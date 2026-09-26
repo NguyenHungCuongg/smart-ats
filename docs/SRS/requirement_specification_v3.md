@@ -622,7 +622,7 @@ SET LOCAL app.current_tenant_id = '<tenant_uuid_from_jwt>';
 
 #### `FR-C2.1` [P1] Document Extraction Engine
 
-- **PDF thuần text**: `PyPDF2` / `pdfminer.six`.
+- **PDF thuần text**: `pypdf` / `PyMuPDF` (`fitz`) hoặc `pdfminer.six`.
 - **PDF scan / ảnh**: OCR (Tesseract / Google Vision API).
 - **DOCX**: `python-docx`.
 - Sau extract raw text → LLM chuẩn hóa JSON với `response_format={"type": "json_object"}`.
@@ -709,7 +709,7 @@ Toàn bộ nội dung từ file người dùng là **untrusted input**:
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │                        PRESENTATION LAYER                          │
-│  TypeScript + React 18 / Next.js 14 (App Router)                  │
+│  TypeScript + React 19 / Next.js 15 (App Router)                  │
 │  TanStack Query v5 + Zustand                                       │
 │  @hello-pangea/dnd (Kanban) + TanStack Table v8                   │
 │  WebSocket Client (real-time progress)                             │
@@ -735,12 +735,12 @@ Toàn bộ nội dung từ file người dùng là **untrusted input**:
                                  │
 ┌────────────────────────────────▼───────────────────────────────────┐
 │                   INFRASTRUCTURE & PERSISTENCE                      │
-│  • PostgreSQL 16 — Shared Schema + Row-Level Security (RLS)       │
-│  • Redis 7 — Task Queue + Session Cache + WebSocket Pub/Sub       │
+│  • PostgreSQL 16+ / 17 — Shared Schema + Row-Level Security (RLS)  │
+│  • Redis 7+ — Task Queue + Session Cache + WebSocket Pub/Sub       │
 │  • AWS S3 / MinIO — AES-256 encrypted document storage            │
 │  • OpenAI API: GPT-4o (scoring/parsing/generation)                │
 │                text-embedding-3-large (semantic embeddings)        │
-│  • Fallback: Google Gemini 1.5 Pro                                │
+│  • Fallback: Google Gemini 2.0 Flash / 1.5 Pro                     │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -909,17 +909,17 @@ comments (id, tenant_id, candidate_id, job_posting_id, author_id UUID FK,
 
 ### 9.1. Technology Stack
 
-| Layer        | Công nghệ                                                                                                            |
-| ------------ | -------------------------------------------------------------------------------------------------------------------- |
-| **Frontend** | TypeScript, React 18, Next.js 14 (App Router), TanStack Query v5, Zustand, @hello-pangea/dnd, Shadcn/ui, TailwindCSS |
-| **Backend**  | Python 3.11+, FastAPI (async), SQLAlchemy 2.0 (async ORM), Alembic (migration)                                       |
-| **Auth**     | PyJWT, Passlib[argon2], OAuth2 (Google), slowapi (rate limiting)                                                     |
-| **Document** | PyPDF2/pdfminer.six, python-docx, WeasyPrint/ReportLab (PDF gen)                                                     |
-| **AI/Agent** | LangGraph (StateGraph), LangChain (LLM abstraction + tool calling)                                                   |
-| **LLM**      | OpenAI GPT-4o (primary) + text-embedding-3-large; Google Gemini 1.5 Pro (fallback)                                   |
-| **Async**    | Celery 5, Redis 7 (broker + cache + pub/sub)                                                                         |
-| **Database** | PostgreSQL 16 (Shared Schema + RLS)                                                                                  |
-| **Storage**  | AWS S3 / MinIO (AES-256 encryption)                                                                                  |
+| Layer        | Công nghệ & Thư viện Đề xuất                                                                                         | Ghi chú Phiên bản / Khuyến nghị                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Frontend** | TypeScript 5+, React 19 / 18, Next.js 15+ (App Router), TanStack Query v5, Zustand 5, Shadcn/ui, TailwindCSS v4 / v3.4 | Server Actions, modern hooks & async request API                |
+| **Backend**  | Python 3.11 - 3.12+, FastAPI (async, Pydantic v2), SQLAlchemy 2.0+ (async ORM), Alembic                             | Hiệu năng cao với async runtime & Pydantic v2 validation core   |
+| **Auth**     | PyJWT, `pwdlib[argon2]` hoặc `argon2-cffi` (thay thế passlib), OAuth2 (Google), slowapi                             | Passlib đã ngừng bảo trì; khuyến nghị dùng `pwdlib` hiện đại    |
+| **Document** | `pypdf` (thay thế PyPDF2) / `PyMuPDF` (`fitz`), `python-docx`, `WeasyPrint` / `ReportLab`                            | PyPDF2 đã deprecated; `pypdf` hoặc `PyMuPDF` nhanh và chuẩn hơn |
+| **AI/Agent** | LangGraph (StateGraph), LangChain Core (LLM abstraction + tool calling)                                              | LangGraph StateGraph cho ReAct & Human-in-the-Loop workflows    |
+| **LLM**      | OpenAI GPT-4o (primary) + text-embedding-3-large; Google Gemini 2.0 Flash / 1.5 Pro (fallback)                       | Structured JSON Output, multimodal & semantic reasoning tốc độ  |
+| **Async**    | Celery 5.4+, Redis 7+ (broker + cache + pub/sub)                                                                     | Quản lý worker queue bóc tách CV & scoring bất đồng bộ          |
+| **Database** | PostgreSQL 16+ / 17 (Shared Schema + Row-Level Security)                                                             | Tối ưu query execution & kiểm soát RLS chặt chẽ đa tenant       |
+| **Storage**  | AWS S3 / MinIO (AES-256 encryption)                                                                                  | Chuẩn S3 API cho lưu trữ tài liệu CV/JD bảo mật                 |
 
 ### 9.2. Hạ tầng & DevOps
 
