@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart ATS Platform Architecture · System Topology</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2.5rem 2rem;
+    }
+
+    .frame {
+      max-width: 1280px;
+      width: 100%;
+    }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.6rem, 2.2vw + 0.8rem, 2.2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      font-size: 0.88rem;
+      color: var(--color-muted);
+      margin-bottom: 1.75rem;
+      max-width: 880px;
+      line-height: 1.45;
+    }
+
+    .svg-container {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid rgba(45,49,66,0.12);
+      border-radius: 8px;
+      padding: 1.5rem 1rem;
+      overflow-x: auto;
+      margin-bottom: 2rem;
+    }
+
+    svg {
+      width: 100%;
+      min-width: 1180px;
+      display: block;
+      height: auto;
+    }
+
+    /* Editorial Summary Cards */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr 0.95fr;
+      gap: 1.25rem;
+      width: 100%;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid rgba(45,49,66,0.12);
+      border-radius: 6px;
+      padding: 1.25rem 1.4rem;
+    }
+
+    .card .card-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.35rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.ink { background: var(--color-ink); }
+    .card-dot.link { background: #2e5aa8; }
+
+    .card h3 {
+      font-size: 0.98rem;
+      font-weight: 600;
+      color: var(--color-ink);
+    }
+
+    .card ul {
+      list-style: none;
+      font-size: 0.82rem;
+      color: var(--color-muted);
+      line-height: 1.55;
+    }
+
+    .card ul li {
+      margin-bottom: 0.4rem;
+      position: relative;
+      padding-left: 1rem;
+    }
+
+    .card ul li::before {
+      content: "—";
+      position: absolute;
+      left: 0;
+      color: rgba(45,49,66,0.4);
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">SYSTEM ARCHITECTURE · DISTRIBUTED ATS PLATFORM</p>
+    <h1>Smart ATS Platform Architecture</h1>
+    <p class="subtitle">Production topology featuring Next.js 16 App Router, FastAPI 0.141 Gateway, Celery 5.4 + LangGraph Agentic Loop, PostgreSQL 18 with Row-Level Security, Redis 7 SSE Broker, and S3 Object Store.</p>
+
+    <div class="svg-container">
+      <svg viewBox="0 0 1200 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="sad-title sad-desc">
+        <title id="sad-title">Smart ATS Platform Architecture</title>
+        <desc id="sad-desc">Architecture diagram showing Presentation Tier, Application and Agent Tier, and Data Persistence Tier with orthogonal connectors and focal LangGraph worker.</desc>
+
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/>
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <!-- Canvas Background -->
+        <rect width="100%" height="100%" fill="#ffffff"/>
+
+        <!-- ========================================== -->
+        <!-- TIER / ZONE BOUNDARIES (Drawn First) -->
+        <!-- ========================================== -->
+
+        <!-- Zone 1: Presentation Tier -->
+        <rect x="36" y="24" width="1128" height="116" rx="8" fill="rgba(45,49,66,0.015)" stroke="rgba(45,49,66,0.18)" stroke-width="0.8" stroke-dasharray="4,4"/>
+        <rect x="48" y="28" width="156" height="12" rx="2" fill="#ffffff"/>
+        <text x="126" y="37" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">PRESENTATION &amp; INGRESS TIER</text>
+
+        <!-- Zone 2: Application & Agent Execution Tier -->
+        <rect x="36" y="164" width="1128" height="236" rx="8" fill="rgba(45,49,66,0.015)" stroke="rgba(45,49,66,0.18)" stroke-width="0.8" stroke-dasharray="4,4"/>
+        <rect x="48" y="168" width="224" height="12" rx="2" fill="#ffffff"/>
+        <text x="160" y="177" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">APPLICATION &amp; AGENT EXECUTION TIER</text>
+
+        <!-- Zone 3: Data Persistence Tier -->
+        <rect x="36" y="424" width="1128" height="136" rx="8" fill="rgba(45,49,66,0.015)" stroke="rgba(45,49,66,0.18)" stroke-width="0.8" stroke-dasharray="4,4"/>
+        <rect x="48" y="428" width="204" height="12" rx="2" fill="#ffffff"/>
+        <text x="150" y="437" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">DATA PERSISTENCE &amp; STORAGE TIER</text>
+
+
+        <!-- ========================================== -->
+        <!-- ARROWS & CONNECTORS (Drawn Before Nodes) -->
+        <!-- ========================================== -->
+
+        <!-- 1. Recruiter Browser -> Next.js App -->
+        <line x1="230" y1="84" x2="352" y2="84" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+
+        <!-- 2. Next.js -> FastAPI Gateway (Exit Next.js bottom at x=440 -> enters FastAPI top at x=190) -->
+        <path d="M 440,116 V 142 Q 440,150 432,150 H 198 Q 190,150 190,158 V 212" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+
+        <!-- 3. Next.js -> S3 Direct Upload (Presigned PDF, routed around right side) -->
+        <path d="M 600,84 H 1004 Q 1012,84 1012,92 V 480 Q 1012,488 1004,488 H 982" fill="none" stroke="#4f5d75" stroke-width="1.1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+
+        <!-- 4. FastAPI Gateway -> Celery Worker -->
+        <line x1="300" y1="248" x2="422" y2="248" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- 5. Celery Worker -> LangGraph Runner (Focal Primary Flow) -->
+        <line x1="640" y1="248" x2="742" y2="248" stroke="#eb6c36" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+
+        <!-- 6. LangGraph Runner -> External LLMs (OpenAI / Anthropic) -->
+        <line x1="990" y1="248" x2="1032" y2="248" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+
+        <!-- 7. FastAPI Gateway -> PostgreSQL 18 (RLS Context Query) -->
+        <line x1="190" y1="286" x2="190" y2="452" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- 8. Celery Worker -> Redis 7 (Task Queue Broker) -->
+        <line x1="530" y1="286" x2="530" y2="452" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- 9. Celery Worker -> PostgreSQL 18 (Commit Evaluations & Scoring) -->
+        <path d="M 430,266 H 328 Q 320,266 320,274 V 480 Q 320,488 312,488 H 300" fill="none" stroke="#4f5d75" stroke-width="1.1" marker-end="url(#arrow)"/>
+
+        <!-- 10. LangGraph -> S3 (Fetch Raw CVs & Read Artifacts) -->
+        <path d="M 870,296 V 452" fill="none" stroke="#4f5d75" stroke-width="1.1" marker-end="url(#arrow)"/>
+
+        <!-- 11. Redis Pub/Sub -> FastAPI Gateway (SSE Subscriber Loop) -->
+        <path d="M 422,480 H 368 Q 360,480 360,472 V 274 Q 360,266 352,266 H 300" fill="none" stroke="#eb6c36" stroke-width="1.1" stroke-dasharray="4,3" marker-end="url(#arrow-accent)"/>
+
+
+        <!-- ========================================== -->
+        <!-- MASKED ARROW LABELS (6-10px gaps) -->
+        <!-- ========================================== -->
+
+        <!-- Label: HTTPS on Recruiter -> Next.js -->
+        <rect x="264" y="66" width="54" height="12" rx="2" fill="#ffffff"/>
+        <text x="291" y="75" fill="#2e5aa8" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HTTPS/WSS</text>
+
+        <!-- Label: REST API / JWT on Next.js -> FastAPI -->
+        <rect x="270" y="144" width="80" height="12" rx="2" fill="#ffffff"/>
+        <text x="310" y="153" fill="#2e5aa8" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">REST API + JWT</text>
+
+        <!-- Label: S3 Upload -->
+        <rect x="946" y="76" width="108" height="12" rx="2" fill="#ffffff"/>
+        <text x="1000" y="85" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">PRESIGNED S3 UPLOAD</text>
+
+        <!-- Label: DISPATCH on FastAPI -> Celery -->
+        <rect x="334" y="232" width="56" height="12" rx="2" fill="#ffffff"/>
+        <text x="362" y="241" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DISPATCH</text>
+
+        <!-- Label: AGENT LOOP on Celery -> LangGraph (Coral) -->
+        <rect x="656" y="232" width="76" height="12" rx="2" fill="#ffffff" stroke="rgba(235,108,54,0.3)" stroke-width="0.8"/>
+        <text x="694" y="241" fill="#eb6c36" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AGENT LOOP</text>
+
+        <!-- Label: INFERENCE on LangGraph -> LLM -->
+        <rect x="996" y="232" width="30" height="12" rx="2" fill="#ffffff"/>
+        <text x="1011" y="241" fill="#2e5aa8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+
+        <!-- Label: SET RLS on FastAPI -> PostgreSQL -->
+        <rect x="146" y="360" width="88" height="12" rx="2" fill="#ffffff"/>
+        <text x="190" y="369" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">SET LOCAL RLS</text>
+
+        <!-- Label: TASK QUEUE on Celery -> Redis -->
+        <rect x="496" y="360" width="68" height="12" rx="2" fill="#ffffff"/>
+        <text x="530" y="369" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">TASK QUEUE</text>
+
+        <!-- Label: COMMIT on Celery -> Postgres -->
+        <rect x="302" y="320" width="36" height="12" rx="2" fill="#ffffff"/>
+        <text x="320" y="329" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">WRITE</text>
+
+        <!-- Label: REDIS PUB/SUB on Redis -> FastAPI (Coral dashed) -->
+        <rect x="338" y="380" width="84" height="12" rx="2" fill="#ffffff"/>
+        <text x="380" y="389" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">PUB/SUB (SSE)</text>
+
+        <!-- Label: FETCH CV on LangGraph -> S3 -->
+        <rect x="846" y="360" width="48" height="12" rx="2" fill="#ffffff"/>
+        <text x="870" y="369" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">FETCH CV</text>
+
+
+        <!-- ========================================== -->
+        <!-- COMPONENT NODES -->
+        <!-- ========================================== -->
+
+        <!-- NODE 1: Recruiter / Admin Browser -->
+        <g id="node-recruiter">
+          <rect x="70" y="52" width="160" height="64" rx="6" fill="#ffffff" stroke="#7a8399" stroke-width="1"/>
+          <rect x="78" y="58" width="38" height="12" rx="2" fill="none" stroke="rgba(122,131,153,0.50)" stroke-width="0.8"/>
+          <text x="97" y="67" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLIENT</text>
+          <text x="150" y="86" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Recruiter / Admin</text>
+          <text x="150" y="102" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Modern Web Browser</text>
+        </g>
+
+        <!-- NODE 2: Next.js 16 Web Application -->
+        <g id="node-nextjs">
+          <rect x="352" y="52" width="248" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+          <rect x="360" y="58" width="56" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+          <text x="388" y="67" fill="#2d3142" opacity="0.8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NEXT.JS 16</text>
+          <text x="476" y="86" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Next.js Web Application</text>
+          <text x="476" y="102" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">React 19 · SSR · Tailwind CSS · SSE</text>
+        </g>
+
+        <!-- NODE 3: FastAPI Gateway -->
+        <g id="node-fastapi">
+          <rect x="80" y="214" width="220" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+          <rect x="88" y="222" width="50" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+          <text x="113" y="231" fill="#2d3142" opacity="0.8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FASTAPI</text>
+          <text x="190" y="252" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">FastAPI 0.141 Gateway</text>
+          <text x="190" y="270" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">JWT Context · RLS Middleware · OpenAPI</text>
+        </g>
+
+        <!-- NODE 4: Celery 5.4 Worker -->
+        <g id="node-celery">
+          <rect x="422" y="214" width="218" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+          <rect x="430" y="222" width="48" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+          <text x="454" y="231" fill="#2d3142" opacity="0.8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CELERY</text>
+          <text x="531" y="252" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Celery 5.4 Async Worker</text>
+          <text x="531" y="270" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Concurrency · Redis Broker · State</text>
+        </g>
+
+        <!-- NODE 5: LangGraph Agent Engine (Focal Node - Coral Accent) -->
+        <g id="node-langgraph">
+          <rect x="742" y="206" width="248" height="88" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.3"/>
+          <rect x="752" y="214" width="66" height="12" rx="2" fill="none" stroke="#eb6c36" stroke-width="0.8"/>
+          <text x="785" y="223" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">LANGGRAPH</text>
+          <text x="866" y="244" fill="#2d3142" font-size="12.5" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">LangGraph 1.2 Agent Engine</text>
+          <text x="866" y="262" fill="#eb6c36" font-size="9.5" font-weight="500" font-family="'Geist', sans-serif" text-anchor="middle">Plan → Tool Call → Reflect (HITL)</text>
+          <text x="866" y="278" fill="#4f5d75" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">StateGraph · 2-Loop Max Reflection</text>
+        </g>
+
+        <!-- NODE 6: External LLMs (OpenAI / Anthropic) -->
+        <g id="node-llm">
+          <rect x="1032" y="214" width="112" height="72" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+          <rect x="1040" y="222" width="32" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.25)" stroke-width="0.8"/>
+          <text x="1056" y="231" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SAAS</text>
+          <text x="1088" y="252" fill="#2d3142" font-size="11.5" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">AI Services</text>
+          <text x="1088" y="270" fill="#4f5d75" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">GPT-4o / Claude</text>
+        </g>
+
+        <!-- NODE 7: PostgreSQL 18.x with RLS -->
+        <g id="node-postgres">
+          <rect x="80" y="452" width="220" height="74" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+          <rect x="88" y="460" width="60" height="12" rx="2" fill="none" stroke="rgba(79,93,117,0.50)" stroke-width="0.8"/>
+          <text x="118" y="469" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">POSTGRESQL</text>
+          <text x="190" y="489" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PostgreSQL 18.x</text>
+          <text x="190" y="506" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Row-Level Security (RLS) · pgvector</text>
+        </g>
+
+        <!-- NODE 8: Redis 7 Cluster -->
+        <g id="node-redis">
+          <rect x="422" y="452" width="218" height="74" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+          <rect x="430" y="460" width="40" height="12" rx="2" fill="none" stroke="rgba(79,93,117,0.50)" stroke-width="0.8"/>
+          <text x="450" y="469" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">REDIS 7</text>
+          <text x="531" y="489" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Redis 7 Cluster</text>
+          <text x="531" y="506" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Celery Broker · SSE Pub/Sub · Cache</text>
+        </g>
+
+        <!-- NODE 9: AWS S3 / MinIO Object Store -->
+        <g id="node-s3">
+          <rect x="760" y="452" width="220" height="74" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+          <rect x="768" y="460" width="48" height="12" rx="2" fill="none" stroke="rgba(79,93,117,0.50)" stroke-width="0.8"/>
+          <text x="792" y="469" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STORAGE</text>
+          <text x="870" y="489" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">AWS S3 / MinIO Store</text>
+          <text x="870" y="506" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Raw CV PDFs · AES-256 Encrypted</text>
+        </g>
+
+        <!-- ========================================== -->
+        <!-- BOTTOM LEGEND STRIP -->
+        <!-- ========================================== -->
+        <line x1="36" y1="584" x2="1164" y2="584" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="36" y="606" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <rect x="130" y="597" width="16" height="11" rx="2" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+        <text x="154" y="606" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Focal Agent / LangGraph</text>
+
+        <rect x="310" y="597" width="16" height="11" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="334" y="606" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Application Service</text>
+
+        <rect x="470" y="597" width="16" height="11" rx="2" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+        <text x="494" y="606" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Persistence / DB / Cache</text>
+
+        <line x1="660" y1="603" x2="686" y2="603" stroke="#eb6c36" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <text x="694" y="606" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Agentic Execution / SSE</text>
+
+        <line x1="840" y1="603" x2="866" y2="603" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text x="874" y="606" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Synchronous HTTP / API</text>
+
+        <line x1="1020" y1="603" x2="1046" y2="603" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <text x="1054" y="606" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Async Event / Presigned</text>
+      </svg>
+    </div>
+
+    <!-- Editorial Summary Cards -->
+    <div class="cards-grid">
+      <div class="card">
+        <p class="card-eyebrow">SECURITY ARCHITECTURE</p>
+        <div class="card-header">
+          <span class="card-dot ink"></span>
+          <h3>Multi-Tenant Row-Level Security</h3>
+        </div>
+        <ul>
+          <li><strong>PostgreSQL 18 RLS:</strong> Dynamic session variable <code>SET LOCAL app.current_tenant</code> configured per HTTP transaction by FastAPI middleware.</li>
+          <li><strong>Zero Cross-Tenant Leakage:</strong> Enforced at the SQL engine level; rogue application queries cannot access unauthorized tenant partitions.</li>
+          <li><strong>Role-Based Access:</strong> Strict permission checks for Recruiter, Company Admin, and System Admin roles.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <p class="card-eyebrow">AGENTIC ENGINE</p>
+        <div class="card-header">
+          <span class="card-dot coral"></span>
+          <h3>LangGraph 1.2 Reflection Loop</h3>
+        </div>
+        <ul>
+          <li><strong>Autonomous Campaign Workflow:</strong> StateGraph executes <code>Plan → Execute Tools → Reflect</code> loop with maximum 2 iterations.</li>
+          <li><strong>Human-in-the-Loop (HITL):</strong> Halts and requests recruiter confirmation before destructive actions or ambiguous job matching.</li>
+          <li><strong>Explainable Fit-Gap:</strong> Synthesizes structured JSON scoring with STAR interview question generation.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <p class="card-eyebrow">HIGH SCALE &amp; STREAMING</p>
+        <div class="card-header">
+          <span class="card-dot link"></span>
+          <h3>Distributed Streaming Pipeline</h3>
+        </div>
+        <ul>
+          <li><strong>SSE Live Token Stream:</strong> Redis Pub/Sub channels push real-time agent thoughts directly to Next.js UI via Server-Sent Events.</li>
+          <li><strong>Celery 5.4 Concurrency:</strong> Decouples heavy AI inference and document parsing from user-facing API threads.</li>
+          <li><strong>Direct S3 Presigned Uploads:</strong> Browsers upload multi-megabyte CVs straight to encrypted S3 buckets, bypassing web servers.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
