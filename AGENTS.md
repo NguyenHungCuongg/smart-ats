@@ -14,6 +14,10 @@ Canonical triage roles mapped 1:1. See `docs/agents/triage-labels.md`.
 
 Single-context layout (`CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.
 
+### Project docs
+
+`docs/SRS/requirement_specification_v3.md` is the single source of truth for requirements; PRD, SAD and ERD summarise it. `docs/SRS/requirement_specification_v2.md` is superseded — don't build from it.
+
 ## Core Coding Principles (Karpathy Guidelines)
 
 Behavioral guidelines to reduce common LLM coding mistakes, derived from Andrej Karpathy's observations. These guidelines bias toward caution over speed.
