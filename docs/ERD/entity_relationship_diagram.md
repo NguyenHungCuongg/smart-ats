@@ -97,11 +97,17 @@ The system uses **PostgreSQL 18.x** with a **Shared Schema Multi-Tenant Strategy
 - `job_posting_id` (UUID, FK, NULLABLE) -> `job_postings.id`
 - `brief` (TEXT): Natural language instructions from Recruiter.
 - `target_count` (INT): Desired shortlist size.
-- `cv_pool_ids` (UUID ARRAY): List of candidates being evaluated.
 - `status` (ENUM): 'PLANNING', 'EXECUTING', 'REFLECTING', 'NEEDS_APPROVAL', 'ESCALATED', 'APPROVED', 'REJECTED'.
 - `planned_steps` (JSONB): Tool calls planned by agent.
 - `reflection_log` (JSONB): Log of reasoning and suggestions.
 - `reflection_count` (INT): Loops executed (max 2).
+
+**`campaign_candidates`**
+- `campaign_id` (UUID, FK) -> `campaigns.id`
+- `candidate_id` (UUID, FK) -> `candidates.id`
+- `status` (VARCHAR): Status of the candidate in this campaign (e.g. 'PENDING', 'SCORED', 'FAILED').
+- `retry_count` (INT): Number of times the scoring task was retried.
+- `scoring_result_id` (UUID, FK, NULLABLE) -> `scoring_results.id`
 
 **`comments`**
 - `id` (UUID, PK)

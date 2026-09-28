@@ -10,13 +10,15 @@
 ## 1. Architectural Overview
 Smart ATS follows a scalable, modern web application architecture leveraging a separation of concerns across Presentation, API Gateway, Domain Services, Async Workers, and Data layers. The system is designed to provide high-performance multi-tenant isolation and reliable asynchronous AI processing.
 
-## 2. Technology Stack (Latest Versions as of Sep 2026)
+The deterministic scoring pipeline (JD parse → CV parse → Score → Explain → Human Approval) is the primary workflow and thesis contribution. The Smart Agent (Module A0) operates as an orchestration layer on top of this pipeline and is validated as an extension.
+
+## 2. Technology Stack — Versions pinned and validated 2026-09-28
 - **Frontend**: Next.js 16.x (App Router), React 19.3.0, TailwindCSS 4.3.3.
 - **API & Core Backend**: FastAPI 0.141.1 (Python 3.12+), SQLAlchemy 2.1.1 (Async ORM).
 - **Async Workers**: Celery 5.6.3 + Redis 8.10.2.
 - **Database**: PostgreSQL 18.x with Row-Level Security (RLS).
-- **AI Orchestration**: LangGraph 1.2.12, LangChain ~0.3.x.
-- **LLM Models**: OpenAI GPT-4o, text-embedding-3-large (Gemini 2.0 Flash fallback).
+- **AI Orchestration**: LangGraph 1.2.12.
+- **LLM Models**: OpenAI GPT-4o, text-embedding-3-large.
 
 ---
 
@@ -29,7 +31,7 @@ Smart ATS follows a scalable, modern web application architecture leveraging a s
 
 ### 3.2 API Gateway Layer (FastAPI)
 - **Authentication**: JWT-based auth via custom middleware. Extracts Tenant ID from token.
-- **Tenant Context Setting**: Middleware sets PostgreSQL local variable (`app.current_tenant_id`) immediately upon connection checkout for RLS enforcement.
+- **Tenant Context Setting**: Middleware sets PostgreSQL local variable (`app.current_tenant_id`) inside the transaction boundary for RLS enforcement.
 - **Routing & Validation**: Routes requests to domain services. Uses Pydantic v2 for aggressive request validation and prompt sanitization.
 
 ### 3.3 Domain Service Layer
@@ -53,9 +55,9 @@ The database avoids the complexity of schema-per-tenant while ensuring total log
 1. All domain tables have a `tenant_id` UUID column.
 2. `ENABLE ROW LEVEL SECURITY` is set on domain tables.
 3. Policy configured as:
-   `USING (tenant_id = current_setting('app.current_tenant_id')::uuid)`
-4. The application layer sets this variable at the beginning of each SQLAlchemy session.
-5. Failsafe: Without the session variable set, RLS evaluates to false, returning 0 rows.
+   `USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)`
+4. The application layer sets this variable within the transaction boundary (not just on connection checkout).
+5. Failsafe: Without the session variable set, `current_setting(..., true)` returns NULL, which makes the RLS evaluate to false, returning 0 rows.
 
 ---
 

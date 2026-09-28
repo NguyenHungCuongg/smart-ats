@@ -45,7 +45,7 @@ Smart ATS implements a Role-Based Access Control (RBAC) system tailored for SME 
 ### 3.2 Module A1: AI Parsing & Candidate Evaluation
 - **FR-A1.1 Parse JD & Config**: AI extracts Job Title, Level, Must-have/Nice-to-have Skills, Experience, Responsibilities. Recruiter can edit weights (default: Technical 50%, Soft Skills 20%, Experience 30%).
 - **FR-A1.2 Batch CV Parsing**: Supports up to 50 CVs (PDF/DOCX) via drag-and-drop. Processes asynchronously via Celery. Failed files do not block the batch.
-- **FR-A1.3 3-Axis Semantic Scoring**: Utilizes text-embedding-3-large and GPT-4o for matching. Outputs a detailed **Fit-Gap Report** (Strengths, Gaps, Recommendations) for every candidate. Implements Demographics Blind Scoring (removing age, gender, etc. before scoring).
+- **FR-A1.3 3-Axis Semantic Scoring**: Utilizes text-embedding-3-large and GPT-4o for matching. Outputs a detailed **Fit-Gap Report** (Strengths, Gaps, Recommendations) for every candidate. Implements Demographics Blind Scoring (removing age, gender, etc. before scoring). *Note: Demographics masking is a best-effort approach to reduce bias, but cannot guarantee 100% elimination. Soft skills evaluation is based purely on CV claims and should be verified during the interview.*
 - **FR-A1.4 Shortlist & Interview Qs**: Generates STAR-method interview questions specifically targeting identified Gaps in the candidate's profile.
 - **FR-A1.5 PDF Report Export**: Generates professional PDF summaries of the JD, rankings, and Fit-Gap analysis.
 
@@ -74,14 +74,14 @@ Smart ATS implements a Role-Based Access Control (RBAC) system tailored for SME 
   - Batch parsing of 50 CVs P95 ≤ 120s
   - LLM Time to First Token (TTFT) ≤ 3s
 - **Security**: Argon2id hashing, TLS 1.3, RLS data isolation, strict rate limiting.
-- **Reliability**: 99.5% uptime, Celery fallback for LLM timeouts (Graceful Degradation).
+- **Reliability**: Target: production-oriented deployment with documented RPO/RTO. Demo environment: Docker Compose with persistent volumes and automated backup. Celery fallback for LLM timeouts (Graceful Degradation).
 - **Usability**: UI supports Vietnamese (Default) and English. Async processes must show progress bars.
 
 ---
 
 ## 5. Technology Stack Requirements
-*Must strictly use latest versions as of Sept 2026.*
+*Must strictly use versions pinned and validated 2026-09-28.*
 - **Frontend**: Next.js 16.x, React 19.3.0, TailwindCSS 4.3.3, Zustand 5, TanStack Query v5.
 - **Backend**: Python 3.12, FastAPI 0.141.1, SQLAlchemy 2.1.1 (asyncio).
-- **AI Core**: LangGraph 1.2.12, LangChain 0.3.x, OpenAI GPT-4o, text-embedding-3-large.
+- **AI Core**: LangGraph 1.2.12, OpenAI GPT-4o, text-embedding-3-large.
 - **Infrastructure**: PostgreSQL 18.x, Redis 8.10.2, Celery 5.6.3, AWS S3 / MinIO.
