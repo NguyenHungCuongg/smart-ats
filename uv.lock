@@ -1,0 +1,19 @@
+version = 1
+revision = 3
+requires-python = "==3.13.*"
+
+[manifest]
+members = [
+    "smart-ats-api",
+    "smart-ats-eval",
+]
+
+[[package]]
+name = "smart-ats-api"
+version = "0.0.0"
+source = { virtual = "apps/api" }
+
+[[package]]
+name = "smart-ats-eval"
+version = "0.0.0"
+source = { virtual = "packages/eval" }

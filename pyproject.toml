@@ -1,0 +1,3 @@
+# Virtual uv workspace root: holds the shared uv.lock, is not itself a package.
+[tool.uv.workspace]
+members = ["apps/api", "packages/eval"]
