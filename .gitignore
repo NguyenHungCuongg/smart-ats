@@ -1,0 +1,34 @@
+# Environment — only the contract is committed
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Node.js / Next.js
+node_modules/
+.pnpm-store/
+.next/
+out/
+*.tsbuildinfo
+coverage/
+
+# Docker / local data
+docker-compose.override.yml
+*.log
+
+# OS / editors (.vscode/ is shared, see Infra 08)
+.DS_Store
+Thumbs.db
+.idea/

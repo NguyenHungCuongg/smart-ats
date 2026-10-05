@@ -1,0 +1,24 @@
+# Build context is the repo root (the uv/pnpm lockfiles live here).
+.git/
+.github/
+.claude/
+.agents/
+docs/
+
+.env
+.env.*
+
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+
+**/node_modules/
+**/.next/
+**/out/
+**/coverage/
+**/*.log
+
+docker-compose*.yml

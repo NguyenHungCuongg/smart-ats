@@ -1,0 +1,40 @@
+name: Move linked issue to In review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+jobs:
+  move:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          # Issue number from branch "feature/issue-7-..." or, failing that, "closes #7" in the PR body.
+          ISSUE=$(grep -oP 'issue-\K\d+' <<< "$HEAD_REF" | head -1 || true)
+          [ -z "$ISSUE" ] && ISSUE=$(grep -oiP '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#\K\d+' <<< "$PR_BODY" | head -1 || true)
+          [ -z "$ISSUE" ] && { echo "No linked issue found"; exit 0; }
+
+          gh api graphql -f owner="$OWNER" -f repo="$REPO" -F n="$ISSUE" -f query='
+            query($owner:String!, $repo:String!, $n:Int!) {
+              repository(owner:$owner, name:$repo) { issue(number:$n) { projectItems(first:10) { nodes {
+                id
+                project { id field(name:"Status") { ... on ProjectV2SingleSelectField { id options { id name } } } }
+              } } } }
+            }' --jq '.data.repository.issue.projectItems.nodes[]
+                     | . as $i | $i.project.field as $f
+                     | ($f.options[] | select(.name == "In review") | .id) as $opt
+                     | "\($i.project.id) \($i.id) \($f.id) \($opt)"' |
+          while read -r PROJECT ITEM FIELD OPTION; do
+            gh api graphql -f p="$PROJECT" -f i="$ITEM" -f f="$FIELD" -f o="$OPTION" -f query='
+              mutation($p:ID!, $i:ID!, $f:ID!, $o:String!) {
+                updateProjectV2ItemFieldValue(input:{projectId:$p, itemId:$i, fieldId:$f, value:{singleSelectOptionId:$o}}) { projectV2Item { id } }
+              }'
+            echo "Issue #$ISSUE -> In review"
+          done

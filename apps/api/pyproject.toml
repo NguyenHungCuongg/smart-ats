@@ -1,0 +1,6 @@
+[project]
+name = "smart-ats-api"
+version = "0.0.0"
+description = "Smart ATS FastAPI backend and Celery workers"
+requires-python = ">=3.13,<3.14"
+dependencies = []
