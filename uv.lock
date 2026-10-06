@@ -13,6 +13,7 @@ dev = [
     { name = "mypy", specifier = "~=2.4.0" },
     { name = "psycopg", extras = ["binary"], specifier = "~=3.3.6" },
     { name = "pytest", specifier = "~=9.0" },
+    { name = "redis", specifier = "~=6.4.0" },
     { name = "ruff", specifier = "~=0.16.10" },
 ]
 
