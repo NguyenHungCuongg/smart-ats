@@ -4,12 +4,12 @@ Multi-tenant ATS with explainable AI scoring. Requirements: [`docs/SRS/requireme
 
 ## Layout
 
-| Path | Contents |
-| --- | --- |
-| `apps/web` | Next.js frontend (pnpm workspace) |
-| `apps/api` | FastAPI backend and Celery workers (uv workspace) |
-| `packages/eval` | Evaluation harness (uv workspace) |
-| `infra/` | Docker and service configuration |
+| Path            | Contents                                          |
+| --------------- | ------------------------------------------------- |
+| `apps/web`      | Next.js frontend (pnpm workspace)                 |
+| `apps/api`      | FastAPI backend and Celery workers (uv workspace) |
+| `packages/eval` | Evaluation harness (uv workspace)                 |
+| `infra/`        | Docker and service configuration                  |
 
 ## Setup
 
@@ -26,19 +26,19 @@ cp .env.example .env     # then fill in secrets
 
 Run from the repo root. Hostnames in `.env` are Compose service names; use `localhost` when running a process directly on the host.
 
-| Task | Command |
-| --- | --- |
-| Web dev server (http://localhost:3000) | `pnpm --filter @smart-ats/web dev` |
-| Web production build | `pnpm --filter @smart-ats/web build` |
-| API dev server (http://localhost:8000) | `uv run --directory apps/api uvicorn app.main:app --reload` |
-| Celery worker (one queue) | `uv run --env-file .env celery --workdir apps/api -A app.worker worker -Q default` |
-| Celery Beat | `uv run --env-file .env celery --workdir apps/api -A app.worker beat` |
+| Task                                   | Command                                                                            |
+| -------------------------------------- | ---------------------------------------------------------------------------------- |
+| Web dev server (http://localhost:3000) | `pnpm --filter @smart-ats/web dev`                                                 |
+| Web production build                   | `pnpm --filter @smart-ats/web build`                                               |
+| API dev server (http://localhost:8000) | `uv run --directory apps/api uvicorn app.main:app --reload`                        |
+| Celery worker (one queue)              | `uv run --env-file .env celery --workdir apps/api -A app.worker worker -Q default` |
+| Celery Beat                            | `uv run --env-file .env celery --workdir apps/api -A app.worker beat`              |
 
 Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Demo SSE stream: `GET /api/demo/sse`.
 
 ## Tests
 
-| Side | Command |
-| --- | --- |
+| Side         | Command                             |
+| ------------ | ----------------------------------- |
 | Web (Vitest) | `pnpm --filter @smart-ats/web test` |
-| API (pytest) | `uv run pytest apps/api` |
+| API (pytest) | `uv run pytest apps/api`            |

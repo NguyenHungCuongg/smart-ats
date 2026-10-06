@@ -1,4 +1,5 @@
 # System Architecture Document (SAD)
+
 ## Smart ATS — AI-Powered Multi-Tenant ATS Platform
 
 **Version:** 3.1
@@ -36,18 +37,18 @@ Pinned lines are in SRS §9.1, checked on 2026-09-28. Exact versions live in loc
 
 ## 3. Containers & Responsibilities
 
-| Container | Responsibility | Scales by |
-|---|---|---|
-| `web` (Next.js) | UI only: recruiter app and the public `/apply/{slug}` page. No Server Actions talk to the backend (ADR-0003). | Stateless replicas |
-| `api` (FastAPI + Uvicorn) | Auth, RBAC, tenant context, CRUD, enqueueing, SSE stream, presigned URLs | Stateless replicas |
-| `worker-llm` | CV/JD extraction, embedding, scoring, interview questions, email drafts. Concurrency is capped globally and per Tenant. | Replicas; bounded by the LLM rate limit |
-| `worker-default` | Non-AI work: file validation, PDF export, notifications, counters | Replicas |
-| `worker-agent` | LangGraph Campaign passes (plan / act / reflect until the Checkpoint) | Replicas |
-| `worker-email` | Sends queued `email_messages` through the provider | 1–2 replicas |
-| `beat` | Schedules the retention/anonymization job, Checkpoint expiry, and stale-task sweep | Exactly 1 |
-| `postgres` | System of record, RLS, pgvector, LangGraph checkpoints | Vertical; read replica later |
-| `redis` | Celery broker, SSE pub/sub, rate-limit and concurrency counters | Vertical |
-| `object storage` | CV/JD files, logos, PDF reports, database backups | Managed |
+| Container                 | Responsibility                                                                                                          | Scales by                               |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `web` (Next.js)           | UI only: recruiter app and the public `/apply/{slug}` page. No Server Actions talk to the backend (ADR-0003).           | Stateless replicas                      |
+| `api` (FastAPI + Uvicorn) | Auth, RBAC, tenant context, CRUD, enqueueing, SSE stream, presigned URLs                                                | Stateless replicas                      |
+| `worker-llm`              | CV/JD extraction, embedding, scoring, interview questions, email drafts. Concurrency is capped globally and per Tenant. | Replicas; bounded by the LLM rate limit |
+| `worker-default`          | Non-AI work: file validation, PDF export, notifications, counters                                                       | Replicas                                |
+| `worker-agent`            | LangGraph Campaign passes (plan / act / reflect until the Checkpoint)                                                   | Replicas                                |
+| `worker-email`            | Sends queued `email_messages` through the provider                                                                      | 1–2 replicas                            |
+| `beat`                    | Schedules the retention/anonymization job, Checkpoint expiry, and stale-task sweep                                      | Exactly 1                               |
+| `postgres`                | System of record, RLS, pgvector, LangGraph checkpoints                                                                  | Vertical; read replica later            |
+| `redis`                   | Celery broker, SSE pub/sub, rate-limit and concurrency counters                                                         | Vertical                                |
+| `object storage`          | CV/JD files, logos, PDF reports, database backups                                                                       | Managed                                 |
 
 ---
 
@@ -72,11 +73,11 @@ tenant_session(tenant_id):   # same helper, async flavour in API, sync flavour i
     COMMIT                                                       -- context disappears
 ```
 
-| Entry point | Where `tenant_id` comes from |
-|---|---|
-| Authenticated API request | JWT claim `tid`. A FastAPI dependency opens `tenant_session` per request. |
-| Celery task | Required first argument of every task. A `@tenant_task` decorator opens the session, and a CI check rejects tasks without it. |
-| Public Apply endpoint | `public_job_by_slug(slug)` (`SECURITY DEFINER`) returns `tenant_id` and `job_id`. The request then continues in `tenant_session`. |
+| Entry point               | Where `tenant_id` comes from                                                                                                      |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Authenticated API request | JWT claim `tid`. A FastAPI dependency opens `tenant_session` per request.                                                         |
+| Celery task               | Required first argument of every task. A `@tenant_task` decorator opens the session, and a CI check rejects tasks without it.     |
+| Public Apply endpoint     | `public_job_by_slug(slug)` (`SECURITY DEFINER`) returns `tenant_id` and `job_id`. The request then continues in `tenant_session`. |
 
 Pre-tenant lookups (login, Google login, invitation acceptance) use the narrow `SECURITY DEFINER` functions listed in ERD §8.
 
@@ -124,7 +125,7 @@ Pre-tenant lookups (login, Google login, invitation acceptance) use the narrow `
 
 1. `POST /campaigns` creates the Campaign (`PLANNING`) and enqueues `run_campaign(tenant_id, campaign_id)` on the `agent` queue.
 2. The worker invokes the LangGraph graph with `thread_id = campaign_id` and the Postgres checkpointer.
-3. The graph cycles **plan → act → reflect**. Every tool is a domain-service call wrapped with a **capability check**: agent tools only get *derived-data* capabilities (create scoring runs, write proposals), never *mutating* capabilities (change stage, create application, send email, edit job). Each step appends to `campaign_events`.
+3. The graph cycles **plan → act → reflect**. Every tool is a domain-service call wrapped with a **capability check**: agent tools only get _derived-data_ capabilities (create scoring runs, write proposals), never _mutating_ capabilities (change stage, create application, send email, edit job). Each step appends to `campaign_events`.
 4. Reaching the Checkpoint:
    - write `campaign_proposals`;
    - set `status = AWAITING_DECISION`;
@@ -132,6 +133,7 @@ Pre-tenant lookups (login, Google login, invitation acceptance) use the narrow `
    - call `interrupt()`.
 
    The task returns and the worker slot is free.
+
 5. The Recruiter Decision (`POST /campaigns/{id}/decision`) is stored, and `resume_campaign(tenant_id, campaign_id, decision)` is enqueued.
 6. The resume task calls the graph with `Command(resume=decision)`:
    - **APPROVE:** apply the accepted proposals through the normal domain services, **as the Recruiter** (stage changes, Rediscovery Applications), then `APPROVED`.
@@ -167,16 +169,16 @@ The HNSW index keeps it fast. Isolation needs no extra filter, because RLS alrea
 
 ## 6. Fault Tolerance & Resilience
 
-| Concern | Mechanism |
-|---|---|
-| Worker crash mid-task | `acks_late=True` and `task_reject_on_worker_lost=True`; the task is idempotent through natural unique keys |
-| LLM timeout / 429 / 5xx | Retry with backoff 5s → 15s → 60s, then the item is `FAILED` with a retry button |
-| LLM provider outage | Circuit breaker in Redis (≥ 5 consecutive failures in 1 min → *degraded* for 2 min). New AI tasks wait, the UI shows a banner, and non-AI features keep working. |
-| Noisy neighbour | Per-tenant concurrency semaphore in Redis (`max_llm_concurrency`, default 5), plus AI Budget checks before enqueue |
-| Lost enqueue after commit | Outbox-style state rows (`upload_batch_items`, `email_messages`, `score_results`) plus a `beat` sweep of stale `PENDING`/`QUEUED` rows |
-| Concurrent Kanban moves | Optimistic locking on `applications.version` |
-| Redis loss | No durable data in Redis. In-flight tasks are recovered by the stale-row sweep, and SSE clients reconnect and refetch. |
-| Data loss | Daily PostgreSQL backup to object storage, 30-day retention, RPO ≤ 24h, RTO ≤ 2h; restore rehearsed once and documented. Object storage versioning is on. |
+| Concern                   | Mechanism                                                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker crash mid-task     | `acks_late=True` and `task_reject_on_worker_lost=True`; the task is idempotent through natural unique keys                                                       |
+| LLM timeout / 429 / 5xx   | Retry with backoff 5s → 15s → 60s, then the item is `FAILED` with a retry button                                                                                 |
+| LLM provider outage       | Circuit breaker in Redis (≥ 5 consecutive failures in 1 min → _degraded_ for 2 min). New AI tasks wait, the UI shows a banner, and non-AI features keep working. |
+| Noisy neighbour           | Per-tenant concurrency semaphore in Redis (`max_llm_concurrency`, default 5), plus AI Budget checks before enqueue                                               |
+| Lost enqueue after commit | Outbox-style state rows (`upload_batch_items`, `email_messages`, `score_results`) plus a `beat` sweep of stale `PENDING`/`QUEUED` rows                           |
+| Concurrent Kanban moves   | Optimistic locking on `applications.version`                                                                                                                     |
+| Redis loss                | No durable data in Redis. In-flight tasks are recovered by the stale-row sweep, and SSE clients reconnect and refetch.                                           |
+| Data loss                 | Daily PostgreSQL backup to object storage, 30-day retention, RPO ≤ 24h, RTO ≤ 2h; restore rehearsed once and documented. Object storage versioning is on.        |
 
 ---
 

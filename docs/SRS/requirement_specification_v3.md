@@ -114,13 +114,13 @@ Phần lớn doanh nghiệp vừa và nhỏ (SME) Việt Nam vẫn quản lý tu
 
 ### 2.4. Bổ sung trong v3.1 (lý do)
 
-| Bổ sung | Lý do |
-| --- | --- |
-| **Public Apply Link** | Không có kênh nộp hồ sơ thì stage "Applied" không có ý nghĩa; mọi ATS thực tế đều có. Chi phí thấp (một form). |
+| Bổ sung                                      | Lý do                                                                                                                                                                               |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Public Apply Link**                        | Không có kênh nộp hồ sơ thì stage "Applied" không có ý nghĩa; mọi ATS thực tế đều có. Chi phí thấp (một form).                                                                      |
 | **Gửi email thật** qua dịch vụ transactional | Lời mời thành viên (FR-C1.2) và email từ chối hàng loạt (FR-A3.2) vốn đã cần gửi email; v3.0 "không SMTP" tự mâu thuẫn. Dùng dịch vụ có sẵn nên không phát sinh DevOps mail server. |
-| **Talent Rediscovery** | Tận dụng embedding đã có; biến Talent Pool thành tài sản của tenant; là tool quan trọng cho Agent. |
-| **AI Usage Ledger & AI Budget** | Cần để enforce hạn mức theo chi phí thật, đo cost trong thực nghiệm, và là câu chuyện SaaS thực tế. |
-| **Bảo vệ dữ liệu cá nhân** | CV chứa dữ liệu cá nhân và được gửi tới nhà cung cấp LLM nước ngoài; sản phẩm "doanh nghiệp dùng thật" bắt buộc có consent, retention và xóa dữ liệu. |
+| **Talent Rediscovery**                       | Tận dụng embedding đã có; biến Talent Pool thành tài sản của tenant; là tool quan trọng cho Agent.                                                                                  |
+| **AI Usage Ledger & AI Budget**              | Cần để enforce hạn mức theo chi phí thật, đo cost trong thực nghiệm, và là câu chuyện SaaS thực tế.                                                                                 |
+| **Bảo vệ dữ liệu cá nhân**                   | CV chứa dữ liệu cá nhân và được gửi tới nhà cung cấp LLM nước ngoài; sản phẩm "doanh nghiệp dùng thật" bắt buộc có consent, retention và xóa dữ liệu.                               |
 
 ---
 
@@ -128,13 +128,13 @@ Phần lớn doanh nghiệp vừa và nhỏ (SME) Việt Nam vẫn quản lý tu
 
 ### 3.1. Phân loại Hệ thống AI
 
-| Tiêu chí | Phân loại | Ý nghĩa Triển khai |
-| --- | --- | --- |
-| **Mục đích** | Decision Support System (DSS) | Hỗ trợ — không thay thế — quyết định tuyển dụng |
-| **Cốt lõi AI** | LLM Structured Output + Semantic Embeddings | JSON Schema output; embedding cho skill matching và Rediscovery |
-| **Kiến trúc Agent** | Agentic AI — Plan / Act / Reflect với dynamic tool selection | LangGraph `StateGraph`; Checkpoint bằng `interrupt()` |
-| **Mức độ Tự chủ** | Human-in-the-Loop | Agent chỉ tạo dữ liệu dẫn xuất; mọi thay đổi ATS/policy qua Recruiter Decision |
-| **Phạm vi ngành** | Vertical Domain-Specific AI | Prompt, rubric và few-shot cho tuyển dụng tại Việt Nam, CV song ngữ Việt–Anh |
+| Tiêu chí            | Phân loại                                                    | Ý nghĩa Triển khai                                                             |
+| ------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| **Mục đích**        | Decision Support System (DSS)                                | Hỗ trợ — không thay thế — quyết định tuyển dụng                                |
+| **Cốt lõi AI**      | LLM Structured Output + Semantic Embeddings                  | JSON Schema output; embedding cho skill matching và Rediscovery                |
+| **Kiến trúc Agent** | Agentic AI — Plan / Act / Reflect với dynamic tool selection | LangGraph `StateGraph`; Checkpoint bằng `interrupt()`                          |
+| **Mức độ Tự chủ**   | Human-in-the-Loop                                            | Agent chỉ tạo dữ liệu dẫn xuất; mọi thay đổi ATS/policy qua Recruiter Decision |
+| **Phạm vi ngành**   | Vertical Domain-Specific AI                                  | Prompt, rubric và few-shot cho tuyển dụng tại Việt Nam, CV song ngữ Việt–Anh   |
 
 ### 3.2. Đóng góp của Đồ án
 
@@ -152,11 +152,11 @@ Phần lớn doanh nghiệp vừa và nhỏ (SME) Việt Nam vẫn quản lý tu
 
 ### 3.3. Đánh giá Tính Khả thi
 
-| Tiêu chí | Đánh giá |
-| --- | --- |
-| **Tính thực tiễn** | Giải quyết vấn đề thực của SME; có kênh ứng tuyển, email, bảo vệ dữ liệu — dùng được thật |
-| **Khả năng bảo vệ** | Đóng góp chính có thực nghiệm định lượng (Exp 1, 2, 6); Agent có baseline so sánh (Exp 3) |
-| **Khối lượng code** | Khả thi với 2 thành viên + coding agent; CRUD/UI/infra không phải nút thắt |
+| Tiêu chí             | Đánh giá                                                                                                        |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Tính thực tiễn**   | Giải quyết vấn đề thực của SME; có kênh ứng tuyển, email, bảo vệ dữ liệu — dùng được thật                       |
+| **Khả năng bảo vệ**  | Đóng góp chính có thực nghiệm định lượng (Exp 1, 2, 6); Agent có baseline so sánh (Exp 3)                       |
+| **Khối lượng code**  | Khả thi với 2 thành viên + coding agent; CRUD/UI/infra không phải nút thắt                                      |
 | **Nút thắt thực sự** | Dataset & người chấm HR, vòng lặp chất lượng prompt, tính đúng đắn bảo mật, băng thông review code — xem Mục 12 |
 
 ---
@@ -192,28 +192,28 @@ Mỗi User thuộc **đúng một** Tenant (trừ System Admin không thuộc te
 
 ### 4.2. Ma trận Phân quyền RBAC
 
-| Tính năng | System Admin | Company Admin | Recruiter | Reviewer |
-| --- | :-: | :-: | :-: | :-: |
-| Quản lý Tenant, gói, AI Budget nền tảng | ✅ | ❌ | ❌ | ❌ |
-| Xem số liệu tổng hợp theo tenant (không có dữ liệu tuyển dụng) | ✅ | ❌ | ❌ | ❌ |
-| Quản lý Workspace & Member | ❌ | ✅ | ❌ | ❌ |
-| Xem AI Usage của tenant | ❌ | ✅ | ✅ (của mình) | ❌ |
-| Xử lý yêu cầu xóa dữ liệu ứng viên, cấu hình Retention | ❌ | ✅ | ❌ | ❌ |
-| Tạo & Parse Job (FR-A1.1), quản lý vòng đời Job (FR-A3.1) | ❌ | ✅ | ✅ | ❌ |
-| Bật/tắt Public Apply Link (FR-A3.4) | ❌ | ✅ | ✅ | ❌ |
-| Upload & Parse CV (FR-A1.2) | ❌ | ✅ | ✅ | ❌ |
-| Chạy Scoring (FR-A1.3), Rediscovery (FR-A1.6) | ❌ | ✅ | ✅ | ❌ |
-| Kích hoạt Agent & Recruiter Decision (FR-A0) | ❌ | ✅ | ✅ | ❌ |
-| Xem Fit-Gap Report & điểm số | ❌ | ✅ | ✅ | ✅ Assigned |
-| Xem thông tin liên hệ ứng viên | ❌ | ✅ | ✅ | ❌ |
-| Chốt Shortlist, sinh câu hỏi phỏng vấn (FR-A1.4) | ❌ | ✅ | ✅ | ❌ |
-| Xem câu hỏi phỏng vấn | ❌ | ✅ | ✅ | ✅ Assigned |
-| Xuất PDF (FR-A1.5) | ❌ | ✅ | ✅ | ❌ |
-| Soạn & gửi Email (FR-A2.1) | ❌ | ✅ | ✅ | ❌ |
-| Comment & Interview Score (FR-A2.2) | ❌ | ✅ | ✅ | ✅ Assigned |
-| Đổi Stage, Bulk Actions (FR-A3.2) | ❌ | ✅ | ✅ | ❌ |
-| Gán Reviewer | ❌ | ✅ | ✅ | ❌ |
-| Xem Activity Timeline (FR-A3.3) | ❌ | ✅ | ✅ | ✅ Assigned |
+| Tính năng                                                      | System Admin | Company Admin |   Recruiter   |  Reviewer   |
+| -------------------------------------------------------------- | :----------: | :-----------: | :-----------: | :---------: |
+| Quản lý Tenant, gói, AI Budget nền tảng                        |      ✅      |      ❌       |      ❌       |     ❌      |
+| Xem số liệu tổng hợp theo tenant (không có dữ liệu tuyển dụng) |      ✅      |      ❌       |      ❌       |     ❌      |
+| Quản lý Workspace & Member                                     |      ❌      |      ✅       |      ❌       |     ❌      |
+| Xem AI Usage của tenant                                        |      ❌      |      ✅       | ✅ (của mình) |     ❌      |
+| Xử lý yêu cầu xóa dữ liệu ứng viên, cấu hình Retention         |      ❌      |      ✅       |      ❌       |     ❌      |
+| Tạo & Parse Job (FR-A1.1), quản lý vòng đời Job (FR-A3.1)      |      ❌      |      ✅       |      ✅       |     ❌      |
+| Bật/tắt Public Apply Link (FR-A3.4)                            |      ❌      |      ✅       |      ✅       |     ❌      |
+| Upload & Parse CV (FR-A1.2)                                    |      ❌      |      ✅       |      ✅       |     ❌      |
+| Chạy Scoring (FR-A1.3), Rediscovery (FR-A1.6)                  |      ❌      |      ✅       |      ✅       |     ❌      |
+| Kích hoạt Agent & Recruiter Decision (FR-A0)                   |      ❌      |      ✅       |      ✅       |     ❌      |
+| Xem Fit-Gap Report & điểm số                                   |      ❌      |      ✅       |      ✅       | ✅ Assigned |
+| Xem thông tin liên hệ ứng viên                                 |      ❌      |      ✅       |      ✅       |     ❌      |
+| Chốt Shortlist, sinh câu hỏi phỏng vấn (FR-A1.4)               |      ❌      |      ✅       |      ✅       |     ❌      |
+| Xem câu hỏi phỏng vấn                                          |      ❌      |      ✅       |      ✅       | ✅ Assigned |
+| Xuất PDF (FR-A1.5)                                             |      ❌      |      ✅       |      ✅       |     ❌      |
+| Soạn & gửi Email (FR-A2.1)                                     |      ❌      |      ✅       |      ✅       |     ❌      |
+| Comment & Interview Score (FR-A2.2)                            |      ❌      |      ✅       |      ✅       | ✅ Assigned |
+| Đổi Stage, Bulk Actions (FR-A3.2)                              |      ❌      |      ✅       |      ✅       |     ❌      |
+| Gán Reviewer                                                   |      ❌      |      ✅       |      ✅       |     ❌      |
+| Xem Activity Timeline (FR-A3.3)                                |      ❌      |      ✅       |      ✅       | ✅ Assigned |
 
 > **Cơ chế thực thi**: RLS cô lập theo tenant (tầng DB). Role và Reviewer Assignment được kiểm tra ở tầng service (FastAPI dependency) và có integration test cho từng ô "❌" và "Assigned" trong ma trận.
 
@@ -239,17 +239,17 @@ Recruiter tạo một **Campaign** cho một Job bằng **Campaign Brief** (ngô
 
 **Tools khả dụng:**
 
-| Tool | Tác dụng | Loại |
-| --- | --- | --- |
-| `get_campaign_context` | Đọc trạng thái Job/Application/Score Result/Talent Pool | Đọc |
-| `parse_job` | Parse JD Document nếu Job chưa có criteria | Dẫn xuất |
-| `parse_pending_cvs` | Parse các CV Document chưa parse | Dẫn xuất |
-| `run_scoring` | Tạo Scoring Run cho các Application chưa có kết quả | Dẫn xuất |
-| `rediscover_candidates` | Tìm Candidate trong Talent Pool phù hợp Job (FR-A1.6) — **chỉ đề xuất**, chưa tạo Application | Dẫn xuất |
-| `simulate_criteria_change` | Tính lại xếp hạng tất định trên Score Result có sẵn với trọng số / must-have giả định — không gọi LLM | Dẫn xuất |
-| `draft_shortlist` | Đề xuất Shortlist theo `target_count` | Dẫn xuất |
-| `generate_interview_questions` | Sinh câu hỏi cho Shortlist đề xuất (FR-A1.4) | Dẫn xuất |
-| `request_checkpoint` | Dừng tại Checkpoint (bình thường hoặc Escalation kèm lý do) | Điều khiển |
+| Tool                           | Tác dụng                                                                                              | Loại       |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------- | ---------- |
+| `get_campaign_context`         | Đọc trạng thái Job/Application/Score Result/Talent Pool                                               | Đọc        |
+| `parse_job`                    | Parse JD Document nếu Job chưa có criteria                                                            | Dẫn xuất   |
+| `parse_pending_cvs`            | Parse các CV Document chưa parse                                                                      | Dẫn xuất   |
+| `run_scoring`                  | Tạo Scoring Run cho các Application chưa có kết quả                                                   | Dẫn xuất   |
+| `rediscover_candidates`        | Tìm Candidate trong Talent Pool phù hợp Job (FR-A1.6) — **chỉ đề xuất**, chưa tạo Application         | Dẫn xuất   |
+| `simulate_criteria_change`     | Tính lại xếp hạng tất định trên Score Result có sẵn với trọng số / must-have giả định — không gọi LLM | Dẫn xuất   |
+| `draft_shortlist`              | Đề xuất Shortlist theo `target_count`                                                                 | Dẫn xuất   |
+| `generate_interview_questions` | Sinh câu hỏi cho Shortlist đề xuất (FR-A1.4)                                                          | Dẫn xuất   |
+| `request_checkpoint`           | Dừng tại Checkpoint (bình thường hoặc Escalation kèm lý do)                                           | Điều khiển |
 
 **Luồng hoạt động:**
 
@@ -282,16 +282,16 @@ CHECKPOINT — interrupt(); lưu state; worker được giải phóng
 
 **Trạng thái Campaign:**
 
-| Trạng thái | Ý nghĩa |
-| --- | --- |
-| `PLANNING` | Đang lập kế hoạch |
-| `EXECUTING` | Đang chạy tool |
-| `REFLECTING` | Đang đánh giá kết quả |
+| Trạng thái          | Ý nghĩa                                                                   |
+| ------------------- | ------------------------------------------------------------------------- |
+| `PLANNING`          | Đang lập kế hoạch                                                         |
+| `EXECUTING`         | Đang chạy tool                                                            |
+| `REFLECTING`        | Đang đánh giá kết quả                                                     |
 | `AWAITING_DECISION` | Đang dừng tại Checkpoint; `escalation_reason` khác null nếu là Escalation |
-| `APPROVED` | Kết thúc — Shortlist đã áp dụng |
-| `REJECTED` | Kết thúc — không thay đổi ATS |
-| `FAILED` | Kết thúc do lỗi kỹ thuật hoặc vượt ngân sách thời gian/AI Budget |
-| `CANCELLED` | Recruiter hủy khi đang chạy |
+| `APPROVED`          | Kết thúc — Shortlist đã áp dụng                                           |
+| `REJECTED`          | Kết thúc — không thay đổi ATS                                             |
+| `FAILED`            | Kết thúc do lỗi kỹ thuật hoặc vượt ngân sách thời gian/AI Budget          |
+| `CANCELLED`         | Recruiter hủy khi đang chạy                                               |
 
 **`CampaignState` (LangGraph state — chỉ chứa ID và tóm tắt, dữ liệu lớn nằm trong DB):**
 
@@ -316,7 +316,7 @@ class CampaignState(TypedDict):
     escalation_reason: str | None
 ```
 
-**Đầu ra tại Checkpoint:** Shortlist đề xuất kèm Fit-Gap Report; ứng viên Rediscovery đề xuất; What-if Suggestions (ví dụ: "bỏ must-have *Kubernetes* → thêm 4 ứng viên đạt ngưỡng"); câu hỏi phỏng vấn; nhật ký lập luận của Agent (`campaign_events`); lý do Escalation nếu có.
+**Đầu ra tại Checkpoint:** Shortlist đề xuất kèm Fit-Gap Report; ứng viên Rediscovery đề xuất; What-if Suggestions (ví dụ: "bỏ must-have _Kubernetes_ → thêm 4 ứng viên đạt ngưỡng"); câu hỏi phỏng vấn; nhật ký lập luận của Agent (`campaign_events`); lý do Escalation nếu có.
 
 **Giới hạn vận hành:**
 
@@ -382,11 +382,11 @@ _Trọng số mặc định: $w_1 = 0.55$, $w_2 = 0.15$, $w_3 = 0.30$. Soft-Skil
 
 **Chi tiết 3 trục:**
 
-| Trục | Nội dung | Phương pháp |
-| --- | --- | --- |
-| **Technical Fit** | Kỹ năng, công cụ, độ sâu kỹ thuật | 60% **Must-have Coverage** (tất định: chuẩn hóa kỹ năng → khớp alias → khớp ngữ nghĩa bằng embedding trên ngưỡng) + 40% LLM rubric (nice-to-have, độ sâu) |
-| **Soft-Skill Claims** | Làm việc nhóm, giao tiếp, lãnh đạo — **như CV tuyên bố** | LLM rubric, bắt buộc Evidence; nhãn UI ghi rõ "cần kiểm chứng khi phỏng vấn" |
-| **Experience Fit** | Số năm liên quan, quy mô dự án, domain | Số năm tính tất định từ mốc thời gian + LLM rubric cho mức độ liên quan |
+| Trục                  | Nội dung                                                 | Phương pháp                                                                                                                                               |
+| --------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Technical Fit**     | Kỹ năng, công cụ, độ sâu kỹ thuật                        | 60% **Must-have Coverage** (tất định: chuẩn hóa kỹ năng → khớp alias → khớp ngữ nghĩa bằng embedding trên ngưỡng) + 40% LLM rubric (nice-to-have, độ sâu) |
+| **Soft-Skill Claims** | Làm việc nhóm, giao tiếp, lãnh đạo — **như CV tuyên bố** | LLM rubric, bắt buộc Evidence; nhãn UI ghi rõ "cần kiểm chứng khi phỏng vấn"                                                                              |
+| **Experience Fit**    | Số năm liên quan, quy mô dự án, domain                   | Số năm tính tất định từ mốc thời gian + LLM rubric cho mức độ liên quan                                                                                   |
 
 **Rubric có neo:** Mỗi trục do LLM chấm theo thang 1–5, mỗi mức có mô tả cụ thể (ví dụ Technical 5 = "đáp ứng mọi must-have với bằng chứng dự án thực tế và ≥ 2 nice-to-have"). Điểm 1–5 được quy đổi tuyến tính sang 0–100. Rubric có version (`rubric_version`).
 
@@ -629,7 +629,7 @@ Toàn bộ nội dung từ file là **untrusted input**:
 - Tiến độ đẩy về UI qua SSE.
 - **Retry:** exponential backoff 5s / 15s / 60s khi LLM timeout hoặc 429/5xx; sau đó mục đó `FAILED` và có nút chạy lại.
 - **Idempotency:** mọi tác vụ có khóa tự nhiên (ví dụ `(scoring_run_id, application_id)`) — chạy lại không tạo bản ghi trùng.
-- **Graceful degradation:** nhà cung cấp LLM lỗi liên tục (≥ 5 lỗi liên tiếp trong 1 phút) → đánh dấu *degraded*: tác vụ mới ở trạng thái chờ, UI hiển thị banner, các chức năng không dùng AI hoạt động bình thường; tự thử lại sau 2 phút.
+- **Graceful degradation:** nhà cung cấp LLM lỗi liên tục (≥ 5 lỗi liên tiếp trong 1 phút) → đánh dấu _degraded_: tác vụ mới ở trạng thái chờ, UI hiển thị banner, các chức năng không dùng AI hoạt động bình thường; tự thử lại sau 2 phút.
 
 #### `FR-C2.4` [P1] Giảm thiểu Thiên kiến (Blind Profile)
 
@@ -643,49 +643,49 @@ Toàn bộ nội dung từ file là **untrusted input**:
 
 ### 6.1. Hiệu năng
 
-| Mã | Hạng mục | Đặc tả |
-| --- | --- | --- |
-| **NFR-PERF-01** | API CRUD | P95 ≤ 500 ms với 50 người dùng đồng thời |
-| **NFR-PERF-02** | Parse 1 tài liệu | P95 ≤ 15 giây (≤ 5 trang) |
-| **NFR-PERF-03** | Batch 50 CV | P95 ≤ 120 giây, với đồng thời LLM = 5 (giới hạn tenant) và rate limit của tài khoản OpenAI đủ cho tải này — ghi rõ tier khi báo cáo |
-| **NFR-PERF-04** | Chấm điểm 1 Application | P95 ≤ 10 giây |
-| **NFR-PERF-05** | Campaign (thời gian máy, 1 lượt) | ≤ 15 phút, không tính thời gian chờ Checkpoint |
-| **NFR-PERF-06** | Email draft streaming | Token đầu tiên ≤ 3 giây |
-| **NFR-PERF-07** | Rediscovery | P95 ≤ 500 ms trên 10.000 CV Document |
+| Mã              | Hạng mục                         | Đặc tả                                                                                                                              |
+| --------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **NFR-PERF-01** | API CRUD                         | P95 ≤ 500 ms với 50 người dùng đồng thời                                                                                            |
+| **NFR-PERF-02** | Parse 1 tài liệu                 | P95 ≤ 15 giây (≤ 5 trang)                                                                                                           |
+| **NFR-PERF-03** | Batch 50 CV                      | P95 ≤ 120 giây, với đồng thời LLM = 5 (giới hạn tenant) và rate limit của tài khoản OpenAI đủ cho tải này — ghi rõ tier khi báo cáo |
+| **NFR-PERF-04** | Chấm điểm 1 Application          | P95 ≤ 10 giây                                                                                                                       |
+| **NFR-PERF-05** | Campaign (thời gian máy, 1 lượt) | ≤ 15 phút, không tính thời gian chờ Checkpoint                                                                                      |
+| **NFR-PERF-06** | Email draft streaming            | Token đầu tiên ≤ 3 giây                                                                                                             |
+| **NFR-PERF-07** | Rediscovery                      | P95 ≤ 500 ms trên 10.000 CV Document                                                                                                |
 
 ### 6.2. Bảo mật & Quyền riêng tư
 
-| Mã | Hạng mục | Đặc tả |
-| --- | --- | --- |
-| **NFR-SEC-01** | Mật khẩu | Argon2id (`pwdlib`) |
-| **NFR-SEC-02** | Phiên | Access 15 phút; Refresh 7 ngày, rotation + reuse detection, lưu hash |
-| **NFR-SEC-03** | Multi-tenant | Forced RLS trên mọi bảng thuộc tenant; test xuyên tenant chạy trong CI mỗi PR |
-| **NFR-SEC-04** | Dữ liệu lưu trữ | Object storage mã hóa server-side (SSE-S3/AES-256); PostgreSQL volume mã hóa ở tầng đĩa (môi trường production) |
-| **NFR-SEC-05** | Truyền tải | HTTPS (TLS 1.2+, ưu tiên 1.3), HSTS |
-| **NFR-SEC-06** | Rate limiting | 100 req/phút/user cho API; 10 lần đăng nhập/phút/IP; Public Apply 5 lần/giờ/IP; AI giới hạn bằng AI Budget + đồng thời/tenant (FR-C1.4) |
-| **NFR-SEC-07** | Input | ORM parameterized queries; kiểm tra MIME bằng magic bytes; giới hạn kích thước file; CSP; chống CSRF cho endpoint dùng cookie |
-| **NFR-SEC-08** | Prompt defense | FR-C2.2 |
-| **NFR-SEC-09** | File truy cập | CV chỉ tải qua presigned URL ngắn hạn (≤ 5 phút) sau khi kiểm tra quyền |
-| **NFR-SEC-10** | Bí mật | Không commit `.env`; secrets qua biến môi trường của nền tảng triển khai / Docker secrets |
+| Mã             | Hạng mục        | Đặc tả                                                                                                                                  |
+| -------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **NFR-SEC-01** | Mật khẩu        | Argon2id (`pwdlib`)                                                                                                                     |
+| **NFR-SEC-02** | Phiên           | Access 15 phút; Refresh 7 ngày, rotation + reuse detection, lưu hash                                                                    |
+| **NFR-SEC-03** | Multi-tenant    | Forced RLS trên mọi bảng thuộc tenant; test xuyên tenant chạy trong CI mỗi PR                                                           |
+| **NFR-SEC-04** | Dữ liệu lưu trữ | Object storage mã hóa server-side (SSE-S3/AES-256); PostgreSQL volume mã hóa ở tầng đĩa (môi trường production)                         |
+| **NFR-SEC-05** | Truyền tải      | HTTPS (TLS 1.2+, ưu tiên 1.3), HSTS                                                                                                     |
+| **NFR-SEC-06** | Rate limiting   | 100 req/phút/user cho API; 10 lần đăng nhập/phút/IP; Public Apply 5 lần/giờ/IP; AI giới hạn bằng AI Budget + đồng thời/tenant (FR-C1.4) |
+| **NFR-SEC-07** | Input           | ORM parameterized queries; kiểm tra MIME bằng magic bytes; giới hạn kích thước file; CSP; chống CSRF cho endpoint dùng cookie           |
+| **NFR-SEC-08** | Prompt defense  | FR-C2.2                                                                                                                                 |
+| **NFR-SEC-09** | File truy cập   | CV chỉ tải qua presigned URL ngắn hạn (≤ 5 phút) sau khi kiểm tra quyền                                                                 |
+| **NFR-SEC-10** | Bí mật          | Không commit `.env`; secrets qua biến môi trường của nền tảng triển khai / Docker secrets                                               |
 
 ### 6.3. Độ tin cậy & Vận hành
 
-| Mã | Hạng mục | Đặc tả |
-| --- | --- | --- |
-| **NFR-REL-01** | Sao lưu & phục hồi | PostgreSQL backup hàng ngày, giữ 30 ngày; **RPO ≤ 24 giờ, RTO ≤ 2 giờ**; diễn tập restore ít nhất 1 lần và ghi lại kết quả |
-| **NFR-REL-02** | Graceful degradation | FR-C2.3 |
-| **NFR-REL-03** | Worker isolation | API và worker là tiến trình/container riêng; worker chết giữa chừng → task được giao lại (acks late) và idempotent |
-| **NFR-REL-04** | Quan sát | Log có cấu trúc (JSON) kèm `request_id`, `tenant_id`, `task_id`; Flower cho Celery; AI Usage Ledger cho chi phí; tracing LLM bằng Langfuse (P2) |
-| **NFR-REL-05** | Health checks | `/healthz` (liveness) và `/readyz` (DB, Redis, storage) cho mọi service |
+| Mã             | Hạng mục             | Đặc tả                                                                                                                                          |
+| -------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **NFR-REL-01** | Sao lưu & phục hồi   | PostgreSQL backup hàng ngày, giữ 30 ngày; **RPO ≤ 24 giờ, RTO ≤ 2 giờ**; diễn tập restore ít nhất 1 lần và ghi lại kết quả                      |
+| **NFR-REL-02** | Graceful degradation | FR-C2.3                                                                                                                                         |
+| **NFR-REL-03** | Worker isolation     | API và worker là tiến trình/container riêng; worker chết giữa chừng → task được giao lại (acks late) và idempotent                              |
+| **NFR-REL-04** | Quan sát             | Log có cấu trúc (JSON) kèm `request_id`, `tenant_id`, `task_id`; Flower cho Celery; AI Usage Ledger cho chi phí; tracing LLM bằng Langfuse (P2) |
+| **NFR-REL-05** | Health checks        | `/healthz` (liveness) và `/readyz` (DB, Redis, storage) cho mọi service                                                                         |
 
 ### 6.4. Khả dụng & UX
 
-| Mã | Hạng mục | Đặc tả |
-| --- | --- | --- |
-| **NFR-USE-01** | Onboarding | Recruiter mới hoàn thành lần chấm điểm đầu tiên (từ tạo Job tới xem Fit-Gap) ≤ 5 phút trong usability test với ≥ 5 người |
-| **NFR-USE-02** | Phản hồi trạng thái | Tác vụ > 3 giây có progress (% hoặc x/y) |
-| **NFR-USE-03** | Ngôn ngữ | Giao diện Tiếng Việt (mặc định) và Tiếng Anh; xử lý CV/JD tiếng Việt và tiếng Anh |
-| **NFR-USE-04** | Trình duyệt | 2 phiên bản mới nhất của Chrome, Edge, Firefox, Safari; trang Public Apply dùng được trên di động |
+| Mã             | Hạng mục            | Đặc tả                                                                                                                   |
+| -------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **NFR-USE-01** | Onboarding          | Recruiter mới hoàn thành lần chấm điểm đầu tiên (từ tạo Job tới xem Fit-Gap) ≤ 5 phút trong usability test với ≥ 5 người |
+| **NFR-USE-02** | Phản hồi trạng thái | Tác vụ > 3 giây có progress (% hoặc x/y)                                                                                 |
+| **NFR-USE-03** | Ngôn ngữ            | Giao diện Tiếng Việt (mặc định) và Tiếng Anh; xử lý CV/JD tiếng Việt và tiếng Anh                                        |
+| **NFR-USE-04** | Trình duyệt         | 2 phiên bản mới nhất của Chrome, Edge, Firefox, Safari; trang Public Apply dùng được trên di động                        |
 
 ---
 
@@ -743,14 +743,14 @@ Mô hình dữ liệu: `docs/ERD/entity_relationship_diagram.md`.
 
 **Ablation:**
 
-| Cấu hình | Mô tả |
-| --- | --- |
-| Baseline | BM25 / TF-IDF giữa JD và CV |
-| Config A | Chỉ embedding similarity |
-| Config B | Chỉ LLM chấm tự do 0–100 (không rubric, không coverage) |
-| Config C | LLM rubric có neo, không Must-have Coverage |
+| Cấu hình               | Mô tả                                                                 |
+| ---------------------- | --------------------------------------------------------------------- |
+| Baseline               | BM25 / TF-IDF giữa JD và CV                                           |
+| Config A               | Chỉ embedding similarity                                              |
+| Config B               | Chỉ LLM chấm tự do 0–100 (không rubric, không coverage)               |
+| Config C               | LLM rubric có neo, không Must-have Coverage                           |
 | **Config D (đề xuất)** | Must-have Coverage + semantic skill matching + LLM rubric + grounding |
-| Config D-luna | Như D nhưng dùng model rẻ cho mọi bước — đánh đổi chi phí/chất lượng |
+| Config D-luna          | Như D nhưng dùng model rẻ cho mọi bước — đánh đổi chi phí/chất lượng  |
 
 ### 8.2. Experiment 2: Kháng Prompt Injection
 
@@ -786,15 +786,15 @@ Mô hình dữ liệu: `docs/ERD/entity_relationship_diagram.md`.
 
 **Công cụ:** Locust trên staging. Tách 2 chế độ: **LLM giả lập** (mock có độ trễ thực tế — đo overhead của hệ thống, rẻ, lặp lại được) và **LLM thật** (mẫu nhỏ — đo end-to-end).
 
-| Metric | Kịch bản | Kỳ vọng |
-| --- | --- | --- |
-| API CRUD P95 | 50 người dùng đồng thời | ≤ 500 ms |
-| Parse 1 CV P95 | 20 yêu cầu đồng thời | ≤ 15 giây |
-| Batch 50 CV P95 | 3 batch đồng thời (3 tenant) | ≤ 120 giây |
-| Chấm điểm 1 Application P95 | 30 yêu cầu đồng thời | ≤ 10 giây |
-| Rediscovery P95 | 10.000 CV Document | ≤ 500 ms |
-| Ổn định | 10 người dùng × 30 phút | 0 crash, 0 dữ liệu hỏng, 0 bản ghi trùng |
-| Fairness | 1 tenant spam 200 tác vụ AI | Tenant khác vẫn đạt P95 mục tiêu |
+| Metric                      | Kịch bản                     | Kỳ vọng                                  |
+| --------------------------- | ---------------------------- | ---------------------------------------- |
+| API CRUD P95                | 50 người dùng đồng thời      | ≤ 500 ms                                 |
+| Parse 1 CV P95              | 20 yêu cầu đồng thời         | ≤ 15 giây                                |
+| Batch 50 CV P95             | 3 batch đồng thời (3 tenant) | ≤ 120 giây                               |
+| Chấm điểm 1 Application P95 | 30 yêu cầu đồng thời         | ≤ 10 giây                                |
+| Rediscovery P95             | 10.000 CV Document           | ≤ 500 ms                                 |
+| Ổn định                     | 10 người dùng × 30 phút      | 0 crash, 0 dữ liệu hỏng, 0 bản ghi trùng |
+| Fairness                    | 1 tenant spam 200 tác vụ AI  | Tenant khác vẫn đạt P95 mục tiêu         |
 
 ### 8.6. Experiment 6: Hiệu quả Giảm Thiên kiến
 
@@ -812,45 +812,45 @@ Mô hình dữ liệu: `docs/ERD/entity_relationship_diagram.md`.
 
 > **Phiên bản tra cứu ngày 2026-09-28** từ PyPI, npm, endoflife.date và GitHub releases. Tài liệu ghi **dòng phiên bản (minor)**; phiên bản chính xác được khóa trong lockfile (`uv.lock`, `pnpm-lock.yaml`) — lockfile là nguồn sự thật cho phiên bản.
 
-| Layer | Công nghệ | Phiên bản | Ghi chú |
-| --- | --- | --- | --- |
-| **Runtime** | Python | 3.13.x | Celery 5.6 và LangGraph 1.2 công bố hỗ trợ tới 3.13; chưa dùng 3.14 |
-| | Node.js | 24.x LTS | Next.js 16 yêu cầu ≥ 20.9 |
-| | uv (quản lý gói Python) | 0.12.x | |
-| **Frontend** | Next.js (App Router) | 16.3.x | Chỉ làm frontend (ADR-0003); Next 15 hết hỗ trợ 2026-10-21 |
-| | React | 19.3.x | |
-| | TypeScript | 6.0.x | TS 7.0 (compiler native) đã phát hành — nâng cấp khi Next.js công bố hỗ trợ |
-| | TailwindCSS | 4.3.x | |
-| | shadcn/ui (CLI) | 4.x | |
-| | TanStack Query / Table | 5.x / 9.x | |
-| | Zustand | 5.0.x | |
-| | Zod | 4.x | Validate form & response |
-| | next-intl | 4.x | Song ngữ Vi/En |
-| | @hello-pangea/dnd | 18.x | Kanban; hỗ trợ React 19 |
-| **Backend** | FastAPI | 0.141.x | |
-| | Pydantic | 2.13.x | |
-| | SQLAlchemy | 2.1.x | Async engine (API) + sync engine (worker) — ADR-0002 |
-| | psycopg | 3.3.x | Một driver cho cả async và sync |
-| | Alembic | 1.20.x | Migration + RLS policy |
-| | Uvicorn | 0.54.x | |
-| **Auth** | PyJWT 2.15.x, pwdlib 0.3.x (Argon2), slowapi 0.1.x | | Google OAuth2 qua OIDC |
-| **Async** | Celery | 5.6.x | Queues: `llm`, `default`, `agent`, `email`; Celery beat cho retention |
-| | Flower | 2.2.x | |
-| **AI/Agent** | LangGraph | 1.2.x | |
-| | langgraph-checkpoint-postgres | 3.1.x | Checkpoint bền vững (ADR-0004) |
-| | langchain-openai / openai SDK | 1.6.x / 3.x | |
-| **LLM** | OpenAI `gpt-6-sol` | — | Scoring, Fit-Gap, câu hỏi phỏng vấn, lập kế hoạch Agent |
-| | OpenAI `gpt-6-luna` | — | Trích xuất JD/CV, soạn email, OCR fallback — rẻ, khối lượng lớn |
-| | OpenAI `text-embedding-3-large` | `dimensions=1536` | ADR-0005 |
-| **Document** | pypdf 6.x, python-docx 1.2.x, WeasyPrint 70.x | | Không dùng PyMuPDF do giấy phép AGPL |
-| **Database** | PostgreSQL | 18.x | Hỗ trợ tới 2030-11 |
-| | pgvector | 0.8.x | HNSW index |
-| **Cache/Broker** | Redis | 8.x | Hoặc Valkey 9.x (tương thích, giấy phép BSD) |
-| **Object storage** | AWS S3 (production) / SeaweedFS 4.x (local, staging) | | MinIO đã lưu trữ (archived) repository mã nguồn — không dùng cho dự án mới |
-| **Email** | Amazon SES hoặc Resend (production) / Mailpit (local) | | Webhook bounce — P2 |
-| **Observability** | structlog 26.x; Langfuse 4.x (P2) | | |
-| **Testing** | pytest 9.x, pytest-asyncio, testcontainers 4.x (PostgreSQL thật cho test RLS), Playwright (E2E), Locust 2.x | | |
-| **Lint** | Ruff 0.16.x, ESLint 10.x | | |
+| Layer              | Công nghệ                                                                                                   | Phiên bản         | Ghi chú                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------- |
+| **Runtime**        | Python                                                                                                      | 3.13.x            | Celery 5.6 và LangGraph 1.2 công bố hỗ trợ tới 3.13; chưa dùng 3.14         |
+|                    | Node.js                                                                                                     | 24.x LTS          | Next.js 16 yêu cầu ≥ 20.9                                                   |
+|                    | uv (quản lý gói Python)                                                                                     | 0.12.x            |                                                                             |
+| **Frontend**       | Next.js (App Router)                                                                                        | 16.3.x            | Chỉ làm frontend (ADR-0003); Next 15 hết hỗ trợ 2026-10-21                  |
+|                    | React                                                                                                       | 19.3.x            |                                                                             |
+|                    | TypeScript                                                                                                  | 6.0.x             | TS 7.0 (compiler native) đã phát hành — nâng cấp khi Next.js công bố hỗ trợ |
+|                    | TailwindCSS                                                                                                 | 4.3.x             |                                                                             |
+|                    | shadcn/ui (CLI)                                                                                             | 4.x               |                                                                             |
+|                    | TanStack Query / Table                                                                                      | 5.x / 9.x         |                                                                             |
+|                    | Zustand                                                                                                     | 5.0.x             |                                                                             |
+|                    | Zod                                                                                                         | 4.x               | Validate form & response                                                    |
+|                    | next-intl                                                                                                   | 4.x               | Song ngữ Vi/En                                                              |
+|                    | @hello-pangea/dnd                                                                                           | 18.x              | Kanban; hỗ trợ React 19                                                     |
+| **Backend**        | FastAPI                                                                                                     | 0.141.x           |                                                                             |
+|                    | Pydantic                                                                                                    | 2.13.x            |                                                                             |
+|                    | SQLAlchemy                                                                                                  | 2.1.x             | Async engine (API) + sync engine (worker) — ADR-0002                        |
+|                    | psycopg                                                                                                     | 3.3.x             | Một driver cho cả async và sync                                             |
+|                    | Alembic                                                                                                     | 1.20.x            | Migration + RLS policy                                                      |
+|                    | Uvicorn                                                                                                     | 0.54.x            |                                                                             |
+| **Auth**           | PyJWT 2.15.x, pwdlib 0.3.x (Argon2), slowapi 0.1.x                                                          |                   | Google OAuth2 qua OIDC                                                      |
+| **Async**          | Celery                                                                                                      | 5.6.x             | Queues: `llm`, `default`, `agent`, `email`; Celery beat cho retention       |
+|                    | Flower                                                                                                      | 2.2.x             |                                                                             |
+| **AI/Agent**       | LangGraph                                                                                                   | 1.2.x             |                                                                             |
+|                    | langgraph-checkpoint-postgres                                                                               | 3.1.x             | Checkpoint bền vững (ADR-0004)                                              |
+|                    | langchain-openai / openai SDK                                                                               | 1.6.x / 3.x       |                                                                             |
+| **LLM**            | OpenAI `gpt-6-sol`                                                                                          | —                 | Scoring, Fit-Gap, câu hỏi phỏng vấn, lập kế hoạch Agent                     |
+|                    | OpenAI `gpt-6-luna`                                                                                         | —                 | Trích xuất JD/CV, soạn email, OCR fallback — rẻ, khối lượng lớn             |
+|                    | OpenAI `text-embedding-3-large`                                                                             | `dimensions=1536` | ADR-0005                                                                    |
+| **Document**       | pypdf 6.x, python-docx 1.2.x, WeasyPrint 70.x                                                               |                   | Không dùng PyMuPDF do giấy phép AGPL                                        |
+| **Database**       | PostgreSQL                                                                                                  | 18.x              | Hỗ trợ tới 2030-11                                                          |
+|                    | pgvector                                                                                                    | 0.8.x             | HNSW index                                                                  |
+| **Cache/Broker**   | Redis                                                                                                       | 8.x               | Hoặc Valkey 9.x (tương thích, giấy phép BSD)                                |
+| **Object storage** | AWS S3 (production) / SeaweedFS 4.x (local, staging)                                                        |                   | MinIO đã lưu trữ (archived) repository mã nguồn — không dùng cho dự án mới  |
+| **Email**          | Amazon SES hoặc Resend (production) / Mailpit (local)                                                       |                   | Webhook bounce — P2                                                         |
+| **Observability**  | structlog 26.x; Langfuse 4.x (P2)                                                                           |                   |                                                                             |
+| **Testing**        | pytest 9.x, pytest-asyncio, testcontainers 4.x (PostgreSQL thật cho test RLS), Playwright (E2E), Locust 2.x |                   |                                                                             |
+| **Lint**           | Ruff 0.16.x, ESLint 10.x                                                                                    |                   |                                                                             |
 
 > **Lựa chọn model:** tên model phản ánh danh mục OpenAI tại 2026-09. Code gọi model qua cấu hình, không hard-code, để thực nghiệm so sánh được (Config D vs D-luna) và đổi model không cần sửa code. Không dùng fallback sang nhà cung cấp thứ hai trong scope (mỗi nhà cung cấp cần tinh chỉnh prompt riêng).
 
@@ -867,22 +867,22 @@ Mô hình dữ liệu: `docs/ERD/entity_relationship_diagram.md`.
 
 > Nguyên tắc: **vertical slice sớm**; dataset và người chấm chạy song song với code từ tuần 1; thực nghiệm chạy liên tục, không dồn cuối kỳ; tháng cuối không thêm tính năng.
 
-| Giai đoạn | Tuần | Nội dung | Tiêu chí hoàn thành |
-| --- | --- | --- | --- |
-| **0. Chốt nền tảng** | 1–2 | Chốt SRS/ERD/ADR; scaffold monorepo, Docker Compose, CI; **bắt đầu thu thập dataset, liên hệ người chấm HR** | CI xanh; dataset plan + 2 người chấm xác nhận |
-| **1. Vertical slice** | 3–6 | Auth + Workspace + Member; schema + Forced RLS + role `ats_app`; `tenant_session` cho worker; tạo Job → parse; upload 1 CV → parse; chấm điểm 1 Application; màn hình Fit-Gap; SSE | Luồng end-to-end chạy được; **≥ 15 test RLS xuyên tenant pass trong CI** |
-| **2. ATS core** | 7–12 | Vòng đời Job; Application + Kanban + lịch sử stage; Upload Batch + fault isolation; Reviewer Assignment; comment/mention/notification; Public Apply Link; gửi email (outbox); AI Usage Ledger + AI Budget; scoring v1 đầy đủ (coverage + rubric + grounding); eval harness | Exp 1 & 2 sơ bộ trên tập dev (tuần 12) |
-| **3. AI mở rộng** | 13–16 | Talent Rediscovery (pgvector); câu hỏi phỏng vấn; Audit Log/Timeline; bảo vệ dữ liệu (consent, retention job, xóa dữ liệu); i18n; PDF (P2) | Exp 6 sơ bộ; test Rediscovery cùng tenant |
-| **4. Agent** | 17–20 | LangGraph Plan/Act/Reflect; tools + quyền tool; checkpointer + interrupt/resume; What-if; Checkpoint UI; baseline workflow | Exp 3 chạy đủ 12 kịch bản; test bất biến pass |
-| **5. Thực nghiệm & gia cố** | 21–23 | Chạy chính thức Exp 1–6 trên tập test; load test; security review; diễn tập restore; usability test | Có số liệu cuối cùng cho mọi thực nghiệm |
-| **6. Hoàn thiện** | 24–26 | Viết báo cáo, slide, video demo; **đóng băng tính năng** — chỉ sửa lỗi | Bản demo ổn định trên staging |
+| Giai đoạn                   | Tuần  | Nội dung                                                                                                                                                                                                                                                                   | Tiêu chí hoàn thành                                                      |
+| --------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **0. Chốt nền tảng**        | 1–2   | Chốt SRS/ERD/ADR; scaffold monorepo, Docker Compose, CI; **bắt đầu thu thập dataset, liên hệ người chấm HR**                                                                                                                                                               | CI xanh; dataset plan + 2 người chấm xác nhận                            |
+| **1. Vertical slice**       | 3–6   | Auth + Workspace + Member; schema + Forced RLS + role `ats_app`; `tenant_session` cho worker; tạo Job → parse; upload 1 CV → parse; chấm điểm 1 Application; màn hình Fit-Gap; SSE                                                                                         | Luồng end-to-end chạy được; **≥ 15 test RLS xuyên tenant pass trong CI** |
+| **2. ATS core**             | 7–12  | Vòng đời Job; Application + Kanban + lịch sử stage; Upload Batch + fault isolation; Reviewer Assignment; comment/mention/notification; Public Apply Link; gửi email (outbox); AI Usage Ledger + AI Budget; scoring v1 đầy đủ (coverage + rubric + grounding); eval harness | Exp 1 & 2 sơ bộ trên tập dev (tuần 12)                                   |
+| **3. AI mở rộng**           | 13–16 | Talent Rediscovery (pgvector); câu hỏi phỏng vấn; Audit Log/Timeline; bảo vệ dữ liệu (consent, retention job, xóa dữ liệu); i18n; PDF (P2)                                                                                                                                 | Exp 6 sơ bộ; test Rediscovery cùng tenant                                |
+| **4. Agent**                | 17–20 | LangGraph Plan/Act/Reflect; tools + quyền tool; checkpointer + interrupt/resume; What-if; Checkpoint UI; baseline workflow                                                                                                                                                 | Exp 3 chạy đủ 12 kịch bản; test bất biến pass                            |
+| **5. Thực nghiệm & gia cố** | 21–23 | Chạy chính thức Exp 1–6 trên tập test; load test; security review; diễn tập restore; usability test                                                                                                                                                                        | Có số liệu cuối cùng cho mọi thực nghiệm                                 |
+| **6. Hoàn thiện**           | 24–26 | Viết báo cáo, slide, video demo; **đóng băng tính năng** — chỉ sửa lỗi                                                                                                                                                                                                     | Bản demo ổn định trên staging                                            |
 
 **Phân công đề xuất (2 thành viên):**
 
-| Thành viên | Trách nhiệm chính | Review chéo |
-| --- | --- | --- |
-| **SV A** | Backend (FastAPI, RLS, Celery), Scoring Engine, Agent, bảo mật | Review toàn bộ PR frontend liên quan tới auth và dữ liệu |
-| **SV B** | Frontend (Next.js, Kanban, Checkpoint UI), Document Extraction, eval harness & dataset, thực nghiệm, báo cáo | Review toàn bộ PR prompt/scoring |
+| Thành viên | Trách nhiệm chính                                                                                            | Review chéo                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| **SV A**   | Backend (FastAPI, RLS, Celery), Scoring Engine, Agent, bảo mật                                               | Review toàn bộ PR frontend liên quan tới auth và dữ liệu |
+| **SV B**   | Frontend (Next.js, Kanban, Checkpoint UI), Document Extraction, eval harness & dataset, thực nghiệm, báo cáo | Review toàn bộ PR prompt/scoring                         |
 
 > Mọi PR (kể cả do coding agent sinh ra) cần: test đi kèm, CI xanh, và một người còn lại review. Mỗi thành viên phải giải thích được phần của người kia khi bảo vệ.
 
@@ -890,35 +890,35 @@ Mô hình dữ liệu: `docs/ERD/entity_relationship_diagram.md`.
 
 ## 11. Phạm vi Ngoài Đề tài (Out of Scope)
 
-| Tính năng | Lý do |
-| --- | --- |
-| **Career Platform / tài khoản ứng viên** (Reverse Matching, Career Advisor, CV Builder, cổng theo dõi hồ sơ) | Sản phẩm B2C độc lập; ứng viên chỉ tương tác qua Public Apply Link |
-| **Offer/Contract Generator** | CRUD thuần, không có giá trị AI |
-| **Mail server tự vận hành, đọc email đến (inbound)** | Dùng dịch vụ transactional email; hộp thư hai chiều là một sản phẩm riêng |
-| **Tích hợp lịch (Google/Outlook Calendar), đặt lịch phỏng vấn tự động** | Tích hợp OAuth bên thứ ba phức tạp; email mời chứa khung giờ đề xuất là đủ |
-| **e-Signature** | Tích hợp pháp lý phức tạp, ngoài domain |
-| **Video/Voice Interview Bot** | Đề tài nghiên cứu riêng |
-| **ERP/CRM, Job Board syndication (LinkedIn, TopCV)** | Connector thương mại, không cần cho thesis |
-| **Một User thuộc nhiều Tenant** | Tăng độ phức tạp auth/RLS; MVP dùng một tài khoản cho mỗi tenant |
-| **SSO doanh nghiệp (SAML/OIDC tùy biến)** | Nhu cầu của enterprise, không phải SME |
-| **Thanh toán, hóa đơn tự động** | `plan_type` và AI Budget đủ minh họa mô hình SaaS |
-| **Nhà cung cấp LLM dự phòng thứ hai** | Mỗi nhà cung cấp cần tinh chỉnh và đánh giá prompt riêng |
-| **Schema-per-tenant / DB-per-tenant** | Shared schema + Forced RLS đáp ứng yêu cầu (ADR-0001) |
-| **Kubernetes, multi-region, HA database** | Quy mô demo; kiến trúc stateless cho phép mở rộng sau |
+| Tính năng                                                                                                    | Lý do                                                                      |
+| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| **Career Platform / tài khoản ứng viên** (Reverse Matching, Career Advisor, CV Builder, cổng theo dõi hồ sơ) | Sản phẩm B2C độc lập; ứng viên chỉ tương tác qua Public Apply Link         |
+| **Offer/Contract Generator**                                                                                 | CRUD thuần, không có giá trị AI                                            |
+| **Mail server tự vận hành, đọc email đến (inbound)**                                                         | Dùng dịch vụ transactional email; hộp thư hai chiều là một sản phẩm riêng  |
+| **Tích hợp lịch (Google/Outlook Calendar), đặt lịch phỏng vấn tự động**                                      | Tích hợp OAuth bên thứ ba phức tạp; email mời chứa khung giờ đề xuất là đủ |
+| **e-Signature**                                                                                              | Tích hợp pháp lý phức tạp, ngoài domain                                    |
+| **Video/Voice Interview Bot**                                                                                | Đề tài nghiên cứu riêng                                                    |
+| **ERP/CRM, Job Board syndication (LinkedIn, TopCV)**                                                         | Connector thương mại, không cần cho thesis                                 |
+| **Một User thuộc nhiều Tenant**                                                                              | Tăng độ phức tạp auth/RLS; MVP dùng một tài khoản cho mỗi tenant           |
+| **SSO doanh nghiệp (SAML/OIDC tùy biến)**                                                                    | Nhu cầu của enterprise, không phải SME                                     |
+| **Thanh toán, hóa đơn tự động**                                                                              | `plan_type` và AI Budget đủ minh họa mô hình SaaS                          |
+| **Nhà cung cấp LLM dự phòng thứ hai**                                                                        | Mỗi nhà cung cấp cần tinh chỉnh và đánh giá prompt riêng                   |
+| **Schema-per-tenant / DB-per-tenant**                                                                        | Shared schema + Forced RLS đáp ứng yêu cầu (ADR-0001)                      |
+| **Kubernetes, multi-region, HA database**                                                                    | Quy mô demo; kiến trúc stateless cho phép mở rộng sau                      |
 
 ---
 
 ## 12. Rủi ro & Giảm thiểu
 
-| Rủi ro | Mức | Giảm thiểu |
-| --- | --- | --- |
-| Không tìm được / chậm có 2 người chấm HR | Cao | Liên hệ từ tuần 1 (qua GVHD, cựu sinh viên, công ty thực tập); phương án dự phòng: 1 HR + 1 recruiter kỹ thuật, báo cáo Kappa trung thực |
-| Chất lượng scoring không đạt kỳ vọng | Trung bình | Eval harness từ tuần 12; ablation cho thấy đóng góp từng thành phần dù số tuyệt đối thấp |
-| Sai sót bảo mật tinh vi trong code do coding agent sinh ra (quên tenant context, lộ file) | Cao | Test RLS viết **trước** tính năng; CI chặn merge; checklist review bảo mật; Experiment 4 |
-| Rate limit / chi phí OpenAI | Trung bình | Giới hạn đồng thời; LLM giả lập cho load test; AI Budget; theo dõi chi phí qua ledger |
-| Băng thông review code không theo kịp tốc độ sinh code | Trung bình | PR nhỏ theo vertical slice; test là điều kiện merge; không merge code không hiểu |
-| Thay đổi model/API của nhà cung cấp | Thấp | Model qua cấu hình; lưu model + prompt version trong mọi kết quả |
-| Nghĩa vụ pháp lý về dữ liệu cá nhân chưa rõ | Trung bình | FR-C1.5; trao đổi với GVHD; nêu rõ giới hạn trong báo cáo |
+| Rủi ro                                                                                    | Mức        | Giảm thiểu                                                                                                                               |
+| ----------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Không tìm được / chậm có 2 người chấm HR                                                  | Cao        | Liên hệ từ tuần 1 (qua GVHD, cựu sinh viên, công ty thực tập); phương án dự phòng: 1 HR + 1 recruiter kỹ thuật, báo cáo Kappa trung thực |
+| Chất lượng scoring không đạt kỳ vọng                                                      | Trung bình | Eval harness từ tuần 12; ablation cho thấy đóng góp từng thành phần dù số tuyệt đối thấp                                                 |
+| Sai sót bảo mật tinh vi trong code do coding agent sinh ra (quên tenant context, lộ file) | Cao        | Test RLS viết **trước** tính năng; CI chặn merge; checklist review bảo mật; Experiment 4                                                 |
+| Rate limit / chi phí OpenAI                                                               | Trung bình | Giới hạn đồng thời; LLM giả lập cho load test; AI Budget; theo dõi chi phí qua ledger                                                    |
+| Băng thông review code không theo kịp tốc độ sinh code                                    | Trung bình | PR nhỏ theo vertical slice; test là điều kiện merge; không merge code không hiểu                                                         |
+| Thay đổi model/API của nhà cung cấp                                                       | Thấp       | Model qua cấu hình; lưu model + prompt version trong mọi kết quả                                                                         |
+| Nghĩa vụ pháp lý về dữ liệu cá nhân chưa rõ                                               | Trung bình | FR-C1.5; trao đổi với GVHD; nêu rõ giới hạn trong báo cáo                                                                                |
 
 ---
 
