@@ -41,6 +41,19 @@ Open the repo in VS Code and install the recommended extensions: files are forma
 | Type-check web (TypeScript)  | `pnpm --filter @smart-ats/web typecheck`                        |
 | Type-check Python (mypy)     | `uv run mypy`                                                   |
 
+## Infrastructure
+
+Backing services run in Docker Compose (`docker-compose.yml`), configured from `.env`.
+
+| Task                         | Command                                     |
+| ---------------------------- | ------------------------------------------- |
+| Start and wait until healthy | `docker compose up -d --wait`               |
+| Smoke-test the running stack | `uv run --env-file .env pytest infra/tests` |
+| Stop (keeps data)            | `docker compose down`                       |
+| Stop and delete all data     | `docker compose down -v`                    |
+
+PostgreSQL is published on `127.0.0.1:${POSTGRES_HOST_PORT}`; set another port in `.env` if 5432 is taken. The scripts in `infra/postgres/init` (extension, `ats_owner` / `ats_app` roles) run only when the data volume is empty, so run `docker compose down -v` after changing them.
+
 ## Development
 
 Run from the repo root. Hostnames in `.env` are Compose service names; use `localhost` when running a process directly on the host.
@@ -57,7 +70,8 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Dem
 
 ## Tests
 
-| Side         | Command                             |
-| ------------ | ----------------------------------- |
-| Web (Vitest) | `pnpm --filter @smart-ats/web test` |
-| API (pytest) | `uv run pytest apps/api`            |
+| Side                                | Command                                     |
+| ----------------------------------- | ------------------------------------------- |
+| Web (Vitest)                        | `pnpm --filter @smart-ats/web test`         |
+| API (pytest)                        | `uv run pytest apps/api`                    |
+| Infra smoke (pytest, stack running) | `uv run --env-file .env pytest infra/tests` |

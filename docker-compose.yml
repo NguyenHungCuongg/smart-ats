@@ -1,0 +1,28 @@
+name: smart-ats
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg18-trixie
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      ATS_OWNER_PASSWORD: ${ATS_OWNER_PASSWORD:?set in .env}
+      ATS_APP_PASSWORD: ${ATS_APP_PASSWORD:?set in .env}
+    ports:
+      # Loopback only: the same file runs the demo VPS (SAD §9).
+      - 127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432
+    volumes:
+      # PostgreSQL 18 images keep PGDATA in a versioned subdirectory of this path.
+      - postgres-data:/var/lib/postgresql
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Over TCP: the temporary server that runs the init scripts listens on the socket only.
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

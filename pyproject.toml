@@ -5,6 +5,8 @@ members = ["apps/api", "packages/eval"]
 [dependency-groups]
 dev = [
     "mypy~=2.4.0",
+    "psycopg[binary]~=3.3.6",
+    "pytest~=9.0",
     "ruff~=0.16.10",
 ]
 
@@ -27,7 +29,7 @@ select = ["E", "W", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.13"
 # Add packages/eval once it has code: mypy fails on a directory with no .py files.
-files = ["apps/api"]
+files = ["apps/api", "infra/tests"]
 mypy_path = "apps/api"
 explicit_package_bases = true
 strict = true
