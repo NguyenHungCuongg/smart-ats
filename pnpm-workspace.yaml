@@ -1,4 +1,7 @@
 packages:
   - apps/web
 
+allowBuilds:
+  unrs-resolver: false
+
 engineStrict: true

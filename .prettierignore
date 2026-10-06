@@ -1,0 +1,15 @@
+# Lockfiles and generated files
+pnpm-lock.yaml
+uv.lock
+skills-lock.json
+apps/web/next-env.d.ts
+
+# Vendored agent skills and next dev's generated agent rules
+.agents/
+.claude/
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
+
+# Reference paper extracts and generated diagram pages
+docs/references/
+docs/**/*.html

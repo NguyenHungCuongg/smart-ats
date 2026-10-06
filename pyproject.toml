@@ -2,5 +2,35 @@
 [tool.uv.workspace]
 members = ["apps/api", "packages/eval"]
 
+[dependency-groups]
+dev = [
+    "mypy~=2.4.0",
+    "ruff~=0.16.10",
+]
+
 [tool.uv]
 required-version = ">=0.12,<0.13"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["apps/api"]
+# Markdown is formatted by Prettier; agent skills are vendored.
+extend-exclude = ["*.md", ".agents", ".claude"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.13"
+# Add packages/eval once it has code: mypy fails on a directory with no .py files.
+files = ["apps/api"]
+mypy_path = "apps/api"
+explicit_package_bases = true
+strict = true
+# Celery and kombu ship no type information.
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = ["celery.*", "kombu.*"]
+ignore_missing_imports = true
