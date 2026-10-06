@@ -9,6 +9,5 @@
     }
   },
   "eslint.workingDirectories": ["apps/web"],
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
   "typescript.tsdk": "apps/web/node_modules/typescript/lib"
 }

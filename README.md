@@ -22,6 +22,12 @@ uv sync                  # installs Python 3.13 if missing
 cp .env.example .env     # then fill in secrets
 ```
 
+The repo uses LF line endings everywhere. A clone made before `.gitattributes` existed may still hold CRLF files on Windows; convert it once, with no uncommitted changes (this resets the working tree):
+
+```sh
+git rm -r --cached -q . && git reset --hard
+```
+
 Open the repo in VS Code and install the recommended extensions: files are formatted on save (Prettier for web files, Ruff for Python). The pre-commit hook formats and lints staged files; CI runs the same checks on every PR to `develop` and `main`.
 
 ## Code quality
