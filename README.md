@@ -54,6 +54,8 @@ Backing services run in Docker Compose (`docker-compose.yml`), configured from `
 
 PostgreSQL is published on `127.0.0.1:${POSTGRES_HOST_PORT}`; set another port in `.env` if 5432 is taken. The scripts in `infra/postgres/init` (extension, `ats_owner` / `ats_app` roles) run only when the data volume is empty, so run `docker compose down -v` after changing them.
 
+Redis is published on `127.0.0.1:${REDIS_HOST_PORT}`. It keeps nothing on disk, so restarting it drops queued tasks. Flower is at http://localhost:5555/flower/ (login from `FLOWER_BASIC_AUTH`); start workers with `-E` to see task events.
+
 ## Development
 
 Run from the repo root. Hostnames in `.env` are Compose service names; use `localhost` when running a process directly on the host.

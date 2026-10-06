@@ -24,5 +24,32 @@ services:
       retries: 10
     restart: unless-stopped
 
+  redis:
+    image: redis:8.10.2-trixie
+    # Transport only (SAD §1): no RDB snapshots, no append-only file.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - 127.0.0.1:${REDIS_HOST_PORT:-6379}:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower:2.2.0
+    environment:
+      CELERY_BROKER_URL: ${REDIS_URL:?set in .env}
+      # Served under /flower behind Caddy (Infra 06); auth because the demo VPS runs this file.
+      FLOWER_URL_PREFIX: flower
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:?set in .env}
+    ports:
+      - 127.0.0.1:5555:5555
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres-data:
