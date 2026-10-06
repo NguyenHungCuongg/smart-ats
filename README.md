@@ -17,10 +17,23 @@ Requires Node 24, [uv](https://docs.astral.sh/uv/) and Docker.
 
 ```sh
 corepack enable          # provides the pnpm version pinned in package.json
-pnpm install
+pnpm install             # also installs the pre-commit hook (Husky)
 uv sync                  # installs Python 3.13 if missing
 cp .env.example .env     # then fill in secrets
 ```
+
+Open the repo in VS Code and install the recommended extensions: files are formatted on save (Prettier for web files, Ruff for Python). The pre-commit hook formats and lints staged files; CI runs the same checks on every PR to `develop` and `main`.
+
+## Code quality
+
+| Task                         | Command                                                         |
+| ---------------------------- | --------------------------------------------------------------- |
+| Format everything (Prettier) | `pnpm format` (check only: `pnpm format:check`)                 |
+| Format Python (Ruff)         | `uv run ruff format` (check only: `uv run ruff format --check`) |
+| Lint web (ESLint)            | `pnpm --filter @smart-ats/web lint`                             |
+| Lint Python (Ruff)           | `uv run ruff check` (autofix: `--fix`)                          |
+| Type-check web (TypeScript)  | `pnpm --filter @smart-ats/web typecheck`                        |
+| Type-check Python (mypy)     | `uv run mypy`                                                   |
 
 ## Development
 
