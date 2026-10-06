@@ -73,6 +73,7 @@ def test_app_role_has_dml_on_owner_tables(owner_table: str) -> None:
     "ddl",
     [
         "CREATE TABLE smoke_forbidden (id int)",
+        "CREATE TEMP TABLE smoke_forbidden (id int)",
         "DROP TABLE {table}",
         "ALTER TABLE {table} ADD x int",
     ],

@@ -70,7 +70,8 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Dem
 
 ## Tests
 
-| Side         | Command                             |
-| ------------ | ----------------------------------- |
-| Web (Vitest) | `pnpm --filter @smart-ats/web test` |
-| API (pytest) | `uv run pytest apps/api`            |
+| Side                                | Command                                     |
+| ----------------------------------- | ------------------------------------------- |
+| Web (Vitest)                        | `pnpm --filter @smart-ats/web test`         |
+| API (pytest)                        | `uv run pytest apps/api`                    |
+| Infra smoke (pytest, stack running) | `uv run --env-file .env pytest infra/tests` |

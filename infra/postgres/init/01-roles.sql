@@ -14,6 +14,7 @@ ALTER SCHEMA public OWNER TO ats_owner;
 CREATE ROLE ats_app LOGIN PASSWORD :'app_password'
   NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 GRANT USAGE ON SCHEMA public TO ats_app;
+REVOKE TEMPORARY ON DATABASE :"DBNAME" FROM PUBLIC;
 
 -- No tables exist yet, so grant on the ones ats_owner creates later.
 ALTER DEFAULT PRIVILEGES FOR ROLE ats_owner IN SCHEMA public
