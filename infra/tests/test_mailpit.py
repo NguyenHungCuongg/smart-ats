@@ -11,21 +11,23 @@ import urllib.request
 import uuid
 from email.message import EmailMessage
 
+# The addresses Compose publishes on.
+SMTP_PORT = 1025
+API_URL = "http://127.0.0.1:8025/api/v1"
+
 
 def test_sent_email_is_retrievable_from_the_api() -> None:
     subject = f"smoke-{uuid.uuid4().hex}"
+    recipient = "candidate@example.com"
     message = EmailMessage()
     message["From"] = os.environ["EMAIL_FROM"]
-    message["To"] = "candidate@example.com"
+    message["To"] = recipient
     message["Subject"] = subject
     message.set_content("Hello from the smoke test.")
-    # The address Compose publishes on.
-    with smtplib.SMTP("127.0.0.1", int(os.environ["SMTP_PORT"]), timeout=10) as smtp:
+    with smtplib.SMTP("127.0.0.1", SMTP_PORT, timeout=10) as smtp:
         smtp.send_message(message)
 
     query = urllib.parse.urlencode({"query": f"subject:{subject}"})
-    with urllib.request.urlopen(f"http://127.0.0.1:8025/api/v1/search?{query}", timeout=10) as r:
-        found = json.load(r)["messages"]
-    assert [(m["Subject"], m["To"][0]["Address"]) for m in found] == [
-        (subject, "candidate@example.com")
-    ]
+    with urllib.request.urlopen(f"{API_URL}/search?{query}", timeout=10) as response:
+        found = json.load(response)["messages"]
+    assert [(m["Subject"], m["To"][0]["Address"]) for m in found] == [(subject, recipient)]

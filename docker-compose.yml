@@ -76,8 +76,9 @@ services:
     # Catches all SMTP mail; the image's own healthcheck covers `up --wait`.
     image: axllent/mailpit:v1.31.4
     ports:
-      - 127.0.0.1:1025:1025 # SMTP
-      - 127.0.0.1:8025:8025 # web UI and REST API
+      # SMTP, then the web UI and REST API.
+      - 127.0.0.1:1025:1025
+      - 127.0.0.1:8025:8025
     restart: unless-stopped
 
 volumes:
