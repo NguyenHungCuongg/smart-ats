@@ -8,7 +8,11 @@ x-python-app: &python-app
     context: .
     dockerfile: apps/api/Dockerfile
   image: smart-ats-api:dev
-  env_file: .env
+  # Only what the code reads; add variables as code needs them. Never the superuser
+  # or ats_owner credentials: the app runs as ats_app (ADR-0001).
+  environment:
+    DATABASE_URL: ${DATABASE_URL:?set in .env}
+    REDIS_URL: ${REDIS_URL:?set in .env}
   depends_on:
     postgres:
       condition: service_healthy
@@ -37,7 +41,8 @@ services:
       retries: 10
 
   # One worker per queue (SAD §3). watchfiles restarts Celery when Python code changes.
-  # -c 2: Celery defaults to one process per CPU; tune per queue once real tasks exist.
+  # -E: task events for Flower. -c 2: Celery defaults to one process per CPU;
+  # tune per queue once real tasks exist.
   worker-llm:
     <<: *python-app
     command:
