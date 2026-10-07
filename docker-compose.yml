@@ -1,6 +1,113 @@
 name: smart-ats
 
+# API, Celery workers and Beat share one image and one source tree.
+# Hot reload uses Compose Watch (`docker compose up --watch`), not bind mounts:
+# Docker Desktop's host-to-VM file sharing drops file events on Windows/macOS.
+x-python-app: &python-app
+  build:
+    context: .
+    dockerfile: apps/api/Dockerfile
+  image: smart-ats-api:dev
+  env_file: .env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  develop:
+    watch:
+      - action: sync
+        path: ./apps/api
+        target: /repo/apps/api
+      - action: rebuild
+        path: ./uv.lock
+  restart: unless-stopped
+
 services:
+  api:
+    <<: *python-app
+    ports:
+      - 127.0.0.1:8000:8000
+    healthcheck:
+      # A plain TCP connect: polling /api/health would flood the access log.
+      test:
+        ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One worker per queue (SAD §3). watchfiles restarts Celery when Python code changes.
+  # -c 2: Celery defaults to one process per CPU; tune per queue once real tasks exist.
+  worker-llm:
+    <<: *python-app
+    command:
+      ["watchfiles", "--filter", "python", "celery -A app.worker worker -Q llm -n llm@%h -E -c 2"]
+
+  worker-default:
+    <<: *python-app
+    command:
+      [
+        "watchfiles",
+        "--filter",
+        "python",
+        "celery -A app.worker worker -Q default -n default@%h -E -c 2",
+      ]
+
+  worker-agent:
+    <<: *python-app
+    command:
+      [
+        "watchfiles",
+        "--filter",
+        "python",
+        "celery -A app.worker worker -Q agent -n agent@%h -E -c 2",
+      ]
+
+  worker-email:
+    <<: *python-app
+    command:
+      [
+        "watchfiles",
+        "--filter",
+        "python",
+        "celery -A app.worker worker -Q email -n email@%h -E -c 2",
+      ]
+
+  # Exactly one instance (SAD §3).
+  beat:
+    <<: *python-app
+    command: ["watchfiles", "--filter", "python", "celery -A app.worker beat"]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set in .env}
+    ports:
+      - 127.0.0.1:3000:3000
+    # The browser, not the web server, calls the API (ADR-0003); this only brings the API up with it.
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('net').connect(3000, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web
+          target: /repo/apps/web
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+    restart: unless-stopped
+
   postgres:
     image: pgvector/pgvector:0.8.7-pg18-trixie
     environment:

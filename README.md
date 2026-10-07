@@ -43,14 +43,19 @@ Open the repo in VS Code and install the recommended extensions: files are forma
 
 ## Infrastructure
 
-Backing services run in Docker Compose (`docker-compose.yml`), configured from `.env`.
+The whole stack (backing services, `api`, `web`, one Celery worker per queue, `beat`) runs in Docker Compose (`docker-compose.yml`), configured from `.env`.
 
-| Task                         | Command                                     |
-| ---------------------------- | ------------------------------------------- |
-| Start and wait until healthy | `docker compose up -d --wait`               |
-| Smoke-test the running stack | `uv run --env-file .env pytest infra/tests` |
-| Stop (keeps data)            | `docker compose down`                       |
-| Stop and delete all data     | `docker compose down -v`                    |
+| Task                               | Command                                     |
+| ---------------------------------- | ------------------------------------------- |
+| Start and wait until healthy       | `docker compose up -d --wait`               |
+| Start with hot reload (foreground) | `docker compose up --watch`                 |
+| Smoke-test the running stack       | `uv run --env-file .env pytest infra/tests` |
+| Stop (keeps data)                  | `docker compose down`                       |
+| Stop and delete all data           | `docker compose down -v`                    |
+
+Hot reload uses [Compose Watch](https://docs.docker.com/compose/how-tos/file-watch/) rather than bind mounts, because Docker Desktop's file sharing drops file events on Windows and macOS. It copies edits under `apps/api` and `apps/web` into the containers, where uvicorn, `watchfiles` (workers, `beat`) and `next dev` reload. A change to `uv.lock` or `pnpm-lock.yaml` rebuilds the image. Without `--watch`, containers run the code baked in at build time; `docker compose up -d --build` refreshes it.
+
+The API is at http://localhost:8000 and the web app at http://localhost:3000. Workers `worker-llm`, `worker-default`, `worker-agent` and `worker-email` each consume only their own queue, with 2 processes each.
 
 PostgreSQL is published on `127.0.0.1:${POSTGRES_HOST_PORT}`; set another port in `.env` if 5432 is taken. The scripts in `infra/postgres/init` (extension, `ats_owner` / `ats_app` roles) run only when the data volume is empty, so run `docker compose down -v` after changing them.
 
