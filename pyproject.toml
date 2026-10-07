@@ -4,11 +4,13 @@ members = ["apps/api", "packages/eval"]
 
 [dependency-groups]
 dev = [
+    "boto3~=1.43.108",
     "mypy~=2.4.0",
     "psycopg[binary]~=3.3.6",
     "pytest~=9.0",
     "redis~=6.4.0",
     "ruff~=0.16.10",
+    "types-boto3[s3]~=1.43.108",
 ]
 
 [tool.uv]
