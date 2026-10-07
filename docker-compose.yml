@@ -51,5 +51,35 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48
+    # All-in-one dev mode with the S3 gateway; creates the bucket on startup if missing.
+    command: ["mini", "-dir=/data", "-bucket=${S3_BUCKET:?set in .env}"]
+    environment:
+      # Becomes the S3 admin identity.
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in .env}
+    ports:
+      # Must match S3_PUBLIC_ENDPOINT: presigned URLs are signed against that host.
+      - 127.0.0.1:8333:8333
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      # Healthy only once the bucket exists, so `up --wait` covers its creation.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8888/buckets/${S3_BUCKET}/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  mailpit:
+    # Catches all SMTP mail; the image's own healthcheck covers `up --wait`.
+    image: axllent/mailpit:v1.31.4
+    ports:
+      - 127.0.0.1:1025:1025 # SMTP
+      - 127.0.0.1:8025:8025 # web UI and REST API
+    restart: unless-stopped
+
 volumes:
   postgres-data:
+  seaweedfs-data:

@@ -56,6 +56,8 @@ PostgreSQL is published on `127.0.0.1:${POSTGRES_HOST_PORT}`; set another port i
 
 Redis is published on `127.0.0.1:${REDIS_HOST_PORT}`. It keeps nothing on disk, so restarting it drops queued tasks. Flower is at http://localhost:5555/flower/ (login from `FLOWER_BASIC_AUTH`); start workers with `-E` to see task events.
 
+SeaweedFS serves the S3 API on `127.0.0.1:8333` (credentials from `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`) and creates `S3_BUCKET` on startup. Presigned URLs must be signed against `S3_PUBLIC_ENDPOINT`, since the browser cannot reach `seaweedfs:8333`. Mailpit accepts SMTP on `127.0.0.1:1025` and shows every caught email at http://localhost:8025; nothing is delivered.
+
 ## Development
 
 Run from the repo root. Hostnames in `.env` are Compose service names; use `localhost` when running a process directly on the host.
