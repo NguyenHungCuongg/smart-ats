@@ -14,6 +14,16 @@ Canonical triage roles mapped 1:1. See `docs/agents/triage-labels.md`.
 
 Single-context layout (`CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.
 
+### References
+
+Bài báo khoa học toàn văn trong `docs/references/` (~1 MB, không đọc hết). Chỉ dùng khi việc đang làm liên quan ADR/FR/Experiment hoặc báo cáo:
+
+1. Đọc `docs/references/README.md` trước: bảng cho biết bài nào dùng cho quyết định nào, kèm lưu ý trích dẫn.
+2. Cần chi tiết → Grep từ khóa trong file bài, chỉ đọc đoạn quanh kết quả. Không Read cả file.
+3. Cần hiểu cả bài → giao subagent đọc, yêu cầu trả về tóm tắt kèm câu trích nguyên văn.
+
+Khi dẫn một bài, trích nguyên văn câu làm căn cứ, không diễn giải theo trí nhớ.
+
 ## Core Coding Principles (Karpathy Guidelines)
 
 Behavioral guidelines to reduce common LLM coding mistakes, derived from Andrej Karpathy's observations. These guidelines bias toward caution over speed.
