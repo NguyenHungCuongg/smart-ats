@@ -8,7 +8,8 @@
   "scripts": {
     "prepare": "husky",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "infra:test": "docker compose up -d --build --wait && uv run --env-file .env pytest infra/tests"
   },
   "devDependencies": {
     "husky": "9.1.7",

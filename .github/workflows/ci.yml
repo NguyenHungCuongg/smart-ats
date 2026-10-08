@@ -35,3 +35,19 @@ jobs:
         run: uv run ruff check
       - name: mypy
         run: uv run mypy
+
+  # Same steps as `pnpm infra:test`, run directly so the job needs no Node setup.
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync --locked
+      - run: cp .env.example .env
+      - name: Start the stack
+        run: docker compose up -d --build --wait
+      - name: Smoke tests
+        run: uv run --env-file .env pytest infra/tests
+      - name: Service logs
+        if: failure()
+        run: docker compose logs
