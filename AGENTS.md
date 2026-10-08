@@ -16,7 +16,17 @@ Single-context layout (`CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.
 
 ### Project docs
 
-`docs/SRS/requirement_specification_v3.md` is the single source of truth for requirements; PRD, SAD and ERD summarise it. `docs/SRS/requirement_specification_v2.md` is superseded — don't build from it.
+Each kind of question has one owning document; the map is in `CONTRIBUTING.md` (section "Bản đồ tài liệu"). Requirements (FR/NFR IDs, acceptance criteria) live only in `docs/SRS/software_requirements_specification.md`. Project docs are written in Vietnamese with English technical terms; when editing them, follow `CONTRIBUTING.md` (section "Viết tài liệu"): every number lives in one document and is referenced by ID elsewhere, and SAD/ERD section numbers are cited from code, so never renumber them.
+
+### References
+
+Bài báo khoa học toàn văn trong `docs/references/` (~1 MB, không đọc hết). Chỉ dùng khi việc đang làm liên quan ADR/FR/Experiment hoặc báo cáo:
+
+1. Đọc `docs/references/README.md` trước: bảng cho biết bài nào dùng cho quyết định nào, kèm lưu ý trích dẫn.
+2. Cần chi tiết → Grep từ khóa trong file bài, chỉ đọc đoạn quanh kết quả. Không Read cả file.
+3. Cần hiểu cả bài → giao subagent đọc, yêu cầu trả về tóm tắt kèm câu trích nguyên văn.
+
+Khi dẫn một bài, trích nguyên văn câu làm căn cứ, không diễn giải theo trí nhớ.
 
 ## Core Coding Principles (Karpathy Guidelines)
 

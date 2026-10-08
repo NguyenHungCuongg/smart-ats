@@ -1,8 +1,8 @@
-# Next.js is a pure frontend; FastAPI owns auth and all business logic
+# Next.js chỉ là frontend; FastAPI sở hữu auth và toàn bộ nghiệp vụ
 
-The Next.js app renders UI and calls the FastAPI REST API from the browser through TanStack Query. It does not use Server Actions or route handlers as a backend-for-frontend. One backend keeps RBAC, RLS context and audit in a single place, and two students cannot afford to maintain a second server layer.
+Ứng dụng Next.js render UI và gọi REST API của FastAPI từ trình duyệt qua TanStack Query. Ứng dụng không dùng Server Action hay route handler làm backend-for-frontend. Một backend duy nhất giữ RBAC, RLS context và audit ở một chỗ, và hai sinh viên không đủ sức duy trì thêm một tầng server thứ hai.
 
-## Consequences
+## Hệ quả
 
-- The access token (15 min) lives in memory. The refresh token (7 days, rotated, reuse detection by token family) is an `HttpOnly; Secure; SameSite=Strict` cookie scoped to `/auth/refresh` on the API's site. The refresh endpoint also requires a custom header against CSRF.
-- Progress is pushed with Server-Sent Events. `EventSource` cannot send an `Authorization` header, so the client first obtains a single-use, 60-second SSE ticket and passes it as a query parameter.
+- Access token nằm trong bộ nhớ. Refresh token (rotate, phát hiện dùng lại theo token family) là cookie `HttpOnly; Secure; SameSite=Strict` giới hạn ở `/auth/refresh` trên site của API. Endpoint refresh còn yêu cầu một custom header để chống CSRF. Thời hạn token: FR-C1.1.
+- Tiến độ được đẩy bằng Server-Sent Events. `EventSource` không gửi được header `Authorization`, nên client lấy trước một SSE ticket dùng một lần, hạn 60 giây, rồi truyền qua query parameter.

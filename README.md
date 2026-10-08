@@ -1,6 +1,6 @@
 # Smart ATS
 
-Multi-tenant ATS with explainable AI scoring. Requirements: [`docs/SRS/requirement_specification_v3.md`](docs/SRS/requirement_specification_v3.md).
+Multi-tenant ATS with explainable AI scoring. Requirements: [`docs/SRS/software_requirements_specification.md`](docs/SRS/software_requirements_specification.md). Documentation map and contribution workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Layout
 

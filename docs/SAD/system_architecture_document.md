@@ -1,159 +1,234 @@
-# System Architecture Document (SAD)
+# Tài liệu Kiến trúc Hệ thống (SAD)
 
-## Smart ATS — AI-Powered Multi-Tenant ATS Platform
+## Smart ATS — Nền tảng ATS Đa Người Thuê Hỗ trợ AI
 
-**Version:** 3.1
-**Date:** 2026-09-28
-**Target Audience:** Engineering, DevOps, Architecture Team
-**Source of truth:** requirements in `docs/SRS/requirement_specification_v3.md`; decisions in `docs/adr/`; terms in `CONTEXT.md`; data model in `docs/ERD/`. Diagrams: `docs/SAD/architecture_diagram.html`.
+**Phiên bản:** 3.2
+**Ngày:** 2026-10-08
+**Đối tượng đọc:** Nhóm phát triển (kỹ thuật, vận hành)
 
----
-
-## 1. Architectural Overview
-
-Smart ATS is a modular monolith: one FastAPI codebase serves the REST API and, as separate processes, the Celery workers. A Next.js app is the only client. PostgreSQL is the single system of record for relational data, embeddings, and agent checkpoints. Redis is transport only (broker, pub/sub, rate-limit counters) and holds no data that cannot be rebuilt.
-
-Two workflows exist:
-
-1. **Deterministic scoring pipeline** (primary thesis contribution): Job parse → CV parse → Scoring Run → Fit-Gap → Shortlist.
-2. **Agentic Campaign** (secondary contribution): an orchestration layer that calls the same domain services as tools and stops at a durable Checkpoint.
-
-Quality attributes, in priority order: **tenant isolation**, **explainability and reproducibility of scores**, **fault isolation** in batch AI work, then performance.
-
-## 2. Technology Stack
-
-Pinned lines are in SRS §9.1, checked on 2026-09-28. Exact versions live in lockfiles. In short:
-
-- Next.js 16.3 / React 19.3 / TypeScript 6.0 / TailwindCSS 4.3 / TanStack Query 5.
-- Python 3.13, FastAPI 0.141, SQLAlchemy 2.1, psycopg 3.3, Pydantic 2.13.
-- Celery 5.6, Redis 8.
-- PostgreSQL 18 with pgvector 0.8.
-- LangGraph 1.2 with `langgraph-checkpoint-postgres` 3.1.
-- OpenAI models: `gpt-6-sol` (reasoning), `gpt-6-luna` (extraction), `text-embedding-3-large` at 1536 dimensions.
-- Object storage: S3 in production, SeaweedFS locally. MinIO's repository has been archived, so it is not used.
-- Email: SES or Resend in production, Mailpit locally.
+> SAD là nguồn sự thật cho **kiến trúc, luồng xử lý, công nghệ và phiên bản**. Yêu cầu và mọi ngưỡng nằm trong [SRS](../SRS/software_requirements_specification.md) và được dẫn bằng mã; lý do của từng quyết định nằm trong `docs/adr/`; thuật ngữ trong `CONTEXT.md`; lược đồ dữ liệu trong [ERD](../ERD/entity_relationship_diagram.md). Sơ đồ: `docs/SAD/architecture_diagram.html`.
+>
+> Số mục của tài liệu này được code dẫn chiếu (ví dụ `SAD §3` trong `docker-compose.yml`); không đánh số lại.
 
 ---
 
-## 3. Containers & Responsibilities
+## 1. Tổng quan Kiến trúc
 
-| Container                 | Responsibility                                                                                                          | Scales by                               |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| `web` (Next.js)           | UI only: recruiter app and the public `/apply/{slug}` page. No Server Actions talk to the backend (ADR-0003).           | Stateless replicas                      |
-| `api` (FastAPI + Uvicorn) | Auth, RBAC, tenant context, CRUD, enqueueing, SSE stream, presigned URLs                                                | Stateless replicas                      |
-| `worker-llm`              | CV/JD extraction, embedding, scoring, interview questions, email drafts. Concurrency is capped globally and per Tenant. | Replicas; bounded by the LLM rate limit |
-| `worker-default`          | Non-AI work: file validation, PDF export, notifications, counters                                                       | Replicas                                |
-| `worker-agent`            | LangGraph Campaign passes (plan / act / reflect until the Checkpoint)                                                   | Replicas                                |
-| `worker-email`            | Sends queued `email_messages` through the provider                                                                      | 1–2 replicas                            |
-| `beat`                    | Schedules the retention/anonymization job, Checkpoint expiry, and stale-task sweep                                      | Exactly 1                               |
-| `postgres`                | System of record, RLS, pgvector, LangGraph checkpoints                                                                  | Vertical; read replica later            |
-| `redis`                   | Celery broker, SSE pub/sub, rate-limit and concurrency counters                                                         | Vertical                                |
-| `object storage`          | CV/JD files, logos, PDF reports, database backups                                                                       | Managed                                 |
-
----
-
-## 4. Multi-Tenant Isolation (ADR-0001, ADR-0002)
-
-### 4.1 Database layer
-
-- Every tenant-owned table has `tenant_id NOT NULL`, RLS `ENABLE` **and** `FORCE`, and one policy using `NULLIF(current_setting('app.current_tenant_id', true), '')::uuid` in both `USING` and `WITH CHECK`.
-- Foreign keys between tenant tables are composite `(tenant_id, id)`, so a row cannot point at another tenant's row.
-- Roles:
-  - `ats_owner` owns the tables and runs migrations only.
-  - `ats_app` is used at runtime: DML only, no ownership, no `BYPASSRLS`.
-  - No runtime role can bypass RLS.
-
-### 4.2 Setting the tenant context — one helper, three entry points
+Smart ATS là một modular monolith: một codebase FastAPI phục vụ REST API và, dưới dạng các tiến trình riêng, các Celery worker. Ứng dụng Next.js là client duy nhất. PostgreSQL là hệ thống lưu trữ chính duy nhất cho dữ liệu quan hệ, embedding và checkpoint của agent. Redis chỉ làm tầng vận chuyển (broker, pub/sub, bộ đếm rate limit) và không giữ dữ liệu nào không dựng lại được.
 
 ```
-tenant_session(tenant_id):   # same helper, async flavour in API, sync flavour in workers
+Browser (Next.js — Recruiter UI + trang /apply)
+   │ HTTPS REST + SSE
+   ▼
+FastAPI (JWT → RBAC → set tenant context mỗi transaction)
+   │                │                       │
+   │ SQL (ats_app)  │ enqueue / pub-sub     │ put object
+   ▼                ▼                       ▼
+PostgreSQL       Redis ──consume──▶ Celery workers ──▶ OpenAI API
+Forced RLS +     (broker, pub/sub)  llm · default ·    Email provider
+pgvector                            agent · email      Object storage (S3)
+   ▲                                        │
+   └──────────── SQL (tenant_session) ──────┘
+```
+
+Có hai luồng nghiệp vụ:
+
+1. **Pipeline chấm điểm tất định** (đóng góp chính của khóa luận): parse Job → Recruiter xác nhận criteria → upload CV / Public Apply → parse từng CV (task riêng) → Scoring Run → xếp hạng + Fit-Gap → Shortlist → câu hỏi phỏng vấn / email / PDF.
+2. **Agentic Campaign** (đóng góp phụ): một lớp điều phối gọi chính các domain service ở trên như tool và dừng tại một Checkpoint bền vững. Task `agent` chạy LangGraph (Plan/Act/Reflect) → `interrupt()` tại Checkpoint, state lưu trong Postgres, task kết thúc → SSE thông báo → Recruiter Decision → task mới resume graph → áp dụng thay đổi dưới tên Recruiter.
+
+Thuộc tính chất lượng theo thứ tự ưu tiên: **cô lập tenant**, **khả năng giải trình và tái lập điểm số**, **cô lập lỗi** trong xử lý AI theo batch, rồi mới tới hiệu năng.
+
+## 2. Công nghệ
+
+> **Phiên bản tra cứu ngày 2026-09-28** từ PyPI, npm, endoflife.date và GitHub releases. Bảng ghi **dòng phiên bản (minor)**; phiên bản chính xác được khóa trong lockfile (`uv.lock`, `pnpm-lock.yaml`) — lockfile là nguồn sự thật cho phiên bản. Ràng buộc buộc phải chọn công nghệ: SRS §5.
+
+| Tầng               | Công nghệ                                                                                                   | Phiên bản         | Ghi chú                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------- |
+| **Runtime**        | Python                                                                                                      | 3.13.x            | Celery 5.6 và LangGraph 1.2 công bố hỗ trợ tới 3.13; chưa dùng 3.14         |
+|                    | Node.js                                                                                                     | 24.x LTS          | Next.js 16 yêu cầu ≥ 20.9                                                   |
+|                    | uv (quản lý gói Python)                                                                                     | 0.12.x            |                                                                             |
+| **Frontend**       | Next.js (App Router)                                                                                        | 16.3.x            | Chỉ làm frontend (ADR-0003); Next 15 hết hỗ trợ 2026-10-21                  |
+|                    | React                                                                                                       | 19.3.x            |                                                                             |
+|                    | TypeScript                                                                                                  | 6.0.x             | TS 7.0 (compiler native) đã phát hành — nâng cấp khi Next.js công bố hỗ trợ |
+|                    | TailwindCSS                                                                                                 | 4.3.x             |                                                                             |
+|                    | shadcn/ui (CLI)                                                                                             | 4.x               |                                                                             |
+|                    | TanStack Query / Table                                                                                      | 5.x / 9.x         |                                                                             |
+|                    | Zustand                                                                                                     | 5.0.x             |                                                                             |
+|                    | Zod                                                                                                         | 4.x               | Validate form & response                                                    |
+|                    | next-intl                                                                                                   | 4.x               | Song ngữ Vi/En                                                              |
+|                    | @hello-pangea/dnd                                                                                           | 18.x              | Kanban; hỗ trợ React 19                                                     |
+| **Backend**        | FastAPI                                                                                                     | 0.141.x           |                                                                             |
+|                    | Pydantic                                                                                                    | 2.13.x            |                                                                             |
+|                    | SQLAlchemy                                                                                                  | 2.1.x             | Async engine (API) + sync engine (worker) — ADR-0002                        |
+|                    | psycopg                                                                                                     | 3.3.x             | Một driver cho cả async và sync                                             |
+|                    | Alembic                                                                                                     | 1.20.x            | Migration + RLS policy                                                      |
+|                    | Uvicorn                                                                                                     | 0.54.x            |                                                                             |
+| **Auth**           | PyJWT 2.15.x, pwdlib 0.3.x (Argon2), slowapi 0.1.x                                                          |                   | Google OAuth2 qua OIDC                                                      |
+| **Async**          | Celery                                                                                                      | 5.6.x             | Queue: `llm`, `default`, `agent`, `email`; Celery beat cho tác vụ định kỳ   |
+|                    | Flower                                                                                                      | 2.2.x             |                                                                             |
+| **AI/Agent**       | LangGraph                                                                                                   | 1.2.x             |                                                                             |
+|                    | langgraph-checkpoint-postgres                                                                               | 3.1.x             | Checkpoint bền vững (ADR-0004)                                              |
+|                    | langchain-openai / openai SDK                                                                               | 1.6.x / 3.x       |                                                                             |
+| **LLM**            | OpenAI `gpt-6-sol`                                                                                          | —                 | Scoring, Fit-Gap, câu hỏi phỏng vấn, lập kế hoạch Agent                     |
+|                    | OpenAI `gpt-6-luna`                                                                                         | —                 | Trích xuất JD/CV, soạn email, OCR fallback — rẻ, khối lượng lớn             |
+|                    | OpenAI `text-embedding-3-large`                                                                             | `dimensions=1536` | ADR-0005                                                                    |
+| **Document**       | pypdf 6.x, python-docx 1.2.x, WeasyPrint 70.x                                                               |                   | Không dùng PyMuPDF do giấy phép AGPL                                        |
+| **Database**       | PostgreSQL                                                                                                  | 18.x              | Hỗ trợ tới 2030-11                                                          |
+|                    | pgvector                                                                                                    | 0.8.x             | HNSW index                                                                  |
+| **Cache/Broker**   | Redis                                                                                                       | 8.x               | Hoặc Valkey 9.x (tương thích, giấy phép BSD)                                |
+| **Object storage** | AWS S3 (production) / SeaweedFS 4.x (local, staging)                                                        |                   | Repository mã nguồn của MinIO đã bị lưu trữ (archived) — không dùng         |
+| **Email**          | Amazon SES hoặc Resend (production) / Mailpit (local)                                                       |                   | Webhook bounce — P2                                                         |
+| **Edge**           | Caddy                                                                                                       |                   | TLS và reverse proxy, không buffer SSE                                      |
+| **Observability**  | structlog 26.x; Langfuse 4.x (P2)                                                                           |                   |                                                                             |
+| **Testing**        | pytest 9.x, pytest-asyncio, testcontainers 4.x (PostgreSQL thật cho test RLS), Playwright (E2E), Locust 2.x |                   |                                                                             |
+| **Lint**           | Ruff 0.16.x, ESLint 10.x                                                                                    |                   |                                                                             |
+
+> **Lựa chọn model:** tên model phản ánh danh mục OpenAI tại 2026-09. Model được chọn qua cấu hình (SRS §5), nên đổi model không cần sửa code và thực nghiệm so sánh được nhiều cấu hình.
+
+---
+
+## 3. Container & Trách nhiệm
+
+| Container                 | Trách nhiệm                                                                                                                 | Mở rộng bằng                        |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `web` (Next.js)           | Chỉ UI: ứng dụng cho recruiter và trang công khai `/apply/{slug}`. Không có Server Action nào gọi xuống backend (ADR-0003). | Replica stateless                   |
+| `api` (FastAPI + Uvicorn) | Auth, RBAC, tenant context, CRUD, enqueue, SSE stream, presigned URL                                                        | Replica stateless                   |
+| `worker-llm`              | Trích xuất CV/JD, embedding, chấm điểm, câu hỏi phỏng vấn, soạn email. Giới hạn đồng thời toàn cục và theo từng Tenant.     | Replica; bị chặn bởi rate limit LLM |
+| `worker-default`          | Việc không dùng AI: kiểm tra file, xuất PDF, thông báo, bộ đếm                                                              | Replica                             |
+| `worker-agent`            | Các lượt chạy LangGraph của Campaign (plan / act / reflect tới Checkpoint)                                                  | Replica                             |
+| `worker-email`            | Gửi các `email_messages` đang chờ qua nhà cung cấp                                                                          | 1–2 replica                         |
+| `beat`                    | Lập lịch job ẩn danh hóa theo Retention Period, hết hạn Checkpoint, quét task bị treo                                       | Đúng 1                              |
+| `postgres`                | Lưu trữ chính, RLS, pgvector, checkpoint của LangGraph                                                                      | Theo chiều dọc; read replica sau    |
+| `redis`                   | Celery broker, SSE pub/sub, bộ đếm rate limit và đồng thời                                                                  | Theo chiều dọc                      |
+| `object storage`          | File CV/JD, logo, báo cáo PDF, bản sao lưu database                                                                         | Dịch vụ managed                     |
+
+---
+
+## 4. Cô lập Multi-Tenant (ADR-0001, ADR-0002)
+
+### 4.1. Tầng database
+
+- Mọi bảng thuộc tenant có `tenant_id NOT NULL`, RLS `ENABLE` **và** `FORCE`, và một policy dùng `NULLIF(current_setting('app.current_tenant_id', true), '')::uuid` cho cả `USING` lẫn `WITH CHECK`.
+- Khóa ngoại giữa các bảng tenant là khóa ghép `(tenant_id, id)`, nên một dòng không thể trỏ tới dòng của tenant khác.
+- Role:
+  - `ats_owner` sở hữu bảng và chỉ dùng để chạy migration.
+  - `ats_app` dùng lúc runtime: chỉ có quyền DML, không sở hữu bảng, không có `BYPASSRLS`.
+  - Không role runtime nào bỏ qua được RLS.
+
+### 4.2. Đặt tenant context — một helper, ba điểm vào
+
+```
+tenant_session(tenant_id):   # cùng một helper, bản async cho API, bản sync cho worker
     BEGIN
-    SELECT set_config('app.current_tenant_id', :tenant_id, true)   -- transaction-local
-    ... work ...
-    COMMIT                                                       -- context disappears
+    SELECT set_config('app.current_tenant_id', :tenant_id, true)   -- chỉ trong transaction
+    ... xử lý ...
+    COMMIT                                                       -- context biến mất
 ```
 
-| Entry point               | Where `tenant_id` comes from                                                                                                      |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Authenticated API request | JWT claim `tid`. A FastAPI dependency opens `tenant_session` per request.                                                         |
-| Celery task               | Required first argument of every task. A `@tenant_task` decorator opens the session, and a CI check rejects tasks without it.     |
-| Public Apply endpoint     | `public_job_by_slug(slug)` (`SECURITY DEFINER`) returns `tenant_id` and `job_id`. The request then continues in `tenant_session`. |
+| Điểm vào                | `tenant_id` lấy từ đâu                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| API request đã xác thực | Claim `tid` trong JWT. Một FastAPI dependency mở `tenant_session` cho mỗi request.                                                    |
+| Celery task             | Tham số đầu tiên, bắt buộc, của mọi task. Decorator `@tenant_task` mở session; một bước kiểm tra trong CI từ chối task không dùng nó. |
+| Endpoint Public Apply   | `public_job_by_slug(slug)` (`SECURITY DEFINER`) trả về `tenant_id` và `job_id`. Request sau đó chạy tiếp trong `tenant_session`.      |
 
-Pre-tenant lookups (login, Google login, invitation acceptance) use the narrow `SECURITY DEFINER` functions listed in ERD §8.
+Các tra cứu trước khi biết tenant (đăng nhập, đăng nhập Google, chấp nhận lời mời) dùng các hàm `SECURITY DEFINER` hẹp liệt kê ở ERD §8.
 
-### 4.3 Application layer
+### 4.3. Tầng ứng dụng
 
-- RBAC and Reviewer Assignment are checked in FastAPI dependencies. Cross-tenant ids return **404**, never 403, so the response does not reveal that the resource exists.
-- Files are only ever served as presigned URLs valid for 5 minutes or less, issued after the permission check. Object keys are prefixed `t/{tenant_id}/…`.
-- The SSE channel is `sse:{tenant_id}:{user_id}`. A user only subscribes to their own channel, after redeeming a single-use SSE ticket.
+- RBAC và Reviewer Assignment được kiểm tra trong FastAPI dependency. Id thuộc tenant khác trả về **404**, không bao giờ 403, để response không tiết lộ resource có tồn tại.
+- File chỉ được phục vụ qua presigned URL (thời hạn theo NFR-SEC-09), cấp sau khi kiểm tra quyền. Object key có tiền tố `t/{tenant_id}/…`.
+- Kênh SSE là `sse:{tenant_id}:{user_id}`. Người dùng chỉ subscribe kênh của chính mình, sau khi đổi một SSE ticket dùng một lần.
 
 ---
 
-## 5. Key Flows
+## 5. Luồng Chính
 
-### 5.1 CV upload & parse (fault-isolated)
+### 5.1. Upload & parse CV (cô lập lỗi)
 
-1. `POST /jobs/{id}/uploads` (multipart, ≤ 50 files) runs in one transaction:
-   - validate MIME with magic bytes and enforce ≤ 10 MB per file;
-   - store each file in object storage;
-   - create `upload_batches` and one `upload_batch_items` row per file;
-   - enqueue one `parse_cv(tenant_id, item_id)` task per file. Tasks are enqueued **after commit** with an `on_commit` hook.
-2. Each task:
-   - checks SHA-256 deduplication;
-   - extracts text (pypdf / python-docx, or vision OCR fallback);
-   - runs LLM structured output with a JSON Schema;
-   - verifies fields against the source;
-   - splits the demographics out into a Blind Profile;
-   - embeds;
-   - upserts the Candidate (email deduplication), `cv_documents` and `applications`;
-   - marks the item `SUCCEEDED`, or `FAILED` with an error code.
-3. Progress events are published on Redis and streamed over SSE. The batch is `COMPLETED` when no item is `PENDING`. The count comes from the item rows, not from a chord.
+1. `POST /jobs/{id}/uploads` (multipart, giới hạn số file và kích thước theo FR-A1.2) chạy trong một transaction:
+   - kiểm tra MIME bằng magic bytes và giới hạn kích thước từng file;
+   - lưu từng file vào object storage;
+   - tạo `upload_batches` và một dòng `upload_batch_items` cho mỗi file;
+   - enqueue một task `parse_cv(tenant_id, item_id)` cho mỗi file. Task được enqueue **sau khi commit** bằng hook `on_commit`.
+2. Mỗi task:
+   - kiểm tra trùng lặp bằng SHA-256;
+   - trích văn bản (pypdf / python-docx, hoặc OCR bằng model đa phương thức khi cần);
+   - gọi LLM structured output với JSON Schema;
+   - kiểm chứng các trường với văn bản gốc;
+   - tách thông tin nhân khẩu học ra, tạo Blind Profile;
+   - tạo embedding;
+   - upsert Candidate (chống trùng theo email), `cv_documents` và `applications`;
+   - đánh dấu item `SUCCEEDED`, hoặc `FAILED` kèm mã lỗi.
+3. Sự kiện tiến độ được publish lên Redis và stream qua SSE. Batch `COMPLETED` khi không còn item `PENDING`. Số đếm lấy từ các dòng item, không dùng chord.
 
-### 5.2 Scoring Run
+### 5.2. Scoring Run
 
-1. `POST /jobs/{id}/scoring-runs` freezes the weights, criteria, model, `prompt_version` and `rubric_version` into `scoring_runs`, then enqueues `score_application(tenant_id, run_id, application_id)` per Application.
-2. Each task:
-   1. computes Must-have Coverage deterministically: skill normalization → alias match → embedding similarity above a threshold;
-   2. asks the LLM for anchored 1–5 rubric grades with Evidence quotes, at `temperature=0`, under a JSON Schema, with the Blind Profile only;
-   3. checks the Evidence against the source text and drops unfound quotes;
-   4. computes the axis and total scores;
-   5. **upserts** on `(scoring_run_id, application_id)`;
-   6. writes an `ai_usage_entries` row.
-3. A retried or redelivered task overwrites its own row and never duplicates it.
+1. `POST /jobs/{id}/scoring-runs` đóng băng trọng số, criteria, model, `prompt_version` và `rubric_version` vào `scoring_runs`, rồi enqueue `score_application(tenant_id, run_id, application_id)` cho mỗi Application.
+2. Mỗi task:
+   1. tính Must-have Coverage tất định: chuẩn hóa kỹ năng → khớp alias → độ tương đồng embedding trên ngưỡng;
+   2. yêu cầu LLM chấm rubric có neo 1–5 kèm Evidence trích nguyên văn, với cấu hình tái lập của FR-A1.3, theo JSON Schema, chỉ trên Blind Profile;
+   3. đối chiếu Evidence với văn bản gốc và loại các quote không tìm thấy;
+   4. tính điểm từng trục và Total;
+   5. **upsert** theo `(scoring_run_id, application_id)`;
+   6. ghi một dòng `ai_usage_entries`.
+3. Task bị retry hoặc giao lại sẽ ghi đè dòng của chính nó, không bao giờ tạo bản trùng.
 
-### 5.3 Campaign with durable Checkpoint (ADR-0004)
+### 5.3. Campaign với Checkpoint bền vững (ADR-0004)
 
-1. `POST /campaigns` creates the Campaign (`PLANNING`) and enqueues `run_campaign(tenant_id, campaign_id)` on the `agent` queue.
-2. The worker invokes the LangGraph graph with `thread_id = campaign_id` and the Postgres checkpointer.
-3. The graph cycles **plan → act → reflect**. Every tool is a domain-service call wrapped with a **capability check**: agent tools only get _derived-data_ capabilities (create scoring runs, write proposals), never _mutating_ capabilities (change stage, create application, send email, edit job). Each step appends to `campaign_events`.
-4. Reaching the Checkpoint:
-   - write `campaign_proposals`;
-   - set `status = AWAITING_DECISION`;
-   - publish an SSE event;
-   - call `interrupt()`.
+1. `POST /campaigns` tạo Campaign (`PLANNING`) và enqueue `run_campaign(tenant_id, campaign_id)` vào queue `agent`.
+2. Worker gọi graph LangGraph với `thread_id = campaign_id` và Postgres checkpointer.
+3. Graph lặp **plan → act → reflect**. Mỗi tool là một lời gọi domain service được bọc bởi **capability check**: tool của agent chỉ có capability tạo _dữ liệu dẫn xuất_ (tạo Scoring Run, ghi đề xuất), không bao giờ có capability _thay đổi_ (đổi Stage, tạo Application, gửi email, sửa Job). Mỗi bước được append vào `campaign_events`.
+4. Khi tới Checkpoint:
+   - ghi `campaign_proposals`;
+   - đặt `status = AWAITING_DECISION`;
+   - publish một sự kiện SSE;
+   - gọi `interrupt()`.
 
-   The task returns and the worker slot is free.
+   Task kết thúc và slot của worker được giải phóng.
 
-5. The Recruiter Decision (`POST /campaigns/{id}/decision`) is stored, and `resume_campaign(tenant_id, campaign_id, decision)` is enqueued.
-6. The resume task calls the graph with `Command(resume=decision)`:
-   - **APPROVE:** apply the accepted proposals through the normal domain services, **as the Recruiter** (stage changes, Rediscovery Applications), then `APPROVED`.
-   - **REVISE:** back to plan.
-   - **REJECT:** `REJECTED`, with no ATS change.
-7. Guards:
-   - a 15-minute machine-time budget per pass;
-   - a per-Campaign cost cap checked against `ai_usage_entries`;
-   - `beat` expires Checkpoints older than 14 days.
+5. Recruiter Decision (`POST /campaigns/{id}/decision`) được lưu, và `resume_campaign(tenant_id, campaign_id, decision)` được enqueue.
+6. Task resume gọi graph với `Command(resume=decision)`:
+   - **APPROVE:** áp dụng các đề xuất được chấp nhận qua domain service thông thường, **dưới tên Recruiter** (đổi Stage, tạo Application từ Rediscovery), rồi `APPROVED`.
+   - **REVISE:** quay lại plan.
+   - **REJECT:** `REJECTED`, không thay đổi gì trong ATS.
+7. Các chốt chặn (giới hạn ở FR-A0):
+   - ngân sách thời gian máy mỗi lượt (NFR-PERF-05);
+   - trần chi phí mỗi Campaign, đối chiếu với `ai_usage_entries`;
+   - `beat` cho hết hạn các Checkpoint quá thời hạn quyết định.
 
-### 5.4 Email (outbox)
+**State của LangGraph** — chỉ chứa ID và tóm tắt, dữ liệu lớn nằm trong DB:
 
-1. Sending a draft sets `email_messages.status = QUEUED` in the same transaction as the business change (for example a bulk reject).
-2. An `on_commit` hook enqueues `send_email(tenant_id, email_id)`.
-3. The worker sends through the provider with `email_id` as the idempotency key, then sets the row to `SENT` or `FAILED`.
-4. The `beat` sweep re-enqueues rows stuck in `QUEUED` for more than 10 minutes, which covers a lost enqueue.
+```python
+class CampaignState(TypedDict):
+    tenant_id: str
+    campaign_id: str
+    job_id: str
+    brief: str
+    target_count: int
 
-### 5.5 Talent Rediscovery
+    plan: list[PlannedStep]          # tool + lý do
+    executed: list[ExecutedStep]     # tool + kết quả tóm tắt + thời gian + chi phí
+    scoring_run_id: str | None
+    qualified_count: int
+    rediscovery_candidate_ids: list[str]
+    what_if_suggestions: list[WhatIfSuggestion]
+    draft_shortlist_application_ids: list[str]
 
-The query is a single SQL statement under RLS:
+    reflection_count: int            # giới hạn: FR-A0
+    revision_count: int              # giới hạn: FR-A0
+    escalation_reason: str | None
+```
+
+### 5.4. Email (outbox)
+
+1. Gửi một bản nháp sẽ đặt `email_messages.status = QUEUED` trong cùng transaction với thay đổi nghiệp vụ (ví dụ từ chối hàng loạt).
+2. Hook `on_commit` enqueue `send_email(tenant_id, email_id)`.
+3. Worker gửi qua nhà cung cấp với `email_id` làm idempotency key, rồi đặt dòng thành `SENT` hoặc `FAILED`.
+4. Lượt quét của `beat` enqueue lại các dòng kẹt ở `QUEUED` quá 10 phút, xử lý trường hợp mất lệnh enqueue.
+
+### 5.5. Talent Rediscovery
+
+Truy vấn là một câu SQL duy nhất chạy dưới RLS:
 
 ```sql
 SELECT ... FROM cv_documents d JOIN candidates c ...
@@ -163,52 +238,63 @@ ORDER BY d.embedding <=> :job_embedding
 LIMIT 50
 ```
 
-The HNSW index keeps it fast. Isolation needs no extra filter, because RLS already restricts the rows.
+Index HNSW giữ truy vấn nhanh. Cô lập không cần thêm điều kiện lọc, vì RLS đã giới hạn các dòng.
 
 ---
 
-## 6. Fault Tolerance & Resilience
+## 6. Chịu lỗi & Phục hồi
 
-| Concern                   | Mechanism                                                                                                                                                        |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker crash mid-task     | `acks_late=True` and `task_reject_on_worker_lost=True`; the task is idempotent through natural unique keys                                                       |
-| LLM timeout / 429 / 5xx   | Retry with backoff 5s → 15s → 60s, then the item is `FAILED` with a retry button                                                                                 |
-| LLM provider outage       | Circuit breaker in Redis (≥ 5 consecutive failures in 1 min → _degraded_ for 2 min). New AI tasks wait, the UI shows a banner, and non-AI features keep working. |
-| Noisy neighbour           | Per-tenant concurrency semaphore in Redis (`max_llm_concurrency`, default 5), plus AI Budget checks before enqueue                                               |
-| Lost enqueue after commit | Outbox-style state rows (`upload_batch_items`, `email_messages`, `score_results`) plus a `beat` sweep of stale `PENDING`/`QUEUED` rows                           |
-| Concurrent Kanban moves   | Optimistic locking on `applications.version`                                                                                                                     |
-| Redis loss                | No durable data in Redis. In-flight tasks are recovered by the stale-row sweep, and SSE clients reconnect and refetch.                                           |
-| Data loss                 | Daily PostgreSQL backup to object storage, 30-day retention, RPO ≤ 24h, RTO ≤ 2h; restore rehearsed once and documented. Object storage versioning is on.        |
-
----
-
-## 7. AI Safety & Governance
-
-- **Prompt structure:** untrusted document text sits inside `<untrusted_document>`. Scoring calls have no tools, and the output is constrained by a JSON Schema whose grades are integers from 1 to 5.
-- **Grounding:** every Evidence quote is verified against the source, and unverifiable claims are flagged.
-- **Blind Profile:** demographics are stripped before scoring. Known proxies are listed in SRS FR-C2.4.
-- **Human authority:** the agent's capability set excludes every mutating operation (§5.3). The invariant is enforced in code and tests, not in prompts.
-- **Reproducibility:** each Scoring Run and Score Result stores the model, prompt version, rubric version and weights. Prompts are versioned files in the repo.
-- **Data minimisation:** only text is sent to the LLM provider, never photos. The provider is used under API terms that exclude training on the data.
+| Vấn đề                      | Cơ chế                                                                                                                                                      |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker chết giữa task       | `acks_late=True` và `task_reject_on_worker_lost=True`; task idempotent nhờ khóa duy nhất tự nhiên                                                           |
+| LLM timeout / 429 / 5xx     | Retry với backoff theo FR-C2.3, sau đó item `FAILED` kèm nút chạy lại                                                                                       |
+| Nhà cung cấp LLM sập        | Circuit breaker trong Redis theo ngưỡng của FR-C2.3. Tác vụ AI mới phải chờ, UI hiện banner, chức năng không dùng AI vẫn hoạt động.                         |
+| Noisy neighbour             | Semaphore đồng thời theo tenant trong Redis (`tenants.max_llm_concurrency`, giới hạn theo FR-C1.4), cộng kiểm tra AI Budget trước khi enqueue               |
+| Mất lệnh enqueue sau commit | Các dòng trạng thái kiểu outbox (`upload_batch_items`, `email_messages`, `score_results`) cộng lượt quét của `beat` cho các dòng `PENDING`/`QUEUED` bị treo |
+| Kéo thẻ Kanban đồng thời    | Optimistic locking trên `applications.version`                                                                                                              |
+| Mất Redis                   | Redis không giữ dữ liệu bền. Task đang chạy được khôi phục nhờ lượt quét dòng treo; client SSE kết nối lại và tải lại dữ liệu.                              |
+| Mất dữ liệu                 | Backup PostgreSQL hằng ngày lên object storage, bật versioning cho object storage; thời gian giữ, RPO, RTO và diễn tập restore theo NFR-REL-01              |
 
 ---
 
-## 8. Observability
+## 7. An toàn AI & Quản trị
 
-- `structlog` JSON logs carrying `request_id`, `tenant_id`, `user_id` and `task_id`.
-- Flower for queue depth and task failures.
-- `ai_usage_entries` for cost per tenant, feature and model.
-- `campaign_events` for agent traces.
-- Langfuse tracing (P2), with PII masking before export.
-- `/healthz` and `/readyz` on `api` and on the workers (through the Celery inspect ping).
+- **Cấu trúc prompt:** văn bản tài liệu không tin cậy nằm trong `<untrusted_document>`. Lời gọi chấm điểm không có tool, và output bị ràng buộc bởi JSON Schema với điểm là số nguyên từ 1 đến 5.
+- **Grounding:** mọi quote Evidence được đối chiếu với văn bản gốc, nhận định không kiểm chứng được bị gắn cờ.
+- **Blind Profile:** thông tin nhân khẩu học bị loại trước khi chấm điểm. Các proxy đã biết được liệt kê ở SRS FR-C2.4.
+- **Quyền quyết định của con người:** tập capability của agent loại trừ mọi thao tác thay đổi (§5.3). Bất biến này được thực thi bằng code và test, không bằng prompt.
+- **Tái lập:** mỗi Scoring Run và Score Result lưu model, prompt version, rubric version và trọng số. Prompt là file có version trong repo.
+- **Tối thiểu hóa dữ liệu:** chỉ gửi văn bản cho nhà cung cấp LLM, không gửi ảnh. Nhà cung cấp được dùng theo điều khoản API không huấn luyện trên dữ liệu.
 
 ---
 
-## 9. Deployment
+## 8. Quan sát (Observability)
 
-- **Local / staging:** Docker Compose with:
-  - Caddy (TLS), `web`, `api`;
+- Log JSON bằng `structlog` mang `request_id`, `tenant_id`, `user_id` và `task_id`.
+- Flower cho độ sâu queue và task lỗi.
+- `ai_usage_entries` cho chi phí theo tenant, tính năng và model.
+- `campaign_events` cho trace của agent.
+- Langfuse tracing (P2), che PII trước khi xuất.
+
+**Health check** (yêu cầu: NFR-REL-05):
+
+| Service    | Liveness                      | Readiness (DB, Redis, object storage) |
+| ---------- | ----------------------------- | ------------------------------------- |
+| `api`      | `GET /api/health` — đã có     | Chưa có (Roadmap GĐ 1)                |
+| `worker-*` | Celery inspect ping — chưa có | —                                     |
+
+Healthcheck của Docker Compose cho `api`, `web` và `caddy` chỉ mở kết nối TCP, không gọi endpoint HTTP, để không làm đầy access log.
+
+---
+
+## 9. Triển khai
+
+- **Local / staging:** Docker Compose gồm:
+  - Caddy (TLS, reverse proxy), `web`, `api`;
   - `worker-llm`, `worker-default`, `worker-agent`, `worker-email`, `beat`;
-  - `postgres` (image with pgvector), `redis`, `seaweedfs`, `mailpit`, `flower`.
-- **Demo production:** the same Compose file on one VPS (≥ 4 vCPU / 8 GB), with managed S3 and a managed email provider.
-- **Scaling path (not in scope):** `api` and the workers are stateless and scale horizontally. PostgreSQL gets a read replica for reporting. Nothing in the design assumes a single node except `beat`.
+  - `postgres` (image có pgvector), `redis`, `seaweedfs`, `mailpit`, `flower`.
+- **Production cho demo:** cùng file Compose trên một VPS (≥ 4 vCPU / 8 GB RAM), với S3 managed và nhà cung cấp email managed; backup PostgreSQL hằng ngày lên object storage.
+- **CI (GitHub Actions)** trên mọi PR vào `develop` và `main`:
+  - hiện có: Prettier, ESLint, TypeScript, Ruff, mypy, và smoke test hạ tầng (dựng toàn bộ stack bằng Compose);
+  - cần bổ sung (Roadmap GĐ 1): unit test (pytest, Vitest), integration test RLS trên PostgreSQL thật (testcontainers), build image.
+- **Hướng mở rộng (ngoài phạm vi):** `api` và worker stateless nên mở rộng ngang được. PostgreSQL có read replica cho báo cáo. Ngoài `beat`, thiết kế không giả định chạy trên một node.

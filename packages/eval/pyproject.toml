@@ -1,6 +1,6 @@
 [project]
 name = "smart-ats-eval"
 version = "0.0.0"
-description = "Smart ATS evaluation harness (SRS §8)"
+description = "Smart ATS evaluation harness (docs/EVAL/experiment_plan.md)"
 requires-python = ">=3.13,<3.14"
 dependencies = []

@@ -1,8 +1,8 @@
-# Agent Checkpoints use LangGraph interrupts with a Postgres checkpointer
+# Checkpoint của Agent dùng LangGraph interrupt với Postgres checkpointer
 
-A Campaign reaches its Checkpoint by calling LangGraph `interrupt()`. State is persisted by `langgraph-checkpoint-postgres` under `thread_id = campaign_id`, and the Celery task then ends. A Recruiter Decision enqueues a new task that resumes the graph with `Command(resume=decision)`. A human may take hours to decide, and holding a worker slot for that long would starve the queue.
+Một Campaign tới Checkpoint bằng cách gọi `interrupt()` của LangGraph. State được `langgraph-checkpoint-postgres` lưu dưới `thread_id = campaign_id`, rồi Celery task kết thúc. Recruiter Decision enqueue một task mới để resume graph bằng `Command(resume=decision)`. Con người có thể mất hàng giờ để quyết định, và giữ một worker slot trong ngần ấy thời gian sẽ làm nghẽn queue.
 
-## Consequences
+## Hệ quả
 
-- The 15-minute Campaign budget measures machine time only and excludes time spent waiting at a Checkpoint.
-- Before the Checkpoint the agent may create derived data (Scoring Runs, Score Results, What-if Suggestions). It may not change Stages, create Applications, or change Job criteria or weights. Those happen only when the Recruiter Decision is applied, in the resume task, attributed to that Recruiter.
+- Ngân sách thời gian của Campaign (NFR-PERF-05) chỉ tính thời gian máy, không tính thời gian chờ tại Checkpoint.
+- Trước Checkpoint, agent được tạo dữ liệu dẫn xuất (Scoring Run, Score Result, What-if Suggestion). Agent không được đổi Stage, tạo Application, hay thay đổi criteria hoặc trọng số của Job. Những thay đổi đó chỉ xảy ra khi Recruiter Decision được áp dụng, trong task resume, dưới tên Recruiter đó.

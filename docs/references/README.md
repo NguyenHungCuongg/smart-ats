@@ -1,6 +1,6 @@
 # Tài liệu tham khảo — Smart ATS
 
-Danh sách tài liệu dùng trong báo cáo khóa luận. Mỗi tài liệu phải hỗ trợ ít nhất một nhận định, quyết định thiết kế (ADR/FR) hoặc thực nghiệm (SRS §8) cụ thể. Theo dõi tại issue #14.
+Danh sách tài liệu dùng trong báo cáo khóa luận. Mỗi tài liệu phải hỗ trợ ít nhất một nhận định, quyết định thiết kế (ADR/FR) hoặc thực nghiệm ([Kế hoạch Thực nghiệm](../EVAL/experiment_plan.md)) cụ thể. Theo dõi tại issue #14.
 
 **Quy tắc**
 
@@ -70,12 +70,12 @@ Sắp theo mức ưu tiên. Mọi gợi ý phải tự xác minh trước khi th
 | Ưu tiên | Mảng | Cần cho | Gợi ý |
 |---|---|---|---|
 | Cao | Rubric có neo, chấm theo nhiều chiều | ADR-0006 (3 Axis Score, rubric 1–5) | H. Hashemi *et al.*, "LLM-Rubric," ACL 2024; S. Kim *et al.*, "Prometheus 2," EMNLP 2024. |
-| Cao | Độ ổn định khi `temperature=0` | ADR-0006 (metric độ lệch chuẩn qua 5 lần chạy) | B. Atil *et al.*, "Non-determinism of 'deterministic' LLM settings," arXiv:2408.04667 (preprint). |
+| Cao | Độ ổn định khi `temperature=0` | ADR-0006, Experiment 1 (metric độ ổn định) | B. Atil *et al.*, "Non-determinism of 'deterministic' LLM settings," arXiv:2408.04667 (preprint). |
 | Cao | Ràng buộc JSON Schema | ADR-0006, SAD §7 | Z. R. Tam *et al.*, "Let me speak freely?," EMNLP 2024 Industry. Ép định dạng có thể giảm khả năng suy luận: kiểm tra thứ tự trường trong schema (lập luận và Evidence trước, điểm sau). |
 | Trung bình | Tổng quan LLM-as-a-judge | Cơ sở lý thuyết | D. Li *et al.*, "From generation to judgment," EMNLP 2025; L. Zheng *et al.*, "Judging LLM-as-a-judge with MT-Bench and Chatbot Arena," NeurIPS 2023. |
 | Trung bình | Prompt injection gián tiếp | Experiment 2, thẻ `<untrusted_document>` | Greshake *et al.*, AISec 2023; Hines *et al.* 2024 (spotlighting); OWASP Top 10 for LLM Applications. |
 | Trung bình | Truy hồi và embedding | ADR-0005, Rediscovery, baseline Experiment 1 | BM25 (Robertson & Zaragoza 2009); Sentence-BERT (Reimers & Gurevych 2019); HNSW (Malkov & Yashunin 2020). |
-| Trung bình | Metric đánh giá | SRS §8.1 | NDCG (Järvelin & Kekäläinen 2002); weighted kappa (Cohen 1968). |
+| Trung bình | Metric đánh giá | Experiment 1 | NDCG (Järvelin & Kekäläinen 2002); weighted kappa (Cohen 1968). |
 | Trung bình | Phương pháp audit thiên kiến gốc | Experiment 6 | Bertrand & Mullainathan 2004 (thí nghiệm đổi tên ứng viên). |
 | Thấp | Multi-tenant và RLS | ADR-0001, Experiment 4 | Chong *et al.* 2006 (Multi-Tenant Data Architecture); PostgreSQL docs, *Row Security Policies*. |
 | Thấp | Pháp lý | FR-C1.5 | Nghị định 13/2023/NĐ-CP; Luật Bảo vệ dữ liệu cá nhân 2025; EU AI Act (AI tuyển dụng thuộc nhóm rủi ro cao). |
