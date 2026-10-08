@@ -10,7 +10,7 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 | ------------------------------------------------------------- | ------------------------------------------------------ |
 | Vì sao làm, cho ai, quyết định phạm vi                        | [PRD](docs/PRD/product_requirements_document.md)       |
 | Hệ thống phải làm gì: FR, NFR, tiêu chí nghiệm thu, ràng buộc | [SRS](docs/SRS/software_requirements_specification.md) |
-| Kiến trúc, luồng xử lý, công nghệ & phiên bản                 | [SAD](docs/SAD/system_architecture_document.md)        |
+| Kiến trúc, flow xử lý, công nghệ & phiên bản                  | [SAD](docs/SAD/system_architecture_document.md)        |
 | Vì sao chọn giải pháp đó                                      | [ADR](docs/adr/)                                       |
 | Bảng, cột, ràng buộc, index                                   | [ERD](docs/ERD/entity_relationship_diagram.md)         |
 | Thuật ngữ                                                     | [CONTEXT.md](CONTEXT.md)                               |
@@ -24,10 +24,10 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 ## Quy trình làm việc
 
 1. **Issue trước.** Mọi việc bắt đầu từ một GitHub issue. Nhãn triage: [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
-2. **Nhánh.** Tạo từ `develop`, đặt tên `feature/issue-<số>-<mô-tả-ngắn>`, ví dụ `feature/issue-12-caddy-reverse-proxy`. Workflow `pr-to-in-review` lấy số issue từ tên nhánh để chuyển issue sang _In review_. Việc không gắn issue dùng `chore/<mô-tả-ngắn>`.
+2. **Branch.** Tạo từ `develop`, đặt tên `feature/issue-<số>-<mô-tả-ngắn>`, ví dụ `feature/issue-12-caddy-reverse-proxy`. Workflow `pr-to-in-review` lấy số issue từ tên branch để chuyển issue sang _In review_. Việc không gắn issue dùng `chore/<mô-tả-ngắn>`.
 3. **Commit.** Theo [Conventional Commits](https://www.conventionalcommits.org/), viết tiếng Anh, thể mệnh lệnh: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `style:`, `test:`, kèm scope khi hữu ích (`fix(ci): …`).
 4. **Pull request** vào `develop` theo [PR template](.github/pull_request_template.md), body có `Closes #<số>`. Khi PR được merge vào `develop`, workflow `close-issues-on-develop-merge` tự đóng issue.
-5. **Sửa theo review:** thêm commit `chore: address review on <chủ đề>` vào cùng PR. Góp ý đến sau khi PR đã merge thì mở nhánh mới `feature/issue-<số>-<mô-tả>-review-followup`.
+5. **Sửa theo review:** thêm commit `chore: address review on <chủ đề>` vào cùng PR. Góp ý đến sau khi PR đã merge thì mở branch mới `feature/issue-<số>-<mô-tả>-review-followup`.
 6. **`main`** chỉ nhận merge từ `develop`, tại các mốc của Roadmap.
 
 ## Điều kiện merge
@@ -54,6 +54,6 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 
 - **Ngôn ngữ:** tài liệu dự án (PRD, SRS, SAD, ERD, ADR, Roadmap, Kế hoạch Thực nghiệm, file này) viết tiếng Việt. Thuật ngữ chuyên ngành và các từ trong `CONTEXT.md` giữ tiếng Anh (Job, Candidate, Scoring Run…). Code, tên bảng, commit message và PR viết tiếng Anh.
 - **Mỗi con số ở một chỗ:** ngưỡng, giới hạn và thời hạn chỉ ghi ở tài liệu sở hữu (thường là SRS); chỗ khác dẫn mã (`FR-…`, `NFR-…`, `ADR-…`).
-- **Mã yêu cầu ổn định:** không đánh số lại FR/NFR. Số mục của SAD và ERD được code dẫn chiếu (ví dụ `SAD §3` trong `docker-compose.yml`), nên không đánh số lại.
+- **Mã yêu cầu stable:** không đánh số lại FR/NFR. Số mục của SAD và ERD được code dẫn chiếu (ví dụ `SAD §3` trong `docker-compose.yml`), nên không đánh số lại.
 - **Quyết định khó đảo ngược** thì ghi thành ADR mới trong `docs/adr/`. Thuật ngữ mới thì thêm vào `CONTEXT.md`.
 - **Trích dẫn:** dẫn bài báo theo quy tắc trong [docs/references/README.md](docs/references/README.md), trích nguyên văn câu làm căn cứ.

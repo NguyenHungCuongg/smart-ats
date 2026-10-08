@@ -51,7 +51,7 @@ Phần lớn doanh nghiệp vừa và nhỏ (SME) Việt Nam vẫn quản lý tu
 ### 1.3. Nguyên tắc Thiết kế
 
 1. **AI-Augmented, Human-Decided**: AI xử lý khối lượng lớn và đề xuất; con người quyết định. Không có quyết định loại ứng viên hay thay đổi tiêu chí nào được thực hiện tự động.
-2. **No-Prompt UI**: Người dùng không cần kiến thức prompt engineering; mọi khả năng LLM được trừu tượng hóa qua form, wizard và nút hành động.
+2. **No-Prompt UI**: Người dùng không cần kiến thức prompt engineering; mọi khả năng LLM được trừu tượng hóa qua form, wizard và action button.
 3. **Explainability-First**: Mọi điểm số kèm Fit-Gap Report có Evidence trích nguyên văn; mọi điểm số có thể tái lập (lưu model, prompt version, rubric version, trọng số).
 4. **Fault Isolation**: Lỗi của một file hay một ứng viên không ảnh hưởng phần còn lại của batch.
 5. **Isolation by Default**: Dữ liệu tenant được cô lập ở tầng database engine; code quên lọc `tenant_id` vẫn không lộ dữ liệu.
@@ -104,7 +104,7 @@ Chỉ Company Admin và Recruiter được khởi tạo Campaign.
 |              | Cô lập tenant bằng Forced RLS                                                                                  | FR-C1.3      | P1      |
 |              | AI Usage Ledger & AI Budget                                                                                    | FR-C1.4      | P1      |
 |              | Bảo vệ dữ liệu cá nhân ứng viên (đồng ý, lưu giữ, xóa)                                                         | FR-C1.5      | P1      |
-| C2 AI Engine | Trích xuất tài liệu, chống prompt injection, xử lý bất đồng bộ, Blind Profile                                  | FR-C2.1–C2.4 | P1      |
+| C2 AI Engine | Document extraction, chống prompt injection, xử lý bất đồng bộ, Blind Profile                                  | FR-C2.1–C2.4 | P1      |
 
 ---
 

@@ -14,8 +14,8 @@
 
 ## 1. Nguyên tắc
 
-1. **Đóng góp chính đi trước.** Lõi chấm điểm và eval harness bắt đầu từ GĐ 1, chạy offline trên dataset, không chờ UI hay pipeline ATS. Chất lượng prompt là nút thắt thực sự, nên cần nhiều vòng lặp nhất.
-2. **Lát cắt dọc mỏng.** GĐ 1 chỉ làm đủ để một luồng Job → CV → Score → Fit-Gap chạy thật trên nền RLS; quản lý Workspace và Member để sau.
+1. **Đóng góp chính đi trước.** Scoring core và eval harness bắt đầu từ GĐ 1, chạy offline trên dataset, không chờ UI hay pipeline ATS. Chất lượng prompt là bottleneck thực sự, nên cần nhiều vòng lặp nhất.
+2. **Vertical Slice mỏng.** GĐ 1 chỉ làm đủ để một flow Job → CV → Score → Fit-Gap chạy thật trên nền RLS; quản lý Workspace và Member để sau.
 3. **Dữ liệu có hạn chót.** Nhãn của người chấm HR là phụ thuộc bên ngoài lớn nhất, nên có mốc cứng: tập dev xong trước M1, tập test xong trước M2.
 4. **Test bảo mật viết trước tính năng.** Mỗi bảng, endpoint hoặc task mới có test xuyên tenant đi kèm (checklist trong [CONTRIBUTING.md](../../CONTRIBUTING.md#checklist-review-bảo-mật)).
 5. **Đóng băng trước khi đo.** Lượt chạy thực nghiệm chính thức dùng model, prompt và rubric đã gắn tag; không tinh chỉnh trên tập test.
@@ -29,7 +29,7 @@
 | Giai đoạn                              | Tuần  | Thời gian               | Mốc | Trạng thái            |
 | -------------------------------------- | ----- | ----------------------- | --- | --------------------- |
 | **0. Nền tảng dự án**                  | 1–2   | 28/09 – 11/10/2026      | M0  | ✅ trừ dữ liệu (§3.0) |
-| **1. Lát cắt dọc**                     | 3–6   | 12/10 – 08/11/2026      | M1  | ⬜                    |
+| **1. Vertical Slice**                  | 3–6   | 12/10 – 08/11/2026      | M1  | ⬜                    |
 | **2. Chất lượng chấm điểm & ATS lõi**  | 7–11  | 09/11 – 13/12/2026      | M2  | ⬜                    |
 | **3. Hoàn thiện ATS**                  | 12–15 | 14/12/2026 – 10/01/2027 | M3  | ⬜                    |
 | **4. Agent**                           | 16–19 | 11/01 – 07/02/2027      | M4  | ⬜                    |
@@ -37,7 +37,7 @@
 | **5. Thực nghiệm chính thức & gia cố** | 21–23 | 15/02 – 07/03/2027      | M5  | ⬜                    |
 | **6. Hoàn thiện & bảo vệ**             | 24–26 | 08/03 – 28/03/2027      | M6  | ⬜                    |
 
-Mỗi giai đoạn chia thành ba luồng chạy song song: **Nền tảng** (backend, bảo mật, pipeline ATS), **AI & Thực nghiệm** (trích xuất, chấm điểm, agent, eval harness), **Dữ liệu & Báo cáo**.
+Mỗi giai đoạn chia thành ba workstream chạy song song: **Nền tảng** (backend, bảo mật, pipeline ATS), **AI & Thực nghiệm** (extract, chấm điểm, agent, eval harness), **Dữ liệu & Báo cáo**.
 
 ---
 
@@ -48,7 +48,7 @@ Mỗi giai đoạn chia thành ba luồng chạy song song: **Nền tảng** (ba
 Đã xong:
 
 - Ý tưởng và tài liệu: SRS/PRD/SAD/ERD, ADR 0001–0006, `CONTEXT.md` (#1, #3); cấu trúc context cho AI agent (#4); tài liệu tham khảo (#14); tái cấu trúc tài liệu v3.2.
-- Monorepo, biến môi trường, skeleton web/API/Celery và test runner (#7, #18); nhánh `develop` (#6).
+- Monorepo, biến môi trường, skeleton web/API/Celery và test runner (#7, #18); branch `develop` (#6).
 - Hạ tầng Docker Compose: PostgreSQL 18 + pgvector với hai role (#8), Redis + Flower (#9), SeaweedFS + Mailpit (#10), container ứng dụng và topology queue (#11), Caddy với SSE (#12), smoke test hạ tầng (#13).
 - Formatter, linter, type check, git hook và CI (#15).
 
@@ -58,7 +58,7 @@ Còn lại:
 
 **M0:** CI xanh ✅; kế hoạch dataset + 2 người chấm xác nhận ⬜.
 
-### 3.1. GĐ 1 — Lát cắt dọc (T3–6)
+### 3.1. GĐ 1 — Vertical Slice (T3–6)
 
 **Nền tảng**
 
@@ -68,14 +68,14 @@ Còn lại:
 - Bộ test RLS xuyên tenant trên PostgreSQL thật (testcontainers) chạy trong CI.
 - Đăng nhập bằng mật khẩu, access/refresh token (FR-C1.1, chưa cần Google); tenant và user tạo bằng lệnh seed.
 - Readiness check cho `api` (NFR-REL-05).
-- SSE ticket và sự kiện tiến độ thật (ADR-0003).
+- SSE ticket và event tiến độ thật (ADR-0003).
 
 **AI & Thực nghiệm**
 
-- Trích xuất PDF/DOCX và JSON Schema cho JD/CV (FR-C2.1); parse Job và form xác nhận criteria (FR-A1.1).
+- Extract PDF/DOCX và JSON Schema cho JD/CV (FR-C2.1); parse Job và form xác nhận criteria (FR-A1.1).
 - Upload 1 CV → parse → Blind Profile v0 → chấm 1 Application (rubric v0 + Must-have Coverage khớp chính xác/alias) → màn hình Fit-Gap.
-- Lõi chấm điểm gọi được trực tiếp từ eval harness, không cần API hay Celery.
-- Eval harness v0 trong `packages/eval`: đọc dataset, tính Spearman ρ, NDCG@5, Precision@5, grounding rate, độ ổn định; cấu hình Baseline.
+- Scoring core gọi được trực tiếp từ eval harness, không cần API hay Celery.
+- Eval harness v0 trong `packages/eval`: đọc dataset, tính Spearman ρ, NDCG@5, Precision@5, grounding rate, stability; cấu hình Baseline.
 
 **Dữ liệu & Báo cáo**
 
@@ -85,7 +85,7 @@ Còn lại:
 
 **M1:**
 
-- Luồng Job → CV → Score → Fit-Gap chạy end-to-end trên Docker Compose.
+- Flow Job → CV → Score → Fit-Gap chạy end-to-end trên Docker Compose.
 - ≥ 15 test RLS xuyên tenant pass trong CI.
 - Eval harness in bảng so sánh Baseline với scoring v0 trên tập dev.
 - Nhãn tập dev hoàn tất.
@@ -178,7 +178,7 @@ Không lên kế hoạch việc mới. Dùng để bù phần trễ của GĐ 4 
 - Hoàn thiện báo cáo, slide, video demo.
 - **Đóng băng tính năng**: chỉ sửa lỗi.
 
-**M6:** bản demo ổn định trên staging; báo cáo nộp đúng hạn.
+**M6:** bản demo stable trên staging; báo cáo nộp đúng hạn.
 
 ---
 
@@ -189,7 +189,7 @@ Không lên kế hoạch việc mới. Dùng để bù phần trễ của GĐ 4 
 | **SV A**   | Backend (FastAPI, RLS, Celery), Scoring Engine, Agent, bảo mật                                               | Review toàn bộ PR frontend liên quan tới auth và dữ liệu |
 | **SV B**   | Frontend (Next.js, Kanban, Checkpoint UI), Document Extraction, eval harness & dataset, thực nghiệm, báo cáo | Review toàn bộ PR prompt/scoring                         |
 
-> GĐ 1 dồn cho SV A cả nền RLS lẫn lõi chấm điểm. Nếu có nguy cơ trễ M1, chuyển lõi chấm điểm sang SV B, người giữ eval harness, vì hai phần này lặp cùng nhau.
+> GĐ 1 dồn cho SV A cả nền RLS lẫn scoring core. Nếu có nguy cơ trễ M1, chuyển scoring core sang SV B, người giữ eval harness, vì hai phần này lặp cùng nhau.
 
 Mỗi thành viên phải giải thích được phần của người kia khi bảo vệ. Quy tắc review và merge: [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
@@ -219,7 +219,7 @@ Tại mỗi mốc, nếu tiêu chí chưa đạt, cắt theo thứ tự dưới 
 
 ## 7. Khả thi & Rủi ro
 
-**Khả thi:** khối lượng code khả thi với 2 thành viên cùng coding agent; CRUD, UI và hạ tầng không phải nút thắt. Nút thắt thực sự là dataset và người chấm HR, vòng lặp chất lượng prompt, tính đúng đắn bảo mật, và băng thông review code.
+**Khả thi:** khối lượng code khả thi với 2 thành viên cùng coding agent; CRUD, UI và hạ tầng không phải bottleneck. Bottleneck thực sự là dataset và người chấm HR, vòng lặp chất lượng prompt, tính đúng đắn bảo mật, và băng thông review code.
 
 | Rủi ro                                                                                    | Mức        | Giảm thiểu                                                                                                                                                                  |
 | ----------------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -237,15 +237,15 @@ Tại mỗi mốc, nếu tiêu chí chưa đạt, cắt theo thứ tự dưới 
 
 ## 8. Khác gì so với lộ trình trong SRS v3.1
 
-| Thay đổi                                                                          | Lý do                                                                                  |
-| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Eval harness và lõi chấm điểm bắt đầu ở GĐ 1 (trước đây: harness ở GĐ 2, tuần 12) | Đóng góp chính cần nhiều vòng tinh chỉnh nhất; harness không phụ thuộc UI              |
-| Kết quả Experiment 1–2 sơ bộ ở M2 (T11) thay vì T12                               | Phát hiện sớm nếu scoring không đạt                                                    |
-| Có hạn chót cho nhãn tập dev (M1) và tập test (T10)                               | Rủi ro "Cao" trước đây không có mốc                                                    |
-| Workspace, Member, lời mời chuyển từ GĐ 1 sang GĐ 2                               | Lát cắt dọc mỏng hơn; lời mời cần email outbox nên làm cùng nhau                       |
-| Thêm bước CI chạy unit test ở đầu GĐ 1                                            | CI hiện chưa chạy pytest/Vitest; test RLS không chặn merge được nếu CI không chạy test |
-| Kịch bản Experiment 3 viết trong GĐ 3, trước khi code Agent                       | Tránh thiết kế kịch bản theo những gì Agent làm được                                   |
-| Agent T16–19 (trước đây T17–20), thêm T20 làm tuần đệm                            | Tết 2027 rơi vào T19–T20; lộ trình cũ không có tuần đệm                                |
-| Đóng băng bằng git tag trước GĐ 5                                                 | Bảo đảm quy tắc "không tinh chỉnh trên tập test" kiểm chứng được                       |
-| Báo cáo viết theo chương ở mỗi giai đoạn                                          | Lộ trình cũ dồn toàn bộ báo cáo vào 3 tuần cuối                                        |
-| Thêm danh sách cắt giảm                                                           | Gần như mọi FR là P1; cần biết trước cắt gì để giữ thời gian thực nghiệm               |
+| Thay đổi                                                                         | Lý do                                                                                  |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Eval harness và scoring core bắt đầu ở GĐ 1 (trước đây: harness ở GĐ 2, tuần 12) | Đóng góp chính cần nhiều vòng tinh chỉnh nhất; harness không phụ thuộc UI              |
+| Kết quả Experiment 1–2 sơ bộ ở M2 (T11) thay vì T12                              | Phát hiện sớm nếu scoring không đạt                                                    |
+| Có hạn chót cho nhãn tập dev (M1) và tập test (T10)                              | Rủi ro "Cao" trước đây không có mốc                                                    |
+| Workspace, Member, lời mời chuyển từ GĐ 1 sang GĐ 2                              | Vertical Slice mỏng hơn; lời mời cần email outbox nên làm cùng nhau                    |
+| Thêm bước CI chạy unit test ở đầu GĐ 1                                           | CI hiện chưa chạy pytest/Vitest; test RLS không chặn merge được nếu CI không chạy test |
+| Kịch bản Experiment 3 viết trong GĐ 3, trước khi code Agent                      | Tránh thiết kế kịch bản theo những gì Agent làm được                                   |
+| Agent T16–19 (trước đây T17–20), thêm T20 làm tuần đệm                           | Tết 2027 rơi vào T19–T20; lộ trình cũ không có tuần đệm                                |
+| Đóng băng bằng git tag trước GĐ 5                                                | Bảo đảm quy tắc "không tinh chỉnh trên tập test" kiểm chứng được                       |
+| Báo cáo viết theo chương ở mỗi giai đoạn                                         | Lộ trình cũ dồn toàn bộ báo cáo vào 3 tuần cuối                                        |
+| Thêm danh sách cắt giảm                                                          | Gần như mọi FR là P1; cần biết trước cắt gì để giữ thời gian thực nghiệm               |

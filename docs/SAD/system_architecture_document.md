@@ -6,7 +6,7 @@
 **Ngày:** 2026-10-08
 **Đối tượng đọc:** Nhóm phát triển (kỹ thuật, vận hành)
 
-> SAD là nguồn sự thật cho **kiến trúc, luồng xử lý, công nghệ và phiên bản**. Yêu cầu và mọi ngưỡng nằm trong [SRS](../SRS/software_requirements_specification.md) và được dẫn bằng mã; lý do của từng quyết định nằm trong `docs/adr/`; thuật ngữ trong `CONTEXT.md`; lược đồ dữ liệu trong [ERD](../ERD/entity_relationship_diagram.md). Sơ đồ: `docs/SAD/architecture_diagram.html`.
+> SAD là nguồn sự thật cho **kiến trúc, flow xử lý, công nghệ và phiên bản**. Yêu cầu và mọi ngưỡng nằm trong [SRS](../SRS/software_requirements_specification.md) và được dẫn bằng mã; lý do của từng quyết định nằm trong `docs/adr/`; thuật ngữ trong `CONTEXT.md`; lược đồ dữ liệu trong [ERD](../ERD/entity_relationship_diagram.md). Sơ đồ: `docs/SAD/architecture_diagram.html`.
 >
 > Số mục của tài liệu này được code dẫn chiếu (ví dụ `SAD §3` trong `docker-compose.yml`); không đánh số lại.
 
@@ -31,7 +31,7 @@ pgvector                            agent · email      Object storage (S3)
    └──────────── SQL (tenant_session) ──────┘
 ```
 
-Có hai luồng nghiệp vụ:
+Có hai flow nghiệp vụ:
 
 1. **Pipeline chấm điểm tất định** (đóng góp chính của khóa luận): parse Job → Recruiter xác nhận criteria → upload CV / Public Apply → parse từng CV (task riêng) → Scoring Run → xếp hạng + Fit-Gap → Shortlist → câu hỏi phỏng vấn / email / PDF.
 2. **Agentic Campaign** (đóng góp phụ): một lớp điều phối gọi chính các domain service ở trên như tool và dừng tại một Checkpoint bền vững. Task `agent` chạy LangGraph (Plan/Act/Reflect) → `interrupt()` tại Checkpoint, state lưu trong Postgres, task kết thúc → SSE thông báo → Recruiter Decision → task mới resume graph → áp dụng thay đổi dưới tên Recruiter.
@@ -70,7 +70,7 @@ Thuộc tính chất lượng theo thứ tự ưu tiên: **cô lập tenant**, *
 |                    | langgraph-checkpoint-postgres                                                                               | 3.1.x             | Checkpoint bền vững (ADR-0004)                                              |
 |                    | langchain-openai / openai SDK                                                                               | 1.6.x / 3.x       |                                                                             |
 | **LLM**            | OpenAI `gpt-6-sol`                                                                                          | —                 | Scoring, Fit-Gap, câu hỏi phỏng vấn, lập kế hoạch Agent                     |
-|                    | OpenAI `gpt-6-luna`                                                                                         | —                 | Trích xuất JD/CV, soạn email, OCR fallback — rẻ, khối lượng lớn             |
+|                    | OpenAI `gpt-6-luna`                                                                                         | —                 | Extract JD/CV, soạn email, OCR fallback — rẻ, khối lượng lớn                |
 |                    | OpenAI `text-embedding-3-large`                                                                             | `dimensions=1536` | ADR-0005                                                                    |
 | **Document**       | pypdf 6.x, python-docx 1.2.x, WeasyPrint 70.x                                                               |                   | Không dùng PyMuPDF do giấy phép AGPL                                        |
 | **Database**       | PostgreSQL                                                                                                  | 18.x              | Hỗ trợ tới 2030-11                                                          |
@@ -93,7 +93,7 @@ Thuộc tính chất lượng theo thứ tự ưu tiên: **cô lập tenant**, *
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
 | `web` (Next.js)           | Chỉ UI: ứng dụng cho recruiter và trang công khai `/apply/{slug}`. Không có Server Action nào gọi xuống backend (ADR-0003). | Replica stateless                   |
 | `api` (FastAPI + Uvicorn) | Auth, RBAC, tenant context, CRUD, enqueue, SSE stream, presigned URL                                                        | Replica stateless                   |
-| `worker-llm`              | Trích xuất CV/JD, embedding, chấm điểm, câu hỏi phỏng vấn, soạn email. Giới hạn đồng thời toàn cục và theo từng Tenant.     | Replica; bị chặn bởi rate limit LLM |
+| `worker-llm`              | Extract CV/JD, embedding, chấm điểm, câu hỏi phỏng vấn, soạn email. Giới hạn đồng thời toàn cục và theo từng Tenant.        | Replica; bị chặn bởi rate limit LLM |
 | `worker-default`          | Việc không dùng AI: kiểm tra file, xuất PDF, thông báo, bộ đếm                                                              | Replica                             |
 | `worker-agent`            | Các lượt chạy LangGraph của Campaign (plan / act / reflect tới Checkpoint)                                                  | Replica                             |
 | `worker-email`            | Gửi các `email_messages` đang chờ qua nhà cung cấp                                                                          | 1–2 replica                         |
@@ -141,7 +141,7 @@ Các tra cứu trước khi biết tenant (đăng nhập, đăng nhập Google, 
 
 ---
 
-## 5. Luồng Chính
+## 5. Key Flows
 
 ### 5.1. Upload & parse CV (cô lập lỗi)
 
@@ -181,7 +181,7 @@ Các tra cứu trước khi biết tenant (đăng nhập, đăng nhập Google, 
 4. Khi tới Checkpoint:
    - ghi `campaign_proposals`;
    - đặt `status = AWAITING_DECISION`;
-   - publish một sự kiện SSE;
+   - publish một event SSE;
    - gọi `interrupt()`.
 
    Task kết thúc và slot của worker được giải phóng.
@@ -247,7 +247,7 @@ Index HNSW giữ truy vấn nhanh. Cô lập không cần thêm điều kiện l
 | Vấn đề                      | Cơ chế                                                                                                                                                      |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Worker chết giữa task       | `acks_late=True` và `task_reject_on_worker_lost=True`; task idempotent nhờ khóa duy nhất tự nhiên                                                           |
-| LLM timeout / 429 / 5xx     | Retry với backoff theo FR-C2.3, sau đó item `FAILED` kèm nút chạy lại                                                                                       |
+| LLM timeout / 429 / 5xx     | Retry với backoff theo FR-C2.3, sau đó item `FAILED` kèm button chạy lại                                                                                    |
 | Nhà cung cấp LLM sập        | Circuit breaker trong Redis theo ngưỡng của FR-C2.3. Tác vụ AI mới phải chờ, UI hiện banner, chức năng không dùng AI vẫn hoạt động.                         |
 | Noisy neighbour             | Semaphore đồng thời theo tenant trong Redis (`tenants.max_llm_concurrency`, giới hạn theo FR-C1.4), cộng kiểm tra AI Budget trước khi enqueue               |
 | Mất lệnh enqueue sau commit | Các dòng trạng thái kiểu outbox (`upload_batch_items`, `email_messages`, `score_results`) cộng lượt quét của `beat` cho các dòng `PENDING`/`QUEUED` bị treo |

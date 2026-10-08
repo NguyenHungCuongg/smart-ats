@@ -46,7 +46,7 @@ Tài liệu đặc tả những gì Smart ATS phải làm và phải đạt, ở
 
 ### 1.3. Quy ước
 
-- **Mã yêu cầu**: `FR-<module><số>` cho yêu cầu chức năng, `NFR-<nhóm>-<số>` cho phi chức năng. Mã ổn định: không đánh số lại khi xóa; tài liệu khác dẫn chiếu bằng mã.
+- **Mã yêu cầu**: `FR-<module><số>` cho yêu cầu chức năng, `NFR-<nhóm>-<số>` cho phi chức năng. Mã stable: không đánh số lại khi xóa; tài liệu khác dẫn chiếu bằng mã.
 - **Mức ưu tiên**: **P1** = bắt buộc cho demo và thực nghiệm; **P2** = làm nếu còn thời gian, không ảnh hưởng thực nghiệm.
 - **Con số**: mỗi ngưỡng, giới hạn, thời hạn chỉ ghi ở một yêu cầu; chỗ khác dẫn mã yêu cầu đó.
 - **Thuật ngữ**: viết hoa theo `CONTEXT.md` (Job, Candidate, Application, Stage, Scoring Run…).
@@ -141,7 +141,7 @@ Recruiter tạo một **Campaign** cho một Job bằng **Campaign Brief** (ngô
 | `generate_interview_questions` | Sinh câu hỏi cho Shortlist đề xuất (FR-A1.4)                                                          | Dẫn xuất   |
 | `request_checkpoint`           | Dừng tại Checkpoint (bình thường hoặc Escalation kèm lý do)                                           | Điều khiển |
 
-**Luồng hoạt động:**
+**Flow hoạt động:**
 
 ```
 [Recruiter tạo Campaign: Job + Brief + target_count]
@@ -198,9 +198,9 @@ CHECKPOINT — dừng; lưu state; worker được giải phóng
 
 #### `FR-A1.1` [P1] Parse Job & Cấu hình Tiêu chí
 
-**Mô tả:** Recruiter upload JD Document (PDF/DOCX/TXT) hoặc dán văn bản. AI trích xuất thành criteria có cấu trúc.
+**Mô tả:** Recruiter upload JD Document (PDF/DOCX/TXT) hoặc dán văn bản. AI extract thành criteria có cấu trúc.
 
-**Trường trích xuất:** chức danh, cấp bậc (Intern/Junior/Mid/Senior/Lead/Manager), must-have skills, nice-to-have skills, số năm kinh nghiệm tối thiểu, học vấn, trách nhiệm chính, hình thức làm việc (Remote/Hybrid/On-site), dải lương (nếu có), phòng ban, địa điểm.
+**Extracted fields:** chức danh, cấp bậc (Intern/Junior/Mid/Senior/Lead/Manager), must-have skills, nice-to-have skills, số năm kinh nghiệm tối thiểu, học vấn, trách nhiệm chính, hình thức làm việc (Remote/Hybrid/On-site), dải lương (nếu có), phòng ban, địa điểm.
 
 **Human-in-the-Loop:** Kết quả hiển thị trên form chỉnh sửa được. Recruiter có thể thêm/bớt/sửa kỹ năng, đánh dấu must-have/nice-to-have, và chỉnh trọng số 3 trục (tổng = 100%, ràng buộc cả ở DB).
 
@@ -218,7 +218,7 @@ CHECKPOINT — dừng; lưu state; worker được giải phóng
 
 **Mô tả:** Upload tối đa **50 file/Upload Batch** (PDF hoặc DOCX, ≤ 10 MB/file) qua kéo-thả, gắn với một Job (tạo Application ở stage Applied) hoặc chỉ vào Talent Pool.
 
-**Trường trích xuất:** thông tin liên hệ (họ tên, email, điện thoại, LinkedIn/GitHub); lịch sử làm việc (công ty, chức danh, thời gian, trách nhiệm, thành tích); kỹ năng (hard skills, soft skills, tools, ngôn ngữ); học vấn & chứng chỉ; cờ bất thường (khoảng trống công việc, mốc thời gian mâu thuẫn).
+**Extracted fields:** thông tin liên hệ (họ tên, email, điện thoại, LinkedIn/GitHub); lịch sử làm việc (công ty, chức danh, thời gian, trách nhiệm, thành tích); kỹ năng (hard skills, soft skills, tools, ngôn ngữ); học vấn & chứng chỉ; cờ bất thường (khoảng trống công việc, mốc thời gian mâu thuẫn).
 
 **Tách dữ liệu cá nhân:** Thông tin nhân khẩu học (giới tính, ngày sinh/tuổi, ảnh, tình trạng hôn nhân, quê quán) **không lưu** vào profile dùng để chấm điểm; hệ thống tạo **Blind Profile** riêng cho scoring (FR-C2.4).
 
@@ -230,7 +230,7 @@ CHECKPOINT — dừng; lưu state; worker được giải phóng
 
 **Acceptance Criteria:**
 
-- Batch 50 CV hợp lệ → tỷ lệ trích xuất thành công ≥ 95%.
+- Batch 50 CV hợp lệ → tỷ lệ extraction thành công ≥ 95%.
 - Chèn 2 file hỏng → 48 file còn lại hoàn tất; `failed = 2` hiển thị kèm lý do.
 - Batch 50 CV hoàn tất trong thời gian NFR-PERF-03.
 - Upload lại cùng file → không tạo CV Document hay Candidate trùng.
@@ -327,14 +327,14 @@ Báo cáo cho Hiring Manager gồm: tóm tắt Job và trọng số; bảng xế
 
 **Tone:** Trang trọng (Formal) · Thân thiện (Friendly) · Ngắn gọn (Concise).
 
-**Luồng:** AI soạn nháp (stream về UI) → Recruiter chỉnh sửa → bấm **Gửi**. Email được lưu với trạng thái `QUEUED` trong cùng transaction nghiệp vụ, worker gửi qua dịch vụ transactional email (§5) và cập nhật `SENT` / `FAILED`. Không có email nào được gửi mà Recruiter chưa xem.
+**Flow:** AI soạn nháp (stream về UI) → Recruiter chỉnh sửa → bấm **Gửi**. Email được lưu với trạng thái `QUEUED` trong cùng transaction nghiệp vụ, worker gửi qua dịch vụ transactional email (§5) và cập nhật `SENT` / `FAILED`. Không có email nào được gửi mà Recruiter chưa xem.
 
 **Acceptance Criteria:**
 
 - Đổi tone làm thay đổi rõ rệt giọng văn.
 - Email chứa chính xác tên, thời gian, link đã nhập (kiểm tra bằng validator, không tin LLM).
 - Gửi lại do retry không tạo email trùng (idempotency key theo `email_message_id`).
-- Ứng viên không có email → nút Gửi bị vô hiệu, cho phép copy nội dung.
+- Ứng viên không có email → button Gửi bị vô hiệu, cho phép copy nội dung.
 
 ---
 
@@ -479,7 +479,7 @@ Toàn bộ nội dung từ file là **untrusted input**:
 #### `FR-C2.3` [P1] Xử lý Tác vụ AI Bất đồng bộ
 
 - Tác vụ nặng chạy nền, không chặn request; tiến độ đẩy về UI theo thời gian thực.
-- **Retry:** exponential backoff 5s / 15s / 60s khi LLM timeout hoặc 429/5xx; sau đó mục đó `FAILED` và có nút chạy lại.
+- **Retry:** exponential backoff 5s / 15s / 60s khi LLM timeout hoặc 429/5xx; sau đó mục đó `FAILED` và có button chạy lại.
 - **Idempotency:** mọi tác vụ có khóa tự nhiên (ví dụ `(scoring_run_id, application_id)`) — chạy lại không tạo bản ghi trùng.
 - **Graceful degradation:** nhà cung cấp LLM lỗi liên tục (≥ 5 lỗi liên tiếp trong 1 phút) → đánh dấu _degraded_: tác vụ mới ở trạng thái chờ, UI hiển thị banner, các chức năng không dùng AI hoạt động bình thường; tự thử lại sau 2 phút.
 

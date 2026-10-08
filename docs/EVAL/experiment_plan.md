@@ -26,7 +26,7 @@
 
 **Đóng góp chính (nghiên cứu) — Explainable Hybrid Scoring cho tuyển dụng:**
 
-> Thiết kế và đánh giá engine chấm điểm CV–Job kết hợp Must-have Coverage tất định, semantic skill matching bằng embedding, và LLM rubric có neo mức điểm bắt buộc trích dẫn Evidence — kèm đánh giá thực nghiệm về độ tương quan với chuyên gia HR, độ ổn định, khả năng chống prompt injection và giảm thiên kiến nhân khẩu học.
+> Thiết kế và đánh giá engine chấm điểm CV–Job kết hợp Must-have Coverage tất định, semantic skill matching bằng embedding, và LLM rubric có neo mức điểm bắt buộc trích dẫn Evidence — kèm đánh giá thực nghiệm về độ tương quan với chuyên gia HR, stability, khả năng chống prompt injection và giảm thiên kiến nhân khẩu học.
 
 **Đóng góp phụ (nghiên cứu ứng dụng) — Agentic Recruitment Orchestration có kiểm soát:**
 
@@ -73,7 +73,7 @@
 - Spearman ρ giữa Total và điểm HR, tính **trong từng Job** rồi lấy trung bình.
 - **NDCG@5** và **Precision@5** so với Top 5 của HR (sát với cách dùng thực tế: chọn Shortlist).
 - **Grounding rate:** % Evidence tìm thấy trong văn bản gốc (mục tiêu ≥ 95%).
-- **Độ ổn định:** độ lệch chuẩn Total qua 5 lần chấm lặp (mục tiêu ≤ 3 điểm).
+- **Stability:** độ lệch chuẩn Total qua 5 lần chấm lặp (mục tiêu ≤ 3 điểm).
 - **Chi phí & độ trễ** mỗi Application.
 
 **Mục tiêu tham chiếu:** Spearman ρ ≥ 0,6 và NDCG@5 cao hơn baseline có ý nghĩa.
@@ -129,7 +129,7 @@
 
 ## 8. Experiment 5: Hiệu năng Hệ thống
 
-**Công cụ:** Locust trên staging. Tách 2 chế độ: **LLM giả lập** (mock có độ trễ thực tế — đo overhead của hệ thống, rẻ, lặp lại được) và **LLM thật** (mẫu nhỏ — đo end-to-end).
+**Công cụ:** Locust trên staging. Tách 2 chế độ: **LLM giả lập** (mock có độ trễ thực tế — đo overhead của hệ thống, rẻ, repeatable) và **LLM thật** (mẫu nhỏ — đo end-to-end).
 
 | Hạng mục                | Kịch bản tải                 | Đạt khi                                  |
 | ----------------------- | ---------------------------- | ---------------------------------------- |
@@ -138,7 +138,7 @@
 | Upload Batch tối đa     | 3 batch đồng thời (3 tenant) | Đạt NFR-PERF-03                          |
 | Chấm điểm 1 Application | 30 yêu cầu đồng thời         | Đạt NFR-PERF-04                          |
 | Rediscovery             | Như đặc tả trong NFR-PERF-07 | Đạt NFR-PERF-07                          |
-| Ổn định                 | 10 người dùng × 30 phút      | 0 crash, 0 dữ liệu hỏng, 0 bản ghi trùng |
+| Stability               | 10 người dùng × 30 phút      | 0 crash, 0 dữ liệu hỏng, 0 bản ghi trùng |
 | Fairness                | 1 tenant spam 200 tác vụ AI  | Tenant khác vẫn đạt NFR-PERF-01–04       |
 
 ---

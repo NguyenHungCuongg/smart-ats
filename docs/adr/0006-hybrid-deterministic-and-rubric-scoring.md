@@ -5,4 +5,4 @@ Axis Score không phải một con số 0–100 tự do do LLM đưa ra, vì con
 ## Hệ quả
 
 - Mỗi Score Result lưu `model`, `prompt_version`, `rubric_version` và snapshot trọng số của Scoring Run, nên mọi điểm số đều tái lập hoặc giải thích được về sau.
-- Lời gọi chạy với `temperature=0` và seed cố định khi model hỗ trợ. Độ ổn định của điểm số là một metric được đo và báo cáo (Experiment 1), không phải một giả định.
+- Lời gọi chạy với `temperature=0` và seed cố định khi model hỗ trợ. Stability của điểm số là một metric được đo và báo cáo (Experiment 1), không phải một giả định.
