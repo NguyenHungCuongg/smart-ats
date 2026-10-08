@@ -22,6 +22,8 @@ jobs:
         run: pnpm --filter @smart-ats/web lint
       - name: TypeScript
         run: pnpm --filter @smart-ats/web typecheck
+      - name: Vitest
+        run: pnpm --filter @smart-ats/web test
 
   python:
     runs-on: ubuntu-latest
@@ -35,6 +37,10 @@ jobs:
         run: uv run ruff check
       - name: mypy
         run: uv run mypy
+      # Paths are explicit: infra/tests needs the running stack and lives in the infra job.
+      # ubuntu-latest ships Docker, so testcontainers tests run here unchanged.
+      - name: pytest
+        run: uv run pytest apps/api
 
   # Same steps as `pnpm infra:test`, run directly so the job needs no Node setup.
   infra:
