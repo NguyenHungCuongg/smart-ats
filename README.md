@@ -43,7 +43,7 @@ Open the repo in VS Code and install the recommended extensions: files are forma
 
 ## Infrastructure
 
-The whole stack (backing services, `api`, `web`, one Celery worker per queue, `beat`) runs in Docker Compose (`docker-compose.yml`), configured from `.env`.
+The whole stack (backing services, `api`, `web`, one Celery worker per queue, `beat`, `caddy`) runs in Docker Compose (`docker-compose.yml`), configured from `.env`.
 
 | Task                               | Command                                     |
 | ---------------------------------- | ------------------------------------------- |
@@ -55,7 +55,7 @@ The whole stack (backing services, `api`, `web`, one Celery worker per queue, `b
 
 Hot reload uses [Compose Watch](https://docs.docker.com/compose/how-tos/file-watch/) rather than bind mounts, because Docker Desktop's file sharing drops file events on Windows and macOS. It copies edits under `apps/api` and `apps/web` into the containers, where uvicorn, `watchfiles` (workers, `beat`) and `next dev` reload. A change to `uv.lock` or `pnpm-lock.yaml` rebuilds the image. Without `--watch`, containers run the code baked in at build time; `docker compose up -d --build` refreshes it.
 
-Caddy exposes a unified entrypoint at https://localhost (reverse proxying `/` to `web`, `/api/*` and `/openapi.json` to `api`, and `/flower/` to `flower`). Direct service ports remain published for development and smoke testing: API at http://localhost:8000, web app at http://localhost:3000. Workers `worker-llm`, `worker-default`, `worker-agent` and `worker-email` each consume only their own queue, with 2 processes each.
+Caddy exposes a unified entrypoint at https://localhost (reverse proxying `/` to `web`, `/api/*`, `/openapi.json` and `/docs` to `api` with the `/api` prefix kept, and `/flower/` to `flower`). It signs `localhost` with its own CA, so the browser warns until you trust that CA: copy it out with `docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt .` and import it as a trusted root (Windows: `certutil -user -addstore Root root.crt`). Direct service ports remain published for development and smoke testing: API at http://localhost:8000, web app at http://localhost:3000. Workers `worker-llm`, `worker-default`, `worker-agent` and `worker-email` each consume only their own queue, with 2 processes each.
 
 PostgreSQL is published on `127.0.0.1:${POSTGRES_HOST_PORT}`; set another port in `.env` if 5432 is taken. The scripts in `infra/postgres/init` (extension, `ats_owner` / `ats_app` roles) run only when the data volume is empty, so run `docker compose down -v` after changing them.
 

@@ -210,7 +210,8 @@ services:
       flower:
         condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      # A plain TCP connect: the admin API logs every request at info level.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "443"]
       interval: 5s
       timeout: 5s
       retries: 10
