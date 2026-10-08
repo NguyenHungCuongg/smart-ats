@@ -45,13 +45,13 @@ Open the repo in VS Code and install the recommended extensions: files are forma
 
 The whole stack (backing services, `api`, `web`, one Celery worker per queue, `beat`, `caddy`) runs in Docker Compose (`docker-compose.yml`), configured from `.env`.
 
-| Task                               | Command                                     |
-| ---------------------------------- | ------------------------------------------- |
-| Start and wait until healthy       | `docker compose up -d --wait`               |
-| Start with hot reload (foreground) | `docker compose up --watch`                 |
-| Smoke-test the running stack       | `uv run --env-file .env pytest infra/tests` |
-| Stop (keeps data)                  | `docker compose down`                       |
-| Stop and delete all data           | `docker compose down -v`                    |
+| Task                               | Command                       |
+| ---------------------------------- | ----------------------------- |
+| Start and wait until healthy       | `docker compose up -d --wait` |
+| Start with hot reload (foreground) | `docker compose up --watch`   |
+| Build, start and smoke-test        | `pnpm infra:test`             |
+| Stop (keeps data)                  | `docker compose down`         |
+| Stop and delete all data           | `docker compose down -v`      |
 
 Hot reload uses [Compose Watch](https://docs.docker.com/compose/how-tos/file-watch/) rather than bind mounts, because Docker Desktop's file sharing drops file events on Windows and macOS. It copies edits under `apps/api` and `apps/web` into the containers, where uvicorn, `watchfiles` (workers, `beat`) and `next dev` reload. A change to `uv.lock` or `pnpm-lock.yaml` rebuilds the image. Without `--watch`, containers run the code baked in at build time; `docker compose up -d --build` refreshes it.
 
@@ -84,3 +84,4 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Dem
 | Web (Vitest)                        | `pnpm --filter @smart-ats/web test`         |
 | API (pytest)                        | `uv run pytest apps/api`                    |
 | Infra smoke (pytest, stack running) | `uv run --env-file .env pytest infra/tests` |
+| Infra smoke, starting the stack     | `pnpm infra:test`                           |
