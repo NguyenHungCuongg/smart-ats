@@ -295,6 +295,6 @@ Healthcheck của Docker Compose cho `api`, `web` và `caddy` chỉ mở kết n
   - `postgres` (image có pgvector), `redis`, `seaweedfs`, `mailpit`, `flower`.
 - **Production cho demo:** cùng file Compose trên một VPS (≥ 4 vCPU / 8 GB RAM), với S3 managed và nhà cung cấp email managed; backup PostgreSQL hằng ngày lên object storage.
 - **CI (GitHub Actions)** trên mọi PR vào `develop` và `main`:
-  - hiện có: Prettier, ESLint, TypeScript, Ruff, mypy, và smoke test hạ tầng (dựng toàn bộ stack bằng Compose);
-  - cần bổ sung (Roadmap GĐ 1): unit test (pytest, Vitest), integration test RLS trên PostgreSQL thật (testcontainers), build image.
+  - hiện có: Prettier, ESLint, TypeScript, Ruff, mypy, unit test (pytest, Vitest), và smoke test hạ tầng (dựng toàn bộ stack bằng Compose);
+  - cần bổ sung (Roadmap GĐ 1): integration test RLS trên PostgreSQL thật (testcontainers), build image.
 - **Hướng mở rộng (ngoài phạm vi):** `api` và worker stateless nên mở rộng ngang được. PostgreSQL có read replica cho báo cáo. Ngoài `beat`, thiết kế không giả định chạy trên một node.

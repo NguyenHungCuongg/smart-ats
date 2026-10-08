@@ -34,7 +34,7 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 
 Áp dụng cho mọi PR, kể cả PR do coding agent sinh ra:
 
-- CI xanh. CI hiện chạy Prettier, ESLint, TypeScript, Ruff, mypy và smoke test hạ tầng.
+- CI xanh. CI hiện chạy Prettier, ESLint, TypeScript, Ruff, mypy, unit test (pytest, Vitest) và smoke test hạ tầng.
 - Hành vi thay đổi có test đi kèm. Bảng, endpoint hoặc task mới có test xuyên tenant.
 - Đúng tiêu chí nghiệm thu của issue và các FR/NFR liên quan; không làm thêm ngoài phạm vi.
 - Tài liệu sở hữu được cập nhật trong cùng PR: hành vi → SRS, schema → ERD, kiến trúc → SAD, lệnh hoặc cấu hình → README và `.env.example`.
