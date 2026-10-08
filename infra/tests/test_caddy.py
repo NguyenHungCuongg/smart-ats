@@ -1,4 +1,4 @@
-"""Smoke tests for the Caddy edge reverse proxy service (Infra 06).
+"""Smoke tests for the caddy service (Infra 06).
 
 Run against the Compose stack from the host: see README "Infrastructure".
 """
@@ -10,70 +10,56 @@ import ssl
 import time
 import urllib.error
 import urllib.request
+from http.client import HTTPResponse
 
 import pytest
 
-SSL_CONTEXT = ssl._create_unverified_context()
-BASE_URL = "https://localhost"
+# Caddy signs localhost with its own CA; these tests check routing, not certificate trust.
+TLS = ssl.create_default_context()
+TLS.check_hostname = False
+TLS.verify_mode = ssl.CERT_NONE
 
 
-def test_api_health_proxied() -> None:
-    req = urllib.request.Request(f"{BASE_URL}/api/health")
-    with urllib.request.urlopen(req, timeout=10, context=SSL_CONTEXT) as response:
-        assert response.status == 200
+def get(path: str, auth: str | None = None) -> HTTPResponse:
+    request = urllib.request.Request(f"https://localhost{path}")
+    if auth is not None:
+        request.add_header("Authorization", "Basic " + base64.b64encode(auth.encode()).decode())
+    # The web dev server compiles a page on its first request.
+    response: HTTPResponse = urllib.request.urlopen(request, timeout=60, context=TLS)
+    return response
+
+
+def test_api_paths_route_to_api() -> None:
+    with get("/api/health") as response:
         assert json.load(response) == {"status": "ok"}
+    with get("/openapi.json") as response:
+        assert json.load(response)["info"]["title"] == "Smart ATS API"
+    with get("/docs") as response:
+        assert "swagger-ui" in response.read().decode()
 
 
-def test_openapi_spec_proxied() -> None:
-    req = urllib.request.Request(f"{BASE_URL}/openapi.json")
-    with urllib.request.urlopen(req, timeout=10, context=SSL_CONTEXT) as response:
-        assert response.status == 200
-        data = json.load(response)
-        assert "openapi" in data
-
-
-def test_web_proxied() -> None:
-    req = urllib.request.Request(f"{BASE_URL}/")
-    with urllib.request.urlopen(req, timeout=60, context=SSL_CONTEXT) as response:
+def test_other_paths_route_to_web() -> None:
+    with get("/") as response:
         assert response.status == 200
 
 
-def test_flower_proxied_requires_basic_auth() -> None:
-    req = urllib.request.Request(f"{BASE_URL}/flower/")
+def test_flower_requires_basic_auth() -> None:
     with pytest.raises(urllib.error.HTTPError) as error:
-        urllib.request.urlopen(req, timeout=10, context=SSL_CONTEXT)
+        get("/flower/")
     assert error.value.code == 401
 
 
-def test_flower_proxied_with_basic_auth() -> None:
-    auth = os.environ["FLOWER_BASIC_AUTH"]
-    req = urllib.request.Request(f"{BASE_URL}/flower/")
-    req.add_header("Authorization", "Basic " + base64.b64encode(auth.encode()).decode())
-    with urllib.request.urlopen(req, timeout=10, context=SSL_CONTEXT) as response:
-        assert response.status == 200
-        body = response.read().decode()
-        assert "Flower" in body
+def test_flower_routes_to_flower() -> None:
+    with get("/flower/", auth=os.environ["FLOWER_BASIC_AUTH"]) as response:
+        assert "/flower/static/" in response.read().decode()
 
 
-def test_sse_streaming_unbuffered() -> None:
-    start = time.monotonic()
-    first_chunk_time: float | None = None
-    chunks: list[str] = []
-
-    req = urllib.request.Request(f"{BASE_URL}/api/demo/sse")
-    with urllib.request.urlopen(req, timeout=15, context=SSL_CONTEXT) as response:
-        assert response.status == 200
-        assert "text/event-stream" in response.headers.get("Content-Type", "")
-        for line in response:
-            text = line.decode().strip()
-            if text.startswith("data:"):
-                chunks.append(text)
-                if first_chunk_time is None:
-                    first_chunk_time = time.monotonic() - start
-            if len(chunks) >= 2:
-                break
-
-    assert first_chunk_time is not None
-    # First chunk is emitted after 1s; if buffered, it wouldn't arrive until stream completes (5s)
-    assert first_chunk_time < 3.0
-    assert len(chunks) >= 2
+def test_sse_events_arrive_before_stream_ends() -> None:
+    # /api/demo/sse sends five events, one per second, starting immediately.
+    with get("/api/demo/sse") as response:
+        assert response.headers["Content-Type"].startswith("text/event-stream")
+        response.readline()
+        first_event = time.monotonic()
+        response.read()
+    # A buffering proxy would deliver every event at once when the stream closes.
+    assert time.monotonic() - first_event > 3
