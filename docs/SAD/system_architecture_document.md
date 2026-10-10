@@ -98,6 +98,7 @@ Thuộc tính chất lượng theo thứ tự ưu tiên: **cô lập tenant**, *
 | `worker-agent`            | Các lượt chạy LangGraph của Campaign (plan / act / reflect tới Checkpoint)                                                  | Replica                             |
 | `worker-email`            | Gửi các `email_messages` đang chờ qua nhà cung cấp                                                                          | 1–2 replica                         |
 | `beat`                    | Lập lịch job ẩn danh hóa theo Retention Period, hết hạn Checkpoint, quét task bị treo                                       | Đúng 1                              |
+| `migrate`                 | Chạy một lần: Alembic migration bằng `ats_owner`, rồi thoát; `api`, worker và `beat` khởi động sau khi nó thành công        | Đúng 1, mỗi lần deploy              |
 | `postgres`                | Lưu trữ chính, RLS, pgvector, checkpoint của LangGraph                                                                      | Theo chiều dọc; read replica sau    |
 | `redis`                   | Celery broker, SSE pub/sub, bộ đếm rate limit và đồng thời                                                                  | Theo chiều dọc                      |
 | `object storage`          | File CV/JD, logo, báo cáo PDF, bản sao lưu database                                                                         | Dịch vụ managed                     |
