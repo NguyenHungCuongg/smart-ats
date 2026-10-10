@@ -57,7 +57,9 @@ Hot reload uses [Compose Watch](https://docs.docker.com/compose/how-tos/file-wat
 
 Caddy exposes a unified entrypoint at https://localhost (reverse proxying `/` to `web`, `/api/*`, `/openapi.json` and `/docs` to `api` with the `/api` prefix kept, and `/flower/` to `flower`). It signs `localhost` with its own CA, so the browser warns until you trust that CA: copy it out with `docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt .` and import it as a trusted root (Windows: `certutil -user -addstore Root root.crt`). Direct service ports remain published for development and smoke testing: API at http://localhost:8000, web app at http://localhost:3000. Workers `worker-llm`, `worker-default`, `worker-agent` and `worker-email` each consume only their own queue, with 2 processes each.
 
-PostgreSQL is published on `127.0.0.1:${POSTGRES_HOST_PORT}`; set another port in `.env` if 5432 is taken. The scripts in `infra/postgres/init` (extension, `ats_owner` / `ats_app` roles) run only when the data volume is empty, so run `docker compose down -v` after changing them.
+PostgreSQL is published on `127.0.0.1:${POSTGRES_HOST_PORT}`; set another port in `.env` if 5432 is taken. The scripts in `infra/postgres/init` (extensions, `ats_owner` / `ats_app` roles) run only when the data volume is empty, so run `docker compose down -v` after changing them.
+
+The one-shot `migrate` service applies Alembic migrations (`apps/api/migrations`) as `ats_owner` and exits; `api`, the workers and `beat` start only after it succeeds. Everything else connects as `ats_app`, which forced RLS binds (ADR-0001). Compose Watch does not rerun it: after adding a migration, run `docker compose run --rm migrate`.
 
 Redis is published on `127.0.0.1:${REDIS_HOST_PORT}`. It keeps nothing on disk, so restarting it drops queued tasks. Flower is at http://localhost:5555/flower/ (login from `FLOWER_BASIC_AUTH`); start workers with `-E` to see task events.
 
@@ -74,8 +76,10 @@ Run from the repo root. Hostnames in `.env` are Compose service names; use `loca
 | API dev server (http://localhost:8000) | `uv run --directory apps/api uvicorn app.main:app --reload`                        |
 | Celery worker (one queue)              | `uv run --env-file .env celery --workdir apps/api -A app.worker worker -Q default` |
 | Celery Beat                            | `uv run --env-file .env celery --workdir apps/api -A app.worker beat`              |
+| New migration                          | `uv run --directory apps/api alembic revision -m "<message>"`                      |
+| Seed demo tenant and Recruiter         | `docker compose exec -e SEED_PASSWORD=<password> api python -m app.seed`           |
 
-Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Demo SSE stream: `GET /api/demo/sse`.
+Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Demo SSE stream: `GET /api/demo/sse`. The seed creates tenant `demo` with Recruiter `recruiter@demo.local`; rerunning it changes nothing.
 
 ## Tests
 
@@ -85,3 +89,5 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Dem
 | API (pytest)                        | `uv run pytest apps/api`                    |
 | Infra smoke (pytest, stack running) | `uv run --env-file .env pytest infra/tests` |
 | Infra smoke, starting the stack     | `pnpm infra:test`                           |
+
+API tests need Docker: the tenancy tests start their own PostgreSQL with [testcontainers](https://testcontainers.com/), bootstrapped from `infra/postgres/init` and the migrations.

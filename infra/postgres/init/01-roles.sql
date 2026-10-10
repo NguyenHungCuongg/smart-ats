@@ -4,6 +4,8 @@
 \getenv app_password ATS_APP_PASSWORD
 
 CREATE EXTENSION vector;
+-- users.email (ERD §2). Created here: ats_owner has no CREATE on the database.
+CREATE EXTENSION citext;
 
 -- Owns the schema and every table in it; Alembic migrations run as this role.
 CREATE ROLE ats_owner LOGIN PASSWORD :'owner_password'

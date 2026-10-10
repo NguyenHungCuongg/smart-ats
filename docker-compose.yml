@@ -14,8 +14,8 @@ x-python-app: &python-app
     DATABASE_URL: ${DATABASE_URL:?set in .env}
     REDIS_URL: ${REDIS_URL:?set in .env}
   depends_on:
-    postgres:
-      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
     redis:
       condition: service_healthy
   develop:
@@ -28,6 +28,20 @@ x-python-app: &python-app
   restart: unless-stopped
 
 services:
+  # One-shot: applies Alembic migrations, then exits; the app services start after it.
+  # The only service holding the ats_owner credentials (ADR-0001).
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: smart-ats-api:dev
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:?set in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     <<: *python-app
     ports:

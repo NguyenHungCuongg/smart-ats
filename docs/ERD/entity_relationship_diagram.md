@@ -13,7 +13,7 @@
 
 ## 1. Chiến lược Cơ sở Dữ liệu
 
-- **PostgreSQL 18** với extension **pgvector 0.8**, một schema dùng chung (`public`).
+- **PostgreSQL 18** với extension **pgvector 0.8** và **citext** (tạo trong `infra/postgres/init`, vì `ats_owner` không có quyền `CREATE` trên database), một schema dùng chung (`public`).
 - **Forced Row-Level Security** trên mọi bảng thuộc tenant (ADR-0001). Mỗi bảng có đúng một policy:
   ```sql
   USING      (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
@@ -66,7 +66,7 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 | last_login_at      | timestamptz                     |                                                          |
 | created_at         | timestamptz NN                  |                                                          |
 
-`CHECK ((role = 'SYSTEM_ADMIN') = (tenant_id IS NULL))`
+`CHECK ((role = 'SYSTEM_ADMIN') = (tenant_id IS NULL))` · `UNIQUE (tenant_id, id)`: đích của khóa ngoại ghép (§1)
 
 ### `refresh_tokens` — RLS
 
