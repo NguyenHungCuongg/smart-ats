@@ -4,6 +4,8 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, FastAPI
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
+from app import auth
+
 router = APIRouter(prefix="/api")
 
 
@@ -22,3 +24,4 @@ async def demo_sse() -> AsyncIterator[ServerSentEvent]:
 
 app = FastAPI(title="Smart ATS API")
 app.include_router(router)
+app.include_router(auth.router)

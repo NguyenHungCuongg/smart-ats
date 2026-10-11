@@ -7,6 +7,8 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 API_DIR = Path(__file__).parents[1]
 REPO_DIR = API_DIR.parents[1]
@@ -37,4 +39,18 @@ def database() -> Iterator[None]:
         env.setenv("DATABASE_MIGRATION_URL", f"postgresql+psycopg://ats_owner:owner{base}")
         env.setenv("DATABASE_URL", f"postgresql+psycopg://ats_app:app{base}")
         command.upgrade(Config(API_DIR / "alembic.ini"), "head")
+        yield
+
+
+@pytest.fixture(scope="session")
+def redis() -> Iterator[None]:
+    # Keep in sync with the redis service in docker-compose.yml.
+    container = (
+        DockerContainer("redis:8.10.2-trixie")
+        .with_exposed_ports(6379)
+        .waiting_for(LogMessageWaitStrategy("Ready to accept connections"))
+    )
+    with container, pytest.MonkeyPatch.context() as env:
+        host, port = container.get_container_host_ip(), container.get_exposed_port(6379)
+        env.setenv("REDIS_URL", f"redis://{host}:{port}/0")
         yield
