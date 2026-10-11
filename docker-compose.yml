@@ -10,7 +10,7 @@ x-python-app: &python-app
   image: smart-ats-api:dev
   # Only what the code reads; add variables as code needs them. Never the superuser
   # or ats_owner credentials: the app runs as ats_app (ADR-0001).
-  environment:
+  environment: &python-env
     DATABASE_URL: ${DATABASE_URL:?set in .env}
     REDIS_URL: ${REDIS_URL:?set in .env}
   depends_on:
@@ -44,6 +44,13 @@ services:
 
   api:
     <<: *python-app
+    environment:
+      <<: *python-env
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      # Uvicorn takes the client IP from Caddy's X-Forwarded-For only for listed proxies; Caddy's
+      # address varies, so trust any. Per-IP login lockout (FR-C1.1) needs the browser's IP, and
+      # port 8000 is published on loopback only, so only local processes could spoof the header.
+      FORWARDED_ALLOW_IPS: "*"
     ports:
       - 127.0.0.1:8000:8000
     healthcheck:

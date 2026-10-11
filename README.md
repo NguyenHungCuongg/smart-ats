@@ -79,7 +79,7 @@ Run from the repo root. Hostnames in `.env` are Compose service names; use `loca
 | New migration                          | `uv run --directory apps/api alembic revision -m "<message>"`                      |
 | Seed demo tenant and Recruiter         | `docker compose exec -e SEED_PASSWORD=<password> api python -m app.seed`           |
 
-Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Demo SSE stream: `GET /api/demo/sse`. The seed creates tenant `demo` with Recruiter `recruiter@demo.local`; rerunning it changes nothing.
+Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Demo SSE stream: `GET /api/demo/sse`. The seed creates tenant `demo` with Recruiter `recruiter@demo.local`; rerunning it changes nothing. Sign in at https://localhost/login: the refresh cookie is `Secure` and `SameSite=Strict`, so the web app and the API must share the Caddy origin (`NEXT_PUBLIC_API_URL`), not run on separate ports.
 
 ## Tests
 
@@ -90,4 +90,4 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Dem
 | Infra smoke (pytest, stack running) | `uv run --env-file .env pytest infra/tests` |
 | Infra smoke, starting the stack     | `pnpm infra:test`                           |
 
-API tests need Docker: the tenancy tests start their own PostgreSQL with [testcontainers](https://testcontainers.com/), bootstrapped from `infra/postgres/init` and the migrations.
+API tests need Docker: they start their own PostgreSQL and Redis with [testcontainers](https://testcontainers.com/), PostgreSQL bootstrapped from `infra/postgres/init` and the migrations.
