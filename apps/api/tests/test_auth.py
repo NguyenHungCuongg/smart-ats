@@ -1,5 +1,7 @@
 """Password login with rotating refresh tokens (FR-C1.1, ADR-0003), through the HTTP API."""
 
+import asyncio
+import hashlib
 import itertools
 import os
 import uuid
@@ -283,3 +285,41 @@ def test_auth_find_user_leaves_the_callers_tenant_context() -> None:
     with tenant_session(own_tenant) as session:
         assert session.execute(find, {"email": other}).scalar_one() != own_tenant
         assert session.scalars(text("SELECT email FROM users")).all() == [own]
+
+
+async def test_concurrent_guesses_cannot_outrun_the_account_lock() -> None:
+    email = make_user()
+    clients = [other_ip_client() for _ in range(10)]
+
+    responses = await asyncio.gather(*(login(c, email, "wrong password") for c in clients))
+
+    assert sorted(r.status_code for r in responses) == [401] * 5 + [429] * 5
+    assert (await login(clients[0], email)).status_code == 429
+    for c in clients:
+        await c.aclose()
+
+
+async def test_concurrent_guesses_cannot_outrun_the_ip_lock(client: AsyncClient) -> None:
+    emails = [f"{uuid.uuid4().hex}@example.com" for _ in range(10)]
+
+    responses = await asyncio.gather(*(login(client, email, "guess") for email in emails))
+
+    assert sorted(r.status_code for r in responses) == [401] * 5 + [429] * 5
+
+
+async def test_reusing_an_expired_rotated_token_still_revokes_the_family(
+    client: AsyncClient,
+) -> None:
+    first = (await login(client, make_user())).cookies["refresh_token"]
+    second = (await refresh(client, first)).cookies["refresh_token"]
+    with tenant_session(uuid.UUID(first.partition(".")[0])) as session:
+        session.execute(
+            text(
+                "UPDATE refresh_tokens SET expires_at = now() - interval '1 second'"
+                " WHERE token_hash = :token_hash"
+            ),
+            {"token_hash": hashlib.sha256(first.encode()).hexdigest()},
+        )
+
+    assert (await refresh(client, first)).status_code == 401
+    assert (await refresh(client, second)).status_code == 401

@@ -420,7 +420,7 @@ Cùng cấu trúc với `audit_logs`, không có `tenant_id` và có thêm `targ
 
 Thuộc sở hữu của `ats_owner`. `ats_app` chỉ có quyền `EXECUTE`. Mỗi hàm chỉ trả về số cột tối thiểu cần dùng.
 
-Vì RLS bị force, policy ràng buộc cả `ats_owner`: hàm `SECURITY DEFINER` cũng không thấy dòng nào khi chưa có tenant context. Vì vậy hàm lần lượt đặt tenant context của từng Tenant để tìm, rồi trả lại context của caller (ví dụ: migration `0002`).
+Vì RLS bị force, policy ràng buộc cả `ats_owner`: một hàm `SECURITY DEFINER` không thấy dòng nào của bảng tenant khi chưa có tenant context, nên mỗi hàm ở đây phải tự đặt context. `auth_find_user` lần lượt đặt context của từng Tenant để tìm, rồi trả lại context của caller (migration `0002`).
 
 | Hàm                                 | Trả về                                                                                   | Dùng cho          |
 | ----------------------------------- | ---------------------------------------------------------------------------------------- | ----------------- |

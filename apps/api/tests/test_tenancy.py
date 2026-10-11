@@ -95,6 +95,9 @@ async def test_async_session_is_scoped_to_its_tenant(tenant: uuid.UUID) -> None:
 
 
 async def test_async_context_does_not_outlive_the_transaction(tenant: uuid.UUID) -> None:
+    # Start from an empty pool so the next checkout returns the same connection; concurrent
+    # requests in other tests leave several idle ones behind.
+    await async_engine().dispose()
     async with async_tenant_session(tenant) as session:
         pid, _ = (await session.execute(PID_AND_TENANT)).one()
 
