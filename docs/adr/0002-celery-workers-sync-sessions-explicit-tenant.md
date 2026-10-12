@@ -2,7 +2,7 @@
 
 API dùng async engine của SQLAlchemy. Celery worker dùng sync engine, và cả hai chạy trên cùng driver `psycopg` 3. Chúng tôi giữ Celery vì độ trưởng thành và có Flower để giám sát; loại Taskiq (hệ sinh thái nhỏ hơn) và `asyncio.run()` bên trong task (lỗi event loop và pool).
 
-Worker không bao giờ đi qua middleware của API, nên mọi task nhận `tenant_id` làm tham số đầu tiên và mở session qua một helper duy nhất `tenant_session(tenant_id)` để đặt RLS context. Một bước kiểm tra trong CI làm fail mọi task không dùng helper này.
+Worker không bao giờ đi qua middleware của API, nên mọi task nhận `tenant_id` làm tham số đầu tiên và mở session qua một helper duy nhất `tenant_session(tenant_id)` để đặt RLS context. Một bước kiểm tra trong CI làm fail mọi task không dùng helper này; task không thuộc tenant phải được khai báo tường minh trong `NON_TENANT_TASKS` (`app/worker.py`).
 
 ## Hệ quả
 
