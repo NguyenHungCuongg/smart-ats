@@ -23,6 +23,7 @@ export function subscribe(type: string, onEvent: (data: unknown) => void): () =>
     if (stopped || response?.status === 401) return; // signed out
     if (!response?.ok) return reconnect();
     const { ticket } = await response.json();
+    if (stopped) return;
     source = new EventSource(`${API_URL}/api/events?ticket=${encodeURIComponent(ticket)}`);
     source.addEventListener(type, (e) => onEvent(JSON.parse(e.data)));
     // The browser's own retry would reuse the spent ticket and get 401: retry with a new one.

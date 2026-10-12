@@ -124,7 +124,7 @@ async def test_unknown_or_missing_ticket_is_rejected(client: AsyncClient) -> Non
 
 
 @pytest.fixture
-def worker(monkeypatch: pytest.MonkeyPatch) -> Iterator[Celery]:
+def worker() -> Iterator[Celery]:
     from app import worker
 
     before = set(worker.celery_app.tasks)
@@ -140,7 +140,7 @@ async def test_tenant_task_publishes_once_its_transaction_commits(
 
     @tenant_task(name="test.progress")
     def progress(tenant_id: uuid.UUID, session: Session, user_id: str, fail: bool) -> None:
-        events.publish(session, tenant_id, uuid.UUID(user_id), "progress", {"fail": fail})
+        events.publish(session, uuid.UUID(user_id), "progress", {"fail": fail})
         if fail:
             raise RuntimeError("rolled back")
 

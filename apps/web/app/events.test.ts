@@ -93,6 +93,13 @@ test("keeps retrying while the API is unreachable, but not once signed out", asy
   expect(fetch.mock.calls.length - before).toBe(2);
 });
 
+test("unsubscribing before the ticket arrives opens nothing", async () => {
+  events.subscribe("progress", () => {})();
+  await opened();
+
+  expect(FakeEventSource.opened).toHaveLength(0);
+});
+
 test("unsubscribing closes the stream and stops reconnecting", async () => {
   const unsubscribe = events.subscribe("progress", () => {});
   await opened();

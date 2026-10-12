@@ -34,6 +34,7 @@ def tenant_session(tenant_id: UUID) -> Iterator[Session]:
     """One transaction scoped to tenant_id, for workers: commits on exit, rolls back on error."""
     with Session(sync_engine()) as session, session.begin():
         session.execute(_SET_TENANT, {"tenant_id": str(tenant_id)})
+        session.info["tenant_id"] = tenant_id
         yield session
 
 

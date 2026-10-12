@@ -39,8 +39,10 @@ def _sync_redis() -> Redis:
     return client
 
 
-def publish(session: Session, tenant_id: UUID, user_id: UUID, name: str, data: Any) -> None:
+def publish(session: Session, user_id: UUID, name: str, data: Any) -> None:
     """Send event `name` with JSON `data` to the user's open streams once `session` commits.
+
+    The Tenant is the session's own (tenant_session), so a task cannot reach another's channel.
 
     For @tenant_task bodies: a client reloads on the event, so it must not arrive before the
     data it announces is visible; a rolled-back transaction sends nothing.
@@ -49,7 +51,7 @@ def publish(session: Session, tenant_id: UUID, user_id: UUID, name: str, data: A
     event.listen(
         session,
         "after_commit",
-        lambda _: _sync_redis().publish(channel(tenant_id, user_id), message),
+        lambda _: _sync_redis().publish(channel(session.info["tenant_id"], user_id), message),
         once=True,
     )
 
