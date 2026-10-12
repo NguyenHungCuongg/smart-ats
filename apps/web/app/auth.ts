@@ -1,7 +1,7 @@
 // Browser-side session (ADR-0003): the access token lives only in this module's memory;
 // the refresh token is an HttpOnly cookie the browser sends to /api/auth/refresh by itself.
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 // The cookie endpoints reject requests without it, which cross-site forms cannot send.
 const CSRF_HEADER = { "X-Requested-With": "fetch" };
 
