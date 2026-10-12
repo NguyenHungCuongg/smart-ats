@@ -79,7 +79,7 @@ Run from the repo root. Hostnames in `.env` are Compose service names; use `loca
 | New migration                          | `uv run --directory apps/api alembic revision -m "<message>"`                      |
 | Seed demo tenant and Recruiter         | `docker compose exec -e SEED_PASSWORD=<password> api python -m app.seed`           |
 
-Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`. Demo SSE stream: `GET /api/demo/sse`. The seed creates tenant `demo` with Recruiter `recruiter@demo.local`; rerunning it changes nothing. Sign in at https://localhost/login: the refresh cookie is `Secure` and `SameSite=Strict`, so the web app and the API must share the Caddy origin (`NEXT_PUBLIC_API_URL`), not run on separate ports.
+Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; readiness (DB, Redis, object storage): `GET /api/ready`. Demo SSE stream: `GET /api/demo/sse`. The seed creates tenant `demo` with Recruiter `recruiter@demo.local`; rerunning it changes nothing. Sign in at https://localhost/login: the refresh cookie is `Secure` and `SameSite=Strict`, so the web app and the API must share the Caddy origin (`NEXT_PUBLIC_API_URL`), not run on separate ports.
 
 ## Tests
 

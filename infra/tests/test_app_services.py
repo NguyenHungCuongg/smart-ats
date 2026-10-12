@@ -17,6 +17,12 @@ def test_api_health() -> None:
         assert json.load(response) == {"status": "ok"}
 
 
+def test_api_ready() -> None:
+    """200 only if the api reaches PostgreSQL, Redis and SeaweedFS with its own credentials."""
+    with urllib.request.urlopen("http://127.0.0.1:8000/api/ready", timeout=10) as response:
+        assert json.load(response) == {"status": "ok"}
+
+
 def test_web_serves_home_page() -> None:
     # The dev server compiles the page on the first request.
     with urllib.request.urlopen("http://127.0.0.1:3000/", timeout=60) as response:
