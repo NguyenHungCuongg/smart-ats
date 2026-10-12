@@ -912,6 +912,7 @@ version = "0.0.0"
 source = { virtual = "apps/api" }
 dependencies = [
     { name = "alembic" },
+    { name = "boto3" },
     { name = "celery", extra = ["redis"] },
     { name = "fastapi" },
     { name = "psycopg", extra = ["binary"] },
@@ -934,6 +935,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = "~=1.20.0" },
+    { name = "boto3", specifier = "~=1.43.108" },
     { name = "celery", extras = ["redis"], specifier = "~=5.6.0" },
     { name = "fastapi", specifier = "~=0.141.0" },
     { name = "psycopg", extras = ["binary"], specifier = "~=3.3.6" },

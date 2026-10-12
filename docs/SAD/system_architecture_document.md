@@ -281,10 +281,10 @@ Index HNSW giữ truy vấn nhanh. Cô lập không cần thêm điều kiện l
 
 | Service    | Liveness                      | Readiness (DB, Redis, object storage) |
 | ---------- | ----------------------------- | ------------------------------------- |
-| `api`      | `GET /api/health` — đã có     | Chưa có (Roadmap GĐ 1)                |
+| `api`      | `GET /api/health` — đã có     | `GET /api/ready` — đã có              |
 | `worker-*` | Celery inspect ping — chưa có | —                                     |
 
-Healthcheck của Docker Compose cho `api`, `web` và `caddy` chỉ mở kết nối TCP, không gọi endpoint HTTP, để không làm đầy access log.
+Healthcheck của Docker Compose cho `api`, `web` và `caddy` chỉ mở kết nối TCP, không gọi endpoint HTTP, để không làm đầy access log. `/api/ready` là endpoint kiểm tra khi cần, không để poller gọi định kỳ: trả 200 khi DB, Redis và object storage đều kết nối được, trả 503 kèm danh sách phụ thuộc lỗi (`database`, `redis`, `object_storage`) khi không.
 
 ---
 
