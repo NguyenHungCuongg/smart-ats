@@ -2,6 +2,8 @@ from io import BytesIO
 
 import pytest
 from docx import Document
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
@@ -106,3 +108,23 @@ def test_document_without_text_is_no_text(data: bytes) -> None:
         extract_text(data)
 
     assert error.value.code == "NO_TEXT"
+
+
+def test_docx_header_and_text_box() -> None:
+    # CV templates often put contact details in the header and lay out columns in text boxes.
+    doc = Document()
+    doc.sections[0].header.paragraphs[0].text = "an.nguyen@example.com"
+    box = parse_xml(
+        f'<w:r {nsdecls("w")} xmlns:v="urn:schemas-microsoft-com:vml">'
+        "<w:pict><v:shape><v:textbox><w:txbxContent>"
+        "<w:p><w:r><w:t>Kỹ năng: Kubernetes</w:t></w:r></w:p>"
+        "</w:txbxContent></v:textbox></v:shape></w:pict></w:r>"
+    )
+    doc.add_paragraph("Kinh nghiệm")._p.append(box)
+    out = BytesIO()
+    doc.save(out)
+
+    text = extract_text(out.getvalue())
+
+    assert "an.nguyen@example.com" in text
+    assert "Kỹ năng: Kubernetes" in text

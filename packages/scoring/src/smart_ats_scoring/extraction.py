@@ -3,7 +3,8 @@
 from io import BytesIO
 
 from docx import Document
-from docx.table import Table
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.oxml.ns import qn
 from pypdf import PdfReader
 from pypdf.errors import FileNotDecryptedError
 
@@ -21,7 +22,7 @@ def extract_text(data: bytes) -> str:
     """Text of a PDF with a text layer, a DOCX or a UTF-8 text file, told apart by magic bytes."""
     text = _read(data)
     if not text.strip():
-        # ponytail: a scan with a few stray glyphs still passes; OCR fallback (GĐ 2) needs a ratio.
+        # ponytail: a scan with a few stray glyphs still passes; phase-2 OCR fallback needs a ratio.
         raise ExtractionError("NO_TEXT", "the document has no text layer (scanned or empty)")
     return text
 
@@ -48,11 +49,15 @@ def _pdf(data: bytes) -> str:
 
 
 def _docx(data: bytes) -> str:
-    lines = []
-    for block in Document(BytesIO(data)).iter_inner_content():
-        if isinstance(block, Table):
-            # ponytail: nested tables, headers and footers are skipped; add them if CVs need it.
-            lines += ["\t".join(cell.text for cell in row.cells) for row in block.rows]
-        else:
-            lines.append(block.text)
-    return "\n".join(lines)
+    # Every paragraph, wherever it sits: CV templates put contact details in headers and
+    # lay out columns with tables and text boxes. Headers come first, footers last.
+    document = Document(BytesIO(data))
+    rels = document.part.rels.values()
+    headers = [rel.target_part.element for rel in rels if rel.reltype == RT.HEADER]
+    footers = [rel.target_part.element for rel in rels if rel.reltype == RT.FOOTER]
+    # ponytail: a text box saved with a VML fallback is read twice; harmless for the LLM.
+    return "\n".join(
+        "".join(text.text or "" for text in paragraph.iter(qn("w:t")))
+        for part in [*headers, document.element.body, *footers]
+        for paragraph in part.iter(qn("w:p"))
+    )

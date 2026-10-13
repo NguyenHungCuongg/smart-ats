@@ -164,9 +164,10 @@ def blind_profile(profile: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, list):
             return [scrub(item) for item in value]
         if isinstance(value, str):
-            # ponytail: exact quotes only; a phone written another way or a lone given name stays.
+            # ponytail: exact quotes, any case; a phone written another way or a lone given
+            # name stays.
             for old, new in pairs:
-                value = value.replace(old, new)
+                value = re.sub(re.escape(old), new, value, flags=re.IGNORECASE)
         return value
 
     rest = {key: scrub(value) for key, value in profile.items() if key != "contact"}

@@ -190,15 +190,15 @@ def test_blind_profile_replaces_the_name_and_drops_contact_details() -> None:
 def test_blind_profile_scrubs_contact_details_quoted_elsewhere() -> None:
     profile = _profile()
     profile["work_history"][0]["achievements"] = [
-        "Nguyễn Văn An được vinh danh; liên hệ an.nguyen@example.com hoặc 0901 234 567"
+        "NGUYỄN VĂN AN được vinh danh; liên hệ An.Nguyen@example.com hoặc 0901 234 567"
     ]
 
     blind = blind_profile(profile)
 
-    job = blind["work_history"][0]
-    assert job["responsibilities"] == ["Xây dựng REST API bằng FastAPI cho [ẩn]/shop"]
-    assert job["achievements"] == ["Ứng viên được vinh danh; liên hệ [ẩn] hoặc [ẩn]"]
-    assert job["company"] == "Công ty ABC"
+    entry = blind["work_history"][0]
+    assert entry["responsibilities"] == ["Xây dựng REST API bằng FastAPI cho [ẩn]/shop"]
+    assert entry["achievements"] == ["Ứng viên được vinh danh; liên hệ [ẩn] hoặc [ẩn]"]
+    assert entry["company"] == "Công ty ABC"
 
 
 def test_blind_profile_leaves_the_parsed_profile_unchanged() -> None:

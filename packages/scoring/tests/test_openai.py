@@ -8,11 +8,14 @@ import pytest
 from smart_ats_scoring.llm import OpenAiLlm
 from smart_ats_scoring.parsing import CV_SCHEMA, JOB_SCHEMA, parse_cv, parse_job
 
-pytestmark = pytest.mark.skipif(not os.environ.get("OPENAI_API_KEY"), reason="no OPENAI_API_KEY")
+pytestmark = pytest.mark.skipif(
+    not (os.environ.get("OPENAI_API_KEY") and os.environ.get("LLM_EXTRACTION_MODEL")),
+    reason="needs OPENAI_API_KEY and LLM_EXTRACTION_MODEL",
+)
 
 
 def _llm() -> OpenAiLlm:
-    return OpenAiLlm(os.environ.get("LLM_EXTRACTION_MODEL") or "gpt-6-luna")
+    return OpenAiLlm(os.environ["LLM_EXTRACTION_MODEL"])
 
 
 def test_parse_job_with_openai() -> None:
