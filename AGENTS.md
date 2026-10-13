@@ -8,6 +8,7 @@ Run everything from the repo root; `README.md` owns the full command list (setup
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | API tests               | `uv run pytest apps/api` (needs Docker: DB tests start PostgreSQL via testcontainers; never bare `uv run pytest`, `infra/tests` needs the running stack) |
 | One API test            | `uv run pytest apps/api/tests/test_health.py::test_health_returns_ok`                                                                                    |
+| Eval tests / table      | `uv run pytest packages/eval` / `uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json` (see `packages/eval/README.md`)                 |
 | Web tests / one file    | `pnpm --filter @smart-ats/web test` / `pnpm --filter @smart-ats/web test app/page.test.tsx`                                                              |
 | Infra smoke tests       | `pnpm infra:test` (builds and starts the stack, then runs `infra/tests`)                                                                                 |
 | Python lint/format/type | `uv run ruff check`, `uv run ruff format`, `uv run mypy` (strict, covers `apps/api` and `infra/tests`)                                                   |
@@ -21,7 +22,7 @@ CI (`.github/workflows/ci.yml`) runs all of the above on PRs to `develop` and `m
 
 ## Architecture
 
-Built so far: `/api/health`, per-user SSE progress events with one-time tickets (`app/events.py`), one demo Celery task per queue, the tenancy foundation (`tenants`, `users`, `app/db.py`, demo seed), and password login with rotating refresh tokens (`app/auth.py`, web `/login`). The target design lives in `docs/SAD/system_architecture_document.md`, with the reasons in `docs/adr/`. Invariants new code must follow:
+Built so far: `/api/health`, per-user SSE progress events with one-time tickets (`app/events.py`), one demo Celery task per queue, the tenancy foundation (`tenants`, `users`, `app/db.py`, demo seed), password login with rotating refresh tokens (`app/auth.py`, web `/login`), and the offline eval harness with a BM25 Baseline (`packages/eval`). The target design lives in `docs/SAD/system_architecture_document.md`, with the reasons in `docs/adr/`. Invariants new code must follow:
 
 - **Modular monolith.** One FastAPI codebase (`apps/api/app`) serves REST + SSE; the same code runs as Celery workers, one per queue (`llm`, `default`, `agent`, `email`), plus a single `beat`. Redis is transport only; PostgreSQL holds all state, including pgvector embeddings and LangGraph checkpoints (ADR-0004, ADR-0005).
 - **Tenant isolation is enforced in the database** (ADR-0001, SAD §4). Every tenant table has `tenant_id NOT NULL`, forced RLS and composite `(tenant_id, id)` foreign keys. The runtime role `ats_app` cannot bypass RLS; `ats_owner` only runs migrations. All DB access goes through `tenant_session(tenant_id)`; an authenticated route takes `auth: Authenticated` (`app/auth.py`), which opens it from the JWT's `tid`; every Celery task takes `tenant_id` as its first argument and uses `@tenant_task` (ADR-0002). A cross-tenant id returns 404, never 403.

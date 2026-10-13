@@ -959,7 +959,7 @@ dev = [
 [[package]]
 name = "smart-ats-eval"
 version = "0.0.0"
-source = { virtual = "packages/eval" }
+source = { editable = "packages/eval" }
 
 [[package]]
 name = "sqlalchemy"

@@ -78,6 +78,7 @@ Run from the repo root. Hostnames in `.env` are Compose service names; use `loca
 | Celery Beat                            | `uv run --env-file .env celery --workdir apps/api -A app.worker beat`              |
 | New migration                          | `uv run --directory apps/api alembic revision -m "<message>"`                      |
 | Seed demo tenant and Recruiter         | `docker compose exec -e SEED_PASSWORD=<password> api python -m app.seed`           |
+| Eval comparison table (Experiment 1)   | `uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json`           |
 
 Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; readiness (DB, Redis, object storage): `GET /api/ready`. Progress events (SSE): `POST /api/events/ticket` with the access token returns a one-time ticket (lifetime: ADR-0003) for `GET /api/events?ticket=...`; workers send with `app.events.publish`. The seed creates tenant `demo` with Recruiter `recruiter@demo.local`; rerunning it changes nothing. Sign in at https://localhost/login: the refresh cookie is `Secure` and `SameSite=Strict`, so the web app and the API must share the Caddy origin (`NEXT_PUBLIC_API_URL`), not run on separate ports.
 
@@ -87,6 +88,7 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; rea
 | ----------------------------------- | ------------------------------------------- |
 | Web (Vitest)                        | `pnpm --filter @smart-ats/web test`         |
 | API (pytest)                        | `uv run pytest apps/api`                    |
+| Eval harness (pytest)               | `uv run pytest packages/eval`               |
 | Infra smoke (pytest, stack running) | `uv run --env-file .env pytest infra/tests` |
 | Infra smoke, starting the stack     | `pnpm infra:test`                           |
 
