@@ -44,6 +44,8 @@ jobs:
       # Separate run: each package has its own pytest rootdir and settings.
       - name: pytest (eval)
         run: uv run pytest packages/eval
+      - name: pytest (scoring)
+        run: uv run pytest packages/scoring
 
   # Same steps as `pnpm infra:test`, run directly so the job needs no Node setup.
   infra:

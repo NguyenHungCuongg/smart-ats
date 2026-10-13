@@ -4,12 +4,13 @@ Multi-tenant ATS with explainable AI scoring. Requirements: [`docs/SRS/software_
 
 ## Layout
 
-| Path            | Contents                                          |
-| --------------- | ------------------------------------------------- |
-| `apps/web`      | Next.js frontend (pnpm workspace)                 |
-| `apps/api`      | FastAPI backend and Celery workers (uv workspace) |
-| `packages/eval` | Evaluation harness (uv workspace)                 |
-| `infra/`        | Docker and service configuration                  |
+| Path               | Contents                                                                          |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `apps/web`         | Next.js frontend (pnpm workspace)                                                 |
+| `apps/api`         | FastAPI backend and Celery workers (uv workspace)                                 |
+| `packages/eval`    | Evaluation harness (uv workspace)                                                 |
+| `packages/scoring` | Scoring library: Document Extraction, JD/CV parsing, Blind Profile (uv workspace) |
+| `infra/`           | Docker and service configuration                                                  |
 
 ## Setup
 
@@ -89,7 +90,10 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; rea
 | Web (Vitest)                        | `pnpm --filter @smart-ats/web test`         |
 | API (pytest)                        | `uv run pytest apps/api`                    |
 | Eval harness (pytest)               | `uv run pytest packages/eval`               |
+| Scoring library (pytest)            | `uv run pytest packages/scoring`            |
 | Infra smoke (pytest, stack running) | `uv run --env-file .env pytest infra/tests` |
 | Infra smoke, starting the stack     | `pnpm infra:test`                           |
 
 API tests need Docker: they start their own PostgreSQL and Redis with [testcontainers](https://testcontainers.com/), PostgreSQL bootstrapped from `infra/postgres/init` and the migrations.
+
+Scoring tests fake the LLM. `packages/scoring/tests/test_openai.py` calls the real OpenAI API and is skipped unless `OPENAI_API_KEY` is set: run it with `uv run --env-file .env pytest packages/scoring`.

@@ -1,6 +1,6 @@
 # Virtual uv workspace root: holds the shared uv.lock, is not itself a package.
 [tool.uv.workspace]
-members = ["apps/api", "packages/eval"]
+members = ["apps/api", "packages/eval", "packages/scoring"]
 
 [dependency-groups]
 dev = [
@@ -20,7 +20,7 @@ required-version = ">=0.12,<0.13"
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-src = ["apps/api", "packages/eval/src"]
+src = ["apps/api", "packages/eval/src", "packages/scoring/src"]
 # Markdown is formatted by Prettier; agent skills are vendored.
 extend-exclude = ["*.md", ".agents", ".claude"]
 
@@ -32,8 +32,8 @@ select = ["E", "W", "F", "I", "UP", "B"]
 
 [tool.mypy]
 python_version = "3.13"
-files = ["apps/api", "infra/tests", "packages/eval"]
-mypy_path = ["apps/api", "packages/eval/src"]
+files = ["apps/api", "infra/tests", "packages/eval", "packages/scoring"]
+mypy_path = ["apps/api", "packages/eval/src", "packages/scoring/src"]
 explicit_package_bases = true
 strict = true
 
