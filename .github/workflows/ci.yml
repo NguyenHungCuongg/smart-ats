@@ -41,6 +41,9 @@ jobs:
       # ubuntu-latest ships Docker, so testcontainers tests run here unchanged.
       - name: pytest
         run: uv run pytest apps/api
+      # Separate run: each package has its own pytest rootdir and settings.
+      - name: pytest (eval)
+        run: uv run pytest packages/eval
 
   # Same steps as `pnpm infra:test`, run directly so the job needs no Node setup.
   infra:

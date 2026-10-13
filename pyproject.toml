@@ -20,7 +20,7 @@ required-version = ">=0.12,<0.13"
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-src = ["apps/api"]
+src = ["apps/api", "packages/eval/src"]
 # Markdown is formatted by Prettier; agent skills are vendored.
 extend-exclude = ["*.md", ".agents", ".claude"]
 
@@ -32,9 +32,8 @@ select = ["E", "W", "F", "I", "UP", "B"]
 
 [tool.mypy]
 python_version = "3.13"
-# Add packages/eval once it has code: mypy fails on a directory with no .py files.
-files = ["apps/api", "infra/tests"]
-mypy_path = "apps/api"
+files = ["apps/api", "infra/tests", "packages/eval"]
+mypy_path = ["apps/api", "packages/eval/src"]
 explicit_package_bases = true
 strict = true
 
