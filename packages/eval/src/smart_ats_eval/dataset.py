@@ -46,6 +46,7 @@ def load(path: Path) -> Dataset:
     raw = json.loads(path.read_text(encoding="utf-8"))
     raters = tuple(raw["raters"])
     _check(len(set(raters)) == 2 == len(raters), "need exactly two distinct raters")
+    _check(type(raw["for_report"]) is bool, "for_report must be true or false")
     jobs = tuple(_job(job, raters) for job in raw["jobs"])
     _check(len({job.id for job in jobs}) == len(jobs), "duplicate Job id")
     return Dataset(raw["name"], raw["version"], raw["for_report"], raters, jobs)

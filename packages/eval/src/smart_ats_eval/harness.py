@@ -3,6 +3,7 @@
 import statistics
 from collections.abc import Sequence
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Protocol
 
 from smart_ats_eval import metrics
@@ -10,7 +11,7 @@ from smart_ats_eval.dataset import Dataset, Job
 
 
 @dataclass(frozen=True)
-class Score:
+class ScoreResult:
     """One Application's result from a Config: its Total and the Evidence quoted for it."""
 
     cv_id: str
@@ -27,7 +28,7 @@ class Config(Protocol):
     prompt_version: str | None
     rubric_version: str | None
 
-    def score(self, job: Job) -> list[Score]:
+    def score(self, job: Job) -> list[ScoreResult]:
         """Score every CV Document of the Job."""
         ...
 
@@ -69,16 +70,17 @@ def compare(data: Dataset, configs: Sequence[Config], split: str, runs: int) -> 
 
 
 def _evaluate(config: Config, jobs: Sequence[Job], runs: int) -> list[str]:
-    results = [
-        {job.id: {s.cv_id: s for s in config.score(job)} for job in jobs} for _ in range(runs)
-    ]
+    results = [{job.id: _score(config, job) for job in jobs} for _ in range(runs)]
 
     # Each metric is computed per run, per Job (and per rater for Top 5), then averaged.
     rho, ndcg, p5 = [], [], []
     for result in results:
         for job in jobs:
             scores = result[job.id]
-            ranked = sorted(scores.values(), key=lambda s: (-s.total, s.cv_id))
+            # Ties break by a hash of the id: dataset ids may follow quality (be-01 is best).
+            ranked = sorted(
+                scores.values(), key=lambda s: (-s.total, sha256(s.cv_id.encode()).digest())
+            )
             ranking = [s.cv_id for s in ranked]
             rho.append(
                 metrics.spearman(
@@ -122,6 +124,13 @@ def _evaluate(config: Config, jobs: Sequence[Job], runs: int) -> list[str]:
         _fmt(stability, 3),
         _fmt(statistics.fmean(costs) if costs else None, 4),
     ]
+
+
+def _score(config: Config, job: Job) -> dict[str, ScoreResult]:
+    results = {result.cv_id: result for result in config.score(job)}
+    if sorted(results) != sorted(cv.id for cv in job.cvs):
+        raise ValueError(f"{config.name} must return one ScoreResult per CV Document of {job.id}")
+    return results
 
 
 def _fmt(value: float | None, digits: int) -> str:

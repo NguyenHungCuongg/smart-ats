@@ -6,7 +6,7 @@ import statistics
 from collections import Counter
 
 from smart_ats_eval.dataset import Job
-from smart_ats_eval.harness import Score
+from smart_ats_eval.harness import ScoreResult
 
 K1 = 1.5
 B = 0.75
@@ -22,7 +22,7 @@ class Bm25Baseline:
     prompt_version: str | None = None
     rubric_version: str | None = None
 
-    def score(self, job: Job) -> list[Score]:
+    def score(self, job: Job) -> list[ScoreResult]:
         # The corpus is the Job's own CV Documents, so IDF reflects this applicant pool.
         docs = [Counter(_tokens(cv.text)) for cv in job.cvs]
         avg_len = statistics.fmean(doc.total() for doc in docs)
@@ -40,4 +40,4 @@ class Bm25Baseline:
                 if t in doc
             )
 
-        return [Score(cv.id, bm25(doc)) for cv, doc in zip(job.cvs, docs, strict=True)]
+        return [ScoreResult(cv.id, bm25(doc)) for cv, doc in zip(job.cvs, docs, strict=True)]

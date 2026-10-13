@@ -4,11 +4,11 @@ Offline harness for Experiment 1 (scoring quality) in [the experiment plan](../.
 
 ```sh
 uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json            # dev split, 1 run
-uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json --split test --runs 5
+uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json --split test --runs 2
 uv run pytest packages/eval
 ```
 
-The default split is `dev`. Use `test` only for the frozen run the plan describes. Stability needs `--runs 2` or more.
+The default split is `dev`. Use `test` only for the frozen run the plan describes. Stability needs `--runs 2` or more; the plan (§4) sets the run count for the report.
 
 ## Datasets
 
@@ -74,8 +74,8 @@ Each metric is computed per run and per Job, then averaged.
 | Stability    | Sample standard deviation of each Application's Total across runs, averaged over Applications                                                   |
 | Cost/App     | Mean `cost_usd` per Application, over the Scores that report one                                                                                |
 
-The header also shows the weighted Cohen's Kappa (quadratic) between the two raters over the split, and the split's real/synthetic count. A Config's ranking orders CV Documents by Total and breaks ties by id. Targets are in the plan, not here.
+The header also shows the weighted Cohen's Kappa (quadratic) between the two raters over the split, and the split's real/synthetic count. A Config's ranking orders CV Documents by Total and breaks ties by a hash of the id, so ids that follow quality give no advantage. Targets are in the plan, not here.
 
 ## Adding a Config
 
-Implement `harness.Config` and add an instance to `CONFIGS` in `src/smart_ats_eval/__main__.py`. `score(job)` returns one `harness.Score` per CV Document, carrying `total`, any `evidence` quotes and `cost_usd` when it is known. Set `model`, `prompt_version` and `rubric_version` so the table records them. Neither the metrics nor the table need changes. `baseline.py` (Okapi BM25 of the JD against the Job's CVs) is the smallest example.
+Implement `harness.Config` and add an instance to `CONFIGS` in `src/smart_ats_eval/__main__.py`. `score(job)` returns exactly one `harness.ScoreResult` per CV Document, carrying `total`, any `evidence` quotes and `cost_usd` when it is known. Set `model`, `prompt_version` and `rubric_version` so the table records them. Neither the metrics nor the table need changes. `baseline.py` (Okapi BM25 of the JD against the Job's CVs) is the smallest example.

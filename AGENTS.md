@@ -11,7 +11,7 @@ Run everything from the repo root; `README.md` owns the full command list (setup
 | Eval tests / table      | `uv run pytest packages/eval` / `uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json` (see `packages/eval/README.md`)                 |
 | Web tests / one file    | `pnpm --filter @smart-ats/web test` / `pnpm --filter @smart-ats/web test app/page.test.tsx`                                                              |
 | Infra smoke tests       | `pnpm infra:test` (builds and starts the stack, then runs `infra/tests`)                                                                                 |
-| Python lint/format/type | `uv run ruff check`, `uv run ruff format`, `uv run mypy` (strict, covers `apps/api` and `infra/tests`)                                                   |
+| Python lint/format/type | `uv run ruff check`, `uv run ruff format`, `uv run mypy` (strict, covers `apps/api`, `infra/tests` and `packages/eval`)                                  |
 | Web lint/format/type    | `pnpm --filter @smart-ats/web lint`, `pnpm format`, `pnpm --filter @smart-ats/web typecheck`                                                             |
 | New / apply migration   | `uv run --directory apps/api alembic revision -m "<msg>"` / `docker compose run --rm migrate`                                                            |
 | Seed demo tenant        | `docker compose exec -e SEED_PASSWORD=<pw> api python -m app.seed`                                                                                       |

@@ -19,11 +19,11 @@ class FakeConfig:
     def __init__(self) -> None:
         self.calls = 0
 
-    def score(self, job: dataset.Job) -> list[harness.Score]:
+    def score(self, job: dataset.Job) -> list[harness.ScoreResult]:
         self.calls += 1
         jitter = 1 if self.calls % 2 else -1
         return [
-            harness.Score(
+            harness.ScoreResult(
                 cv_id=cv.id,
                 total=cv.hr_score * 20 + jitter,
                 evidence=(cv.text[:12], "not in the CV Document"),
@@ -48,6 +48,15 @@ def test_compare_reports_every_metric_for_a_config() -> None:
     name, model, prompt, rubric, rho, _ndcg, _p5, grounding, stability, cost = row(table, "Fake")
     assert (name, model, prompt, rubric) == ("Fake", "fake-model", "p1", "r1")
     assert (rho, grounding, stability, cost) == ("1.000", "0.500", "1.414", "0.0100")
+
+
+def test_compare_rejects_a_config_that_skips_a_cv_document() -> None:
+    class SkipsOne(FakeConfig):
+        def score(self, job: dataset.Job) -> list[harness.ScoreResult]:
+            return super().score(job)[1:]
+
+    with pytest.raises(ValueError, match="one ScoreResult per CV Document"):
+        harness.compare(dataset.load(SCRATCH), [SkipsOne()], split="dev", runs=1)
 
 
 def test_cli_prints_the_baseline_row_and_flags_scratch_data(

@@ -64,6 +64,14 @@ def test_load_rejects_a_top5_naming_a_cv_outside_the_job(tmp_path: Path) -> None
         dataset.load(write(tmp_path, raw))
 
 
+def test_load_rejects_a_non_boolean_for_report(tmp_path: Path) -> None:
+    raw = valid_raw()
+    raw["for_report"] = "false"  # truthy: would silently drop the NOT FOR REPORT flag
+
+    with pytest.raises(ValueError, match="for_report"):
+        dataset.load(write(tmp_path, raw))
+
+
 def test_load_rejects_an_unknown_split(tmp_path: Path) -> None:
     raw = valid_raw()
     raw["jobs"][0]["split"] = "train"
