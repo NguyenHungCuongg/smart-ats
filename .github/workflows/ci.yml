@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: 0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Prettier
+        run: pnpm format:check
+      - name: ESLint
+        run: pnpm --filter @smart-ats/web lint
+      - name: TypeScript
+        run: pnpm --filter @smart-ats/web typecheck
+      - name: Vitest
+        run: pnpm --filter @smart-ats/web test
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync --locked
+      - name: Ruff format
+        run: uv run ruff format --check
+      - name: Ruff lint
+        run: uv run ruff check
+      - name: mypy
+        run: uv run mypy
+      # Paths are explicit: infra/tests needs the running stack and lives in the infra job.
+      # ubuntu-latest ships Docker, so testcontainers tests run here unchanged.
+      - name: pytest
+        run: uv run pytest apps/api
+      # Separate run: each package has its own pytest rootdir and settings.
+      - name: pytest (eval)
+        run: uv run pytest packages/eval
+      - name: pytest (scoring)
+        run: uv run pytest packages/scoring
+
+  # Same steps as `pnpm infra:test`, run directly so the job needs no Node setup.
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv sync --locked
+      - run: cp .env.example .env
+      - name: Start the stack
+        run: docker compose up -d --build --wait
+      - name: Smoke tests
+        run: uv run --env-file .env pytest infra/tests
+      - name: Service logs
+        if: failure()
+        run: docker compose logs

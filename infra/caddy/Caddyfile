@@ -1,0 +1,17 @@
+localhost {
+	# Prefix kept: FastAPI declares its routes under /api, so no root_path.
+	# SSE needs no flush setting: Caddy flushes text/event-stream responses immediately.
+	@api path /api /api/* /openapi.json /docs
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	redir /flower /flower/
+	handle /flower/* {
+		reverse_proxy flower:5555
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

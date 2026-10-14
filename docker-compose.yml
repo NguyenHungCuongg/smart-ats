@@ -1,0 +1,250 @@
+name: smart-ats
+
+# API, Celery workers and Beat share one image and one source tree.
+# Hot reload uses Compose Watch (`docker compose up --watch`), not bind mounts:
+# Docker Desktop's host-to-VM file sharing drops file events on Windows/macOS.
+x-python-app: &python-app
+  build:
+    context: .
+    dockerfile: apps/api/Dockerfile
+  image: smart-ats-api:dev
+  # Only what the code reads; add variables as code needs them. Never the superuser
+  # or ats_owner credentials: the app runs as ats_app (ADR-0001).
+  environment: &python-env
+    DATABASE_URL: ${DATABASE_URL:?set in .env}
+    REDIS_URL: ${REDIS_URL:?set in .env}
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+  develop:
+    watch:
+      - action: sync
+        path: ./apps/api
+        target: /repo/apps/api
+      - action: rebuild
+        path: ./uv.lock
+  restart: unless-stopped
+
+services:
+  # One-shot: applies Alembic migrations, then exits; the app services start after it.
+  # The only service holding the ats_owner credentials (ADR-0001).
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: smart-ats-api:dev
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:?set in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *python-app
+    environment:
+      <<: *python-env
+      JWT_SECRET: ${JWT_SECRET:?set in .env}
+      # Readiness probes object storage (SAD §8).
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION:?set in .env}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in .env}
+      S3_BUCKET: ${S3_BUCKET:?set in .env}
+      # Uvicorn takes the client IP from Caddy's X-Forwarded-For only for listed proxies; Caddy's
+      # address varies, so trust any. Per-IP login lockout (FR-C1.1) needs the browser's IP, and
+      # port 8000 is published on loopback only, so only local processes could spoof the header.
+      FORWARDED_ALLOW_IPS: "*"
+    ports:
+      - 127.0.0.1:8000:8000
+    healthcheck:
+      # A plain TCP connect: polling /api/health would flood the access log.
+      test:
+        ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One worker per queue (SAD §3). watchfiles restarts Celery when Python code changes.
+  # -E: task events for Flower. -c 2: Celery defaults to one process per CPU;
+  # tune per queue once real tasks exist.
+  worker-llm:
+    <<: *python-app
+    command:
+      ["watchfiles", "--filter", "python", "celery -A app.worker worker -Q llm -n llm@%h -E -c 2"]
+
+  worker-default:
+    <<: *python-app
+    command:
+      [
+        "watchfiles",
+        "--filter",
+        "python",
+        "celery -A app.worker worker -Q default -n default@%h -E -c 2",
+      ]
+
+  worker-agent:
+    <<: *python-app
+    command:
+      [
+        "watchfiles",
+        "--filter",
+        "python",
+        "celery -A app.worker worker -Q agent -n agent@%h -E -c 2",
+      ]
+
+  worker-email:
+    <<: *python-app
+    command:
+      [
+        "watchfiles",
+        "--filter",
+        "python",
+        "celery -A app.worker worker -Q email -n email@%h -E -c 2",
+      ]
+
+  # Exactly one instance (SAD §3).
+  beat:
+    <<: *python-app
+    command: ["watchfiles", "--filter", "python", "celery -A app.worker beat"]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set in .env}
+    ports:
+      - 127.0.0.1:3000:3000
+    # The browser, not the web server, calls the API (ADR-0003); this only brings the API up with it.
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('net').connect(3000, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web
+          target: /repo/apps/web
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg18-trixie
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      ATS_OWNER_PASSWORD: ${ATS_OWNER_PASSWORD:?set in .env}
+      ATS_APP_PASSWORD: ${ATS_APP_PASSWORD:?set in .env}
+    ports:
+      # Loopback only: the same file runs the demo VPS (SAD §9).
+      - 127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432
+    volumes:
+      # PostgreSQL 18 images keep PGDATA in a versioned subdirectory of this path.
+      - postgres-data:/var/lib/postgresql
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Over TCP: the temporary server that runs the init scripts listens on the socket only.
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.10.2-trixie
+    # Transport only (SAD §1): no RDB snapshots, no append-only file.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - 127.0.0.1:${REDIS_HOST_PORT:-6379}:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower:2.2.0
+    environment:
+      CELERY_BROKER_URL: ${REDIS_URL:?set in .env}
+      # Served under /flower behind Caddy (Infra 06); auth because the demo VPS runs this file.
+      FLOWER_URL_PREFIX: flower
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:?set in .env}
+    ports:
+      - 127.0.0.1:5555:5555
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48
+    # All-in-one dev mode with the S3 gateway; creates the bucket on startup if missing.
+    command: ["mini", "-dir=/data", "-bucket=${S3_BUCKET:?set in .env}"]
+    environment:
+      # Becomes the S3 admin identity.
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in .env}
+    ports:
+      # Must match S3_PUBLIC_ENDPOINT: presigned URLs are signed against that host.
+      - 127.0.0.1:8333:8333
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      # Healthy only once the bucket exists, so `up --wait` covers its creation.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8888/buckets/${S3_BUCKET}/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  mailpit:
+    # Catches all SMTP mail; the image's own healthcheck covers `up --wait`.
+    image: axllent/mailpit:v1.31.4
+    ports:
+      # SMTP, then the web UI and REST API.
+      - 127.0.0.1:1025:1025
+      - 127.0.0.1:8025:8025
+    restart: unless-stopped
+
+  caddy:
+    # Single origin for web, API and Flower; SSE unbuffered (Infra 06).
+    image: caddy:2.9.1
+    ports:
+      - 127.0.0.1:80:80
+      - 127.0.0.1:443:443
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      flower:
+        condition: service_started
+    healthcheck:
+      # A plain TCP connect: the admin API logs every request at info level.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "443"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  seaweedfs-data:
+  caddy-data:

@@ -1,104 +1,160 @@
-# Product Requirements Document (PRD)
-## Smart ATS — AI-Powered Multi-Tenant ATS Platform
+# Tài liệu Yêu cầu Sản phẩm (PRD)
 
-**Version:** 3.1
-**Date:** 2026-09-28
-**Target Audience:** Development Team, QA Team, Stakeholders
+## Smart ATS — Nền tảng ATS Đa Người Thuê Hỗ trợ AI
 
-> This PRD is a product summary. **Detailed requirements, acceptance criteria, numbers and versions live only in the SRS** (`docs/SRS/requirement_specification_v3.md`) and are referenced here by ID, not repeated. Terms follow `CONTEXT.md`.
+**Phiên bản:** 3.2
+**Ngày:** 2026-10-08
+**Đối tượng đọc:** Nhóm phát triển, GVHD
 
----
-
-## 1. Product Overview & Vision
-
-Smart ATS is a multi-tenant SaaS Applicant Tracking System for Vietnamese SMEs. It turns unstructured CVs into ranked, explained Shortlists, and lets an agent run a hiring Campaign up to a human Checkpoint.
-
-### 1.1 Problems Solved
-- **Resume overload:** CVs are parsed and scored automatically, including CVs arriving through a Public Apply Link.
-- **Subjective evaluation:** Hybrid scoring (deterministic coverage plus an anchored LLM rubric), with Evidence quoted for every claim.
-- **Administrative burden:** Email drafting and sending, interview questions, bulk pipeline actions.
-- **Lost talent:** Talent Rediscovery surfaces past Candidates for new Jobs.
-- **Cost:** A shared multi-tenant platform with a per-tenant AI Budget.
-
-### 1.2 Design Principles
-- **AI-augmented, human-decided.** AI proposes; only people change Stages, criteria, or send email.
-- **No-prompt UI.** Forms and buttons, not prompt boxes.
-- **Explainability and reproducibility.** Every score has Evidence and a recorded model, prompt version and rubric version.
-- **Fault isolation.** One bad file or failed call never blocks a batch.
-- **Isolation by default.** Tenant data is separated by the database itself.
-
-### 1.3 Success Metrics (targets defined in SRS §8)
-- Scoring agrees with HR experts: Spearman ρ and NDCG@5 against a labelled dataset.
-- Prompt-injection attack success rate is at or below the target.
-- Zero cross-tenant leaks across the automated isolation suite.
-- A new Recruiter reaches their first Fit-Gap Report within the onboarding target.
+> PRD là nguồn sự thật cho **bối cảnh, định vị, nguyên tắc thiết kế, người dùng, hành trình chính và các quyết định phạm vi**. Yêu cầu chi tiết, tiêu chí nghiệm thu và mọi con số nằm trong [SRS](../SRS/software_requirements_specification.md) và được dẫn bằng mã (FR-…, NFR-…), không chép lại. Thuật ngữ theo `CONTEXT.md`. Bản đồ tài liệu: [CONTRIBUTING.md](../../CONTRIBUTING.md#bản-đồ-tài-liệu).
 
 ---
 
-## 2. Personas & Roles (SRS §4)
+## 1. Tổng quan & Tầm nhìn
 
-| Role | Summary |
-|---|---|
-| **System Admin** | Runs the platform: Tenants, plans, AI Budgets, aggregate usage. **No access to any Tenant's recruitment data.** |
-| **Company Admin** | Manages the Workspace and Members, sees AI usage, handles candidate data requests. **Has every Recruiter permission.** |
-| **Recruiter** | Runs hiring end to end: Jobs, CVs, scoring, Rediscovery, Campaigns and Recruiter Decisions, email, pipeline. |
-| **Reviewer** | Sees only assigned Jobs. Reads Fit-Gap Reports, comments, and gives Interview Scores. Cannot change Stages, run AI, send email, or see candidate contact details. |
+Smart ATS là Applicant Tracking System dạng SaaS đa người thuê cho SME Việt Nam. Hệ thống biến các CV phi cấu trúc thành Shortlist đã xếp hạng và có giải trình, và cho phép một agent điều phối Campaign tuyển dụng tới một Checkpoint do con người quyết định.
 
-Only Company Admins and Recruiters can start a Campaign.
+### 1.1. Bối cảnh & Vấn đề
+
+Phần lớn doanh nghiệp vừa và nhỏ (SME) Việt Nam vẫn quản lý tuyển dụng bằng Excel, email và các phần mềm không tích hợp AI.
+
+> Các nhận định định lượng trong mục này chưa có nguồn trích dẫn; việc đối chiếu nguồn hoặc thay bằng khảo sát SME do nhóm tự thực hiện nằm trong [Roadmap](../PLAN/roadmap.md).
+
+| Vấn đề                                  | Biểu hiện                                                                                                                                 | Smart ATS giải quyết bằng                                                                      |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Quá tải sàng lọc**                    | Mỗi vị trí nhận hàng trăm CV phi cấu trúc; đọc – bóc tách – so sánh thủ công tốn hàng chục giờ; recruiter lướt vài giây mỗi CV nên bỏ sót | Parse và chấm điểm CV tự động, kể cả CV đến qua Public Apply Link                              |
+| **Đánh giá thiếu nhất quán & chủ quan** | Điểm phụ thuộc cảm nhận từng recruiter; không có tiêu chí chuẩn hóa nên khó giải thích với Hiring Manager                                 | Chấm điểm lai (Must-have Coverage tất định + LLM rubric có neo), mọi nhận định kèm Evidence    |
+| **Gánh nặng hành chính**                | Soạn thư mời, cập nhật trạng thái hồ sơ, tổng hợp báo cáo chiếm phần lớn thời gian vận hành                                               | Soạn và gửi email, sinh câu hỏi phỏng vấn, bulk action trên pipeline                           |
+| **Mất ứng viên tiềm năng**              | CV cũ nằm im trong hộp thư, không được xem lại cho vị trí mới                                                                             | Talent Rediscovery tìm lại Candidate cũ phù hợp Job mới                                        |
+| **Rào cản chi phí**                     | ATS quốc tế (Workday, Greenhouse, Lever) có chi phí hàng chục nghìn USD/năm, vượt ngân sách SME                                           | Nền tảng multi-tenant dùng chung hạ tầng, chi phí AI kiểm soát bằng AI Budget theo từng tenant |
+
+### 1.2. Định vị Sản phẩm
+
+**Smart ATS** là nền tảng ATS SaaS đa người thuê (Multi-Tenant) cho SME, tích hợp lớp AI để bóc tách CV, chấm điểm có giải trình, và một Agent điều phối có kiểm soát của con người.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SMART ATS PLATFORM                       │
+│           (Multi-Tenant SaaS — AI-Powered ATS)              │
+├─────────────────────────────────────────────────────────────┤
+│  TENANT A (Cty ABC)  │  TENANT B (Cty XYZ)  │  TENANT N     │
+│  Jobs · Candidates · Applications · Talent Pool · AI Budget │
+├─────────────────────────────────────────────────────────────┤
+│               SHARED PLATFORM SERVICES                      │
+│  • Hybrid Scoring Engine (deterministic + LLM rubric)       │
+│  • Agentic Campaign Engine (LangGraph + Checkpoint)         │
+│  • Async Workers (Celery + Redis)                           │
+│  • PostgreSQL — Forced RLS + pgvector                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 1.3. Nguyên tắc Thiết kế
+
+1. **AI-Augmented, Human-Decided**: AI xử lý khối lượng lớn và đề xuất; con người quyết định. Không có quyết định loại ứng viên hay thay đổi tiêu chí nào được thực hiện tự động.
+2. **No-Prompt UI**: Người dùng không cần kiến thức prompt engineering; mọi khả năng LLM được trừu tượng hóa qua form, wizard và action button.
+3. **Explainability-First**: Mọi điểm số kèm Fit-Gap Report có Evidence trích nguyên văn; mọi điểm số có thể tái lập (lưu model, prompt version, rubric version, trọng số).
+4. **Fault Isolation**: Lỗi của một file hay một ứng viên không ảnh hưởng phần còn lại của batch.
+5. **Isolation by Default**: Dữ liệu tenant được cô lập ở tầng database engine; code quên lọc `tenant_id` vẫn không lộ dữ liệu.
+
+### 1.4. Chỉ số Thành công
+
+Ngưỡng cụ thể nằm ở tài liệu được dẫn:
+
+- Điểm số đồng thuận với chuyên gia HR: Spearman ρ và NDCG@5 trên bộ dữ liệu có nhãn (Experiment 1, [Kế hoạch Thực nghiệm](../EVAL/experiment_plan.md)).
+- Tỷ lệ tấn công prompt injection thành công không vượt mục tiêu (Experiment 2).
+- Không rò rỉ dữ liệu xuyên tenant trong bộ test cô lập tự động (Experiment 4).
+- Recruiter mới đạt Fit-Gap Report đầu tiên trong thời gian NFR-USE-01.
 
 ---
 
-## 3. Features (by SRS module)
+## 2. Người dùng & Vai trò
 
-| Module | Feature | SRS | Priority |
-|---|---|---|---|
-| A0 Agent | Campaign: plan / act / reflect, Rediscovery and What-if tools, durable Checkpoint with Approve / Revise / Reject | FR-A0 | P1 |
-| A1 Evaluation | Job parsing with Recruiter confirmation | FR-A1.1 | P1 |
-| | Fault-isolated CV upload & parsing (≤ 50 per batch), deduplication | FR-A1.2 | P1 |
-| | Hybrid 3-axis scoring with Fit-Gap Report and Evidence | FR-A1.3 | P1 |
-| | Ranking, Shortlist, STAR interview questions | FR-A1.4 | P1 |
-| | PDF report | FR-A1.5 | P2 |
-| | Talent Rediscovery | FR-A1.6 | P1 |
-| A2 Collaboration | Email assistant: draft in 3 tones, **send** through a provider | FR-A2.1 | P1 |
-| | Comments, @mentions, Interview Score | FR-A2.2 | P1 |
-| A3 Pipeline | Job lifecycle | FR-A3.1 | P1 |
-| | Kanban over Applications (5 active + 2 terminal Stages), bulk actions | FR-A3.2 | P1 |
-| | Activity timeline & audit log | FR-A3.3 | P1 |
-| | Public Apply Link | FR-A3.4 | P1 |
-| C1 Platform | Auth (password + Google), sessions | FR-C1.1 | P1 |
-| | Workspace & Member management, invitations | FR-C1.2 | P1 |
-| | Forced RLS tenant isolation | FR-C1.3 | P1 |
-| | AI Usage Ledger & AI Budget | FR-C1.4 | P1 |
-| | Candidate personal-data protection (consent, retention, erasure) | FR-C1.5 | P1 |
-| C2 AI Engine | Document extraction, prompt-injection defence, async processing, Blind Profile | FR-C2.1–C2.4 | P1 |
+Chi tiết quyền: SRS §2.
+
+| Vai trò           | Tóm tắt                                                                                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **System Admin**  | Vận hành nền tảng: Tenant, gói dịch vụ, AI Budget, số liệu sử dụng tổng hợp. **Không truy cập dữ liệu tuyển dụng của bất kỳ Tenant nào.**                       |
+| **Company Admin** | Quản lý Workspace và Member, xem AI usage, xử lý yêu cầu dữ liệu của ứng viên. **Có mọi quyền của Recruiter.**                                                  |
+| **Recruiter**     | Vận hành tuyển dụng từ đầu tới cuối: Job, CV, chấm điểm, Rediscovery, Campaign và Recruiter Decision, email, pipeline.                                          |
+| **Reviewer**      | Chỉ thấy Job được gán. Đọc Fit-Gap Report, comment, cho Interview Score. Không đổi Stage, không chạy AI, không gửi email, không xem thông tin liên hệ ứng viên. |
+
+Chỉ Company Admin và Recruiter được khởi tạo Campaign.
 
 ---
 
-## 4. Key User Journeys
+## 3. Tính năng (theo module SRS)
 
-1. **Manual screening:**
-   1. The Recruiter creates a Job from a JD Document and confirms the criteria and weights.
-   2. The Recruiter uploads CVs or shares the Public Apply Link.
-   3. The Recruiter runs scoring and reads the ranked list with Fit-Gap Reports.
-   4. The Recruiter picks a Shortlist, generates interview questions, and sends invitations.
+| Module       | Tính năng                                                                                                      | SRS          | Ưu tiên |
+| ------------ | -------------------------------------------------------------------------------------------------------------- | ------------ | ------- |
+| A0 Agent     | Campaign: plan / act / reflect, tool Rediscovery và What-if, Checkpoint bền vững với Approve / Revise / Reject | FR-A0        | P1      |
+| A1 Đánh giá  | Parse Job, Recruiter xác nhận criteria                                                                         | FR-A1.1      | P1      |
+|              | Upload & parse CV theo batch, cô lập lỗi từng file, chống trùng lặp                                            | FR-A1.2      | P1      |
+|              | Chấm điểm lai 3 trục kèm Fit-Gap Report và Evidence                                                            | FR-A1.3      | P1      |
+|              | Xếp hạng, Shortlist, câu hỏi phỏng vấn STAR                                                                    | FR-A1.4      | P1      |
+|              | Báo cáo PDF                                                                                                    | FR-A1.5      | P2      |
+|              | Talent Rediscovery                                                                                             | FR-A1.6      | P1      |
+| A2 Cộng tác  | Trợ lý email: soạn theo 3 tone, **gửi** qua nhà cung cấp                                                       | FR-A2.1      | P1      |
+|              | Comment, @mention, Interview Score                                                                             | FR-A2.2      | P1      |
+| A3 Pipeline  | Vòng đời Job                                                                                                   | FR-A3.1      | P1      |
+|              | Kanban trên Application (5 Stage hoạt động + 2 Stage kết thúc), bulk action                                    | FR-A3.2      | P1      |
+|              | Activity timeline & audit log                                                                                  | FR-A3.3      | P1      |
+|              | Public Apply Link                                                                                              | FR-A3.4      | P1      |
+| C1 Nền tảng  | Xác thực (mật khẩu + Google), phiên đăng nhập                                                                  | FR-C1.1      | P1      |
+|              | Quản lý Workspace & Member, lời mời                                                                            | FR-C1.2      | P1      |
+|              | Cô lập tenant bằng Forced RLS                                                                                  | FR-C1.3      | P1      |
+|              | AI Usage Ledger & AI Budget                                                                                    | FR-C1.4      | P1      |
+|              | Bảo vệ dữ liệu cá nhân ứng viên (đồng ý, lưu giữ, xóa)                                                         | FR-C1.5      | P1      |
+| C2 AI Engine | Document extraction, chống prompt injection, xử lý bất đồng bộ, Blind Profile                                  | FR-C2.1–C2.4 | P1      |
+
+---
+
+## 4. Hành trình Người dùng Chính
+
+1. **Sàng lọc thủ công:**
+   1. Recruiter tạo Job từ JD Document, xác nhận criteria và trọng số.
+   2. Recruiter upload CV hoặc chia sẻ Public Apply Link.
+   3. Recruiter chạy chấm điểm và đọc danh sách xếp hạng kèm Fit-Gap Report.
+   4. Recruiter chọn Shortlist, sinh câu hỏi phỏng vấn và gửi thư mời.
 2. **Campaign:**
-   1. The Recruiter writes a Campaign Brief with a target count.
-   2. The agent scores the pool, tops it up through Rediscovery if short, and prepares a Shortlist or What-if Suggestions.
-   3. The Recruiter approves, revises, or rejects at the Checkpoint. Nothing changes in the pipeline before that.
-3. **Collaboration:** A Reviewer assigned to a Job reads Fit-Gap Reports, comments with an @mention, and records an Interview Score after the interview.
-4. **Data request:** A candidate asks for deletion, and the Company Admin erases the Candidate. Files, identity fields and embeddings are removed.
+   1. Recruiter viết Campaign Brief kèm số lượng mục tiêu.
+   2. Agent chấm điểm pool, bổ sung qua Rediscovery nếu thiếu, rồi chuẩn bị Shortlist hoặc What-if Suggestion.
+   3. Recruiter approve, revise hoặc reject tại Checkpoint. Không có gì trong pipeline thay đổi trước bước này.
+3. **Cộng tác:** Reviewer được gán vào một Job đọc Fit-Gap Report, comment có @mention, và ghi Interview Score sau buổi phỏng vấn.
+4. **Yêu cầu dữ liệu:** Ứng viên yêu cầu xóa dữ liệu, Company Admin xóa Candidate. File, trường định danh và embedding bị xóa.
 
 ---
 
-## 5. Non-Functional Requirements (SRS §6)
+## 5. Quyết định Phạm vi
 
-- Performance, security, reliability and usability targets are defined only in SRS §6 (NFR-PERF, NFR-SEC, NFR-REL, NFR-USE).
-- The UI is in Vietnamese (default) and English. CVs and JDs in both languages are supported.
+Ghi lại các quyết định phạm vi quan trọng để giải trình khi bảo vệ. Danh sách đầy đủ những gì nằm ngoài đề tài: SRS §6.
 
-## 6. Technology (SRS §9)
+### 5.1. Loại bỏ Side B (Career Platform) — từ v3.0
 
-Next.js / React frontend; FastAPI / SQLAlchemy backend; Celery + Redis workers; PostgreSQL 18 with forced RLS and pgvector; LangGraph with a Postgres checkpointer; OpenAI GPT-6 Sol / Luna and `text-embedding-3-large`. Version lines were checked on 2026-09-28 and are listed in SRS §9.1. Exact pins live in the lockfiles.
+- Side B (Reverse Matching, Career Advisor, CV Builder) là một sản phẩm B2C độc lập, khác domain, bảo mật và UX với B2B ATS.
+- **Quyết định**: tập trung vào ATS B2B. Ứng viên chỉ tương tác qua **Public Apply Link** (một form nộp CV), không có tài khoản ứng viên.
 
-## 7. Out of Scope (SRS §11)
+### 5.2. Loại bỏ Offer/Contract Generator — từ v3.0
 
-Candidate accounts or a career portal, offer letters, calendar integration, inbound email, multi-tenant user membership, enterprise SSO, billing, a second LLM provider, and schema- or database-per-tenant.
+- Là CRUD template-fill thuần, không có giá trị AI; đặt vào roadmap thương mại.
+
+### 5.3. Refine Smart Recruitment Agent — từ v3.0, bổ sung v3.1
+
+- Agent **không bao giờ** tự thay đổi tiêu chí (score threshold, must-have, trọng số) hay trạng thái ATS.
+- v3.1 bổ sung: Agent có **không gian quyết định thật** (khi thiếu ứng viên có thể chọn Rediscovery từ Talent Pool hoặc tính What-if Suggestion) và được so sánh với baseline workflow cố định trong Experiment 3 để chứng minh giá trị.
+
+### 5.4. Bổ sung trong v3.1
+
+| Bổ sung                                      | Lý do                                                                                                                                                                               |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Public Apply Link**                        | Không có kênh nộp hồ sơ thì stage "Applied" không có ý nghĩa; mọi ATS thực tế đều có. Chi phí thấp (một form).                                                                      |
+| **Gửi email thật** qua dịch vụ transactional | Lời mời thành viên (FR-C1.2) và email từ chối hàng loạt (FR-A3.2) vốn đã cần gửi email; v3.0 "không SMTP" tự mâu thuẫn. Dùng dịch vụ có sẵn nên không phát sinh DevOps mail server. |
+| **Talent Rediscovery**                       | Tận dụng embedding đã có; biến Talent Pool thành tài sản của tenant; là tool quan trọng cho Agent.                                                                                  |
+| **AI Usage Ledger & AI Budget**              | Cần để enforce hạn mức theo chi phí thật, đo cost trong thực nghiệm, và là câu chuyện SaaS thực tế.                                                                                 |
+| **Bảo vệ dữ liệu cá nhân**                   | CV chứa dữ liệu cá nhân và được gửi tới nhà cung cấp LLM nước ngoài; sản phẩm "doanh nghiệp dùng thật" bắt buộc có consent, retention và xóa dữ liệu.                               |
+
+---
+
+## 6. Phi Chức năng & Công nghệ
+
+- Mục tiêu hiệu năng, bảo mật, độ tin cậy và khả dụng: SRS §4 (NFR-PERF, NFR-SEC, NFR-REL, NFR-USE).
+- Ràng buộc thiết kế: SRS §5. Công nghệ và phiên bản: [SAD §2](../SAD/system_architecture_document.md#2-công-nghệ).

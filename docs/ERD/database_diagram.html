@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart ATS data model</title>
+  <title>Mô hình dữ liệu Smart ATS</title>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Serif:ital@0;1&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -30,16 +30,16 @@
 </head>
 <body>
   <div class="frame">
-    <p class="eyebrow">ER · ERD v3.1 · Diagram Design</p>
-    <h1>Smart ATS data model</h1>
-    <p class="intro">Companion diagrams for <code>docs/ERD/entity_relationship_diagram.md</code>, which holds every column, constraint and index. Only key fields are drawn. <strong>Every tenant-owned entity also carries <code>tenant_id</code> (not drawn)</strong> under forced row-level security, and foreign keys between tenant tables are composite <code>(tenant_id, id)</code> (ADR-0001). <code>tstz</code> = <code>timestamptz</code>.</p>
+    <p class="eyebrow">ER · ERD v3.2 · Diagram Design</p>
+    <h1>Mô hình dữ liệu Smart ATS</h1>
+    <p class="intro">Sơ đồ đi kèm <code>docs/ERD/entity_relationship_diagram.md</code>, nơi ghi đủ mọi cột, ràng buộc và index. Sơ đồ chỉ vẽ các trường chính. <strong>Mọi thực thể thuộc tenant còn có <code>tenant_id</code> (không vẽ)</strong> dưới forced row-level security, và khóa ngoại giữa các bảng tenant là khóa ghép <code>(tenant_id, id)</code> (ADR-0001). <code>tstz</code> = <code>timestamptz</code>.</p>
     <section>
       <p class="eyebrow">Figure A · ER</p>
-      <h2>Recruitment core</h2>
+      <h2>Lõi tuyển dụng</h2>
       <div class="scroll">
 <svg viewBox="0 0 1104 820" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="erd-core-title erd-core-desc">
-  <title id="erd-core-title">Recruitment core data model</title>
-  <desc id="erd-core-desc">Entity-relationship diagram showing Applications joining Jobs to Candidates, each Application evaluated on one CV Document, with stage history, reviewer assignments and fault-isolated upload batches.</desc>
+  <title id="erd-core-title">Mô hình dữ liệu lõi tuyển dụng</title>
+  <desc id="erd-core-desc">Sơ đồ thực thể quan hệ: Application nối Job với Candidate, mỗi Application được đánh giá trên một CV Document, kèm lịch sử Stage, Reviewer Assignment và Upload Batch cô lập lỗi.</desc>
   <defs><marker id="erd-core-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker><marker id="erd-core-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker><marker id="erd-core-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>
   <rect y="0" width="100%" height="100%" fill="#f5f5f5"/>
   
@@ -250,15 +250,15 @@
   <text x="540" y="792" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Cardinality</text>
 </svg>
       </div>
-      <p class="caption">An <strong>Application</strong> is one Candidate considered for one Job (unique on job + candidate) and carries the current Stage; history is append-only. A Candidate may have several CV Documents (deduplicated by SHA-256 per tenant); each Application is evaluated on one of them. Upload items fail or succeed independently.</p>
+      <p class="caption">Một <strong>Application</strong> là một Candidate được xét cho một Job (duy nhất theo job + candidate) và mang Stage hiện tại; lịch sử chỉ append. Một Candidate có thể có nhiều CV Document (chống trùng bằng SHA-256 trong từng tenant); mỗi Application được đánh giá trên một trong số đó. Các upload item thành công hay thất bại độc lập với nhau.</p>
     </section>
     <section>
       <p class="eyebrow">Figure B · ER</p>
-      <h2>Evaluation and agent</h2>
+      <h2>Đánh giá và agent</h2>
       <div class="scroll">
 <svg viewBox="0 12 1104 848" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="erd-eval-title erd-eval-desc">
-  <title id="erd-eval-title">Evaluation and agent data model</title>
-  <desc id="erd-eval-desc">Entity-relationship diagram showing Scoring Runs producing one Score Result per Application with interview question sets, and Campaigns recording events, proposals and the Scoring Runs they trigger.</desc>
+  <title id="erd-eval-title">Mô hình dữ liệu đánh giá và agent</title>
+  <desc id="erd-eval-desc">Sơ đồ thực thể quan hệ: Scoring Run tạo một Score Result cho mỗi Application kèm bộ câu hỏi phỏng vấn; Campaign ghi lại event, đề xuất và các Scoring Run mà nó kích hoạt.</desc>
   <defs><marker id="erd-eval-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker><marker id="erd-eval-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker><marker id="erd-eval-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>
   <rect y="12" width="100%" height="100%" fill="#f5f5f5"/>
   
@@ -463,15 +463,15 @@
   <text x="713" y="832" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Cardinality</text>
 </svg>
       </div>
-      <p class="caption">A Scoring Run freezes weights, criteria, model, prompt and rubric versions. <code>score_results</code> is unique on <code>(scoring_run_id, application_id)</code> — the idempotency key for retried tasks. A Campaign’s id is its LangGraph <code>thread_id</code>; LangGraph’s own checkpoint tables are not drawn and sit outside RLS.</p>
+      <p class="caption">Scoring Run đóng băng trọng số, criteria, model, prompt version và rubric version. <code>score_results</code> duy nhất theo <code>(scoring_run_id, application_id)</code> — idempotency key cho task bị retry. Id của Campaign đồng thời là <code>thread_id</code> của LangGraph; bảng checkpoint riêng của LangGraph không được vẽ và nằm ngoài RLS.</p>
     </section>
     <section>
       <p class="eyebrow">Figure C · ER</p>
-      <h2>Tenancy, identity and ledgers</h2>
+      <h2>Tenant, định danh và sổ ghi</h2>
       <div class="scroll">
 <svg viewBox="0 0 1160 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="erd-identity-title erd-identity-desc">
-  <title id="erd-identity-title">Tenancy, identity and ledgers</title>
-  <desc id="erd-identity-desc">Entity-relationship diagram showing a Tenant owning Users, invitations, the AI usage ledger and the audit log, with Users holding rotating refresh tokens.</desc>
+  <title id="erd-identity-title">Tenant, định danh và sổ ghi</title>
+  <desc id="erd-identity-desc">Sơ đồ thực thể quan hệ: Tenant sở hữu User, lời mời, AI Usage Ledger và audit log; User giữ các refresh token được rotate.</desc>
   <defs><marker id="erd-identity-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker><marker id="erd-identity-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker><marker id="erd-identity-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>
   <rect y="0" width="100%" height="100%" fill="#f5f5f5"/>
   
@@ -634,15 +634,15 @@
   <text x="540" y="612" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Cardinality</text>
 </svg>
       </div>
-      <p class="caption"><code>tenants</code> is a platform table without RLS. <code>users.tenant_id</code> is null only for System Admins. Refresh tokens rotate within a family; reusing a rotated token revokes the family. Login, Public Apply and invitation acceptance resolve the tenant through <code>SECURITY DEFINER</code> functions.</p>
+      <p class="caption"><code>tenants</code> là bảng nền tảng, không có RLS. <code>users.tenant_id</code> chỉ null với System Admin. Refresh token được rotate trong một family; dùng lại token đã rotate sẽ thu hồi cả family. Đăng nhập, Public Apply và chấp nhận lời mời xác định tenant qua các hàm <code>SECURITY DEFINER</code>.</p>
     </section>
     <section>
       <p class="eyebrow">Figure D · ER</p>
-      <h2>Collaboration and communication</h2>
+      <h2>Cộng tác và giao tiếp</h2>
       <div class="scroll">
 <svg viewBox="0 0 1104 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="erd-collab-title erd-collab-desc">
-  <title id="erd-collab-title">Collaboration and communication</title>
-  <desc id="erd-collab-desc">Entity-relationship diagram showing comments on Applications with mentions of users, user notifications, and email messages that double as the sending outbox.</desc>
+  <title id="erd-collab-title">Cộng tác và giao tiếp</title>
+  <desc id="erd-collab-desc">Sơ đồ thực thể quan hệ: comment trên Application kèm mention tới user, notification của user, và email message đồng thời là outbox gửi thư.</desc>
   <defs><marker id="erd-collab-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker><marker id="erd-collab-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker><marker id="erd-collab-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>
   <rect y="0" width="100%" height="100%" fill="#f5f5f5"/>
   
@@ -782,9 +782,9 @@
   <text x="713" y="572" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Cardinality</text>
 </svg>
       </div>
-      <p class="caption">Comments are soft-deleted. <code>email_messages</code> doubles as the outbox: a row is written as <code>QUEUED</code> in the business transaction and its id is the provider idempotency key.</p>
+      <p class="caption">Comment bị xóa mềm (soft delete). <code>email_messages</code> đồng thời là outbox: một dòng được ghi ở trạng thái <code>QUEUED</code> trong transaction nghiệp vụ, và id của nó là idempotency key gửi cho nhà cung cấp.</p>
     </section>
-    <footer>Smart ATS · ERD v3.1 · 2026-09-28 · generated with the diagram-design skill (default skin)</footer>
+    <footer>Smart ATS · ERD v3.2 · 2026-10-08 · tạo bằng skill diagram-design (default skin)</footer>
   </div>
 </body>
 </html>

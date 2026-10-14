@@ -1,0 +1,105 @@
+{
+  "name": "scratch",
+  "version": 1,
+  "for_report": false,
+  "note": "Dữ liệu tạm do nhóm tự viết và tự gán nhãn để phát triển harness. Mọi CV đều hư cấu, không chứa dữ liệu cá nhân thật. KHÔNG dùng cho báo cáo.",
+  "raters": ["r1", "r2"],
+  "jobs": [
+    {
+      "id": "backend-junior",
+      "split": "dev",
+      "title": "Backend Developer (Junior)",
+      "jd_text": "Tuyển Backend Developer (Junior). Yêu cầu bắt buộc: Python, FastAPI hoặc Django, PostgreSQL, Git. Ưu tiên: Docker, Redis, viết unit test với pytest. Kinh nghiệm 1-2 năm phát triển REST API.",
+      "cvs": [
+        {
+          "id": "be-01",
+          "source": "synthetic",
+          "text": "Backend developer, 2 năm kinh nghiệm. Xây dựng REST API bằng Python và FastAPI cho hệ thống đặt lịch khám, dữ liệu lưu trên PostgreSQL. Viết unit test với pytest, đóng gói bằng Docker, dùng Redis làm cache. Quản lý mã nguồn bằng Git.",
+          "labels": { "r1": 5, "r2": 5 }
+        },
+        {
+          "id": "be-02",
+          "source": "synthetic",
+          "text": "Lập trình viên Django 1 năm. Phát triển API cho website thương mại điện tử, cơ sở dữ liệu PostgreSQL, làm việc nhóm qua Git và GitHub. Có tìm hiểu Docker.",
+          "labels": { "r1": 4, "r2": 4 }
+        },
+        {
+          "id": "be-03",
+          "source": "synthetic",
+          "text": "Sinh viên mới tốt nghiệp ngành CNTT. Đồ án tốt nghiệp: ứng dụng quản lý thư viện viết bằng Python Flask và MySQL. Biết Git cơ bản.",
+          "labels": { "r1": 3, "r2": 2 }
+        },
+        {
+          "id": "be-04",
+          "source": "synthetic",
+          "text": "Software engineer, 18 months. Built HTTP services on a Starlette-based framework in Py3, designed relational schemas on Postgres, set up CI with GitHub Actions and containerised services with docker-compose.",
+          "labels": { "r1": 4, "r2": 4 }
+        },
+        {
+          "id": "be-05",
+          "source": "synthetic",
+          "text": "Kỹ năng: Python Python FastAPI Django PostgreSQL Git Docker Redis pytest REST API. Kinh nghiệm: nhân viên bán hàng 3 năm tại cửa hàng điện máy.",
+          "labels": { "r1": 1, "r2": 2 }
+        },
+        {
+          "id": "be-06",
+          "source": "synthetic",
+          "text": "Frontend developer 2 năm: React, TypeScript, Tailwind CSS. Thiết kế giao diện responsive, phối hợp với designer qua Figma.",
+          "labels": { "r1": 2, "r2": 1 }
+        }
+      ],
+      "top5": {
+        "r1": ["be-01", "be-02", "be-04", "be-03", "be-06"],
+        "r2": ["be-01", "be-04", "be-02", "be-03", "be-05"]
+      }
+    },
+    {
+      "id": "digital-marketing",
+      "split": "test",
+      "title": "Digital Marketing Executive",
+      "jd_text": "Digital Marketing Executive. Yêu cầu bắt buộc: chạy quảng cáo Facebook Ads và Google Ads, đo lường bằng Google Analytics, viết content. Ưu tiên: SEO, email marketing, kinh nghiệm ngành bán lẻ.",
+      "cvs": [
+        {
+          "id": "mk-01",
+          "source": "synthetic",
+          "text": "2 năm Digital Marketing tại chuỗi bán lẻ thời trang: quản lý ngân sách Facebook Ads và Google Ads, theo dõi chuyển đổi trên Google Analytics 4, viết content cho fanpage và chiến dịch email marketing.",
+          "labels": { "r1": 5, "r2": 5 }
+        },
+        {
+          "id": "mk-02",
+          "source": "synthetic",
+          "text": "Content writer 2 năm, viết bài chuẩn SEO cho blog du lịch, quản trị fanpage. Có chạy thử Facebook Ads cho dự án cá nhân.",
+          "labels": { "r1": 3, "r2": 4 }
+        },
+        {
+          "id": "mk-03",
+          "source": "synthetic",
+          "text": "Performance marketer: managed paid social and search campaigns on Meta and Google, built GA4 dashboards, A/B tested landing pages for an e-commerce retailer.",
+          "labels": { "r1": 4, "r2": 4 }
+        },
+        {
+          "id": "mk-04",
+          "source": "synthetic",
+          "text": "Nhân viên tổ chức sự kiện 3 năm, phụ trách truyền thông offline, in ấn POSM, làm việc với nhà cung cấp.",
+          "labels": { "r1": 2, "r2": 2 }
+        },
+        {
+          "id": "mk-05",
+          "source": "synthetic",
+          "text": "Facebook Ads Google Ads Google Analytics SEO content email marketing bán lẻ. Kinh nghiệm: kế toán kho 2 năm.",
+          "labels": { "r1": 1, "r2": 1 }
+        },
+        {
+          "id": "mk-06",
+          "source": "synthetic",
+          "text": "Kế toán tổng hợp 3 năm, lập báo cáo tài chính, thành thạo Excel và phần mềm MISA.",
+          "labels": { "r1": 2, "r2": 1 }
+        }
+      ],
+      "top5": {
+        "r1": ["mk-01", "mk-03", "mk-02", "mk-04", "mk-06"],
+        "r2": ["mk-01", "mk-02", "mk-03", "mk-04", "mk-06"]
+      }
+    }
+  ]
+}

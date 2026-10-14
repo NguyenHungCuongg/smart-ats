@@ -1,10 +1,10 @@
-# Celery workers use synchronous DB sessions and receive the Tenant explicitly
+# Celery worker dùng DB session đồng bộ và nhận Tenant một cách tường minh
 
-The API uses SQLAlchemy's async engine. Celery workers use its sync engine, and both run on the same `psycopg` 3 driver. We kept Celery for its maturity and Flower monitoring, and rejected Taskiq (smaller ecosystem) and `asyncio.run()` inside tasks (event-loop and pool bugs).
+API dùng async engine của SQLAlchemy. Celery worker dùng sync engine, và cả hai chạy trên cùng driver `psycopg` 3. Chúng tôi giữ Celery vì độ trưởng thành và có Flower để giám sát; loại Taskiq (hệ sinh thái nhỏ hơn) và `asyncio.run()` bên trong task (lỗi event loop và pool).
 
-Workers never pass through the API middleware, so every task takes `tenant_id` as its first argument and opens its session through one `tenant_session(tenant_id)` helper that sets the RLS context. A CI check fails any task that does not use it.
+Worker không bao giờ đi qua middleware của API, nên mọi task nhận `tenant_id` làm tham số đầu tiên và mở session qua một helper duy nhất `tenant_session(tenant_id)` để đặt RLS context. Một bước kiểm tra trong CI làm fail mọi task không dùng helper này; task không thuộc tenant phải được khai báo tường minh trong `NON_TENANT_TASKS` (`app/worker.py`).
 
-## Consequences
+## Hệ quả
 
-- Tasks are per item (one CV, one Score Result), acknowledged late, and idempotent through unique keys such as `(scoring_run_id, application_id)`. A redelivered task upserts rather than duplicating.
-- Canvas chords are avoided. Batch progress comes from counting item rows, not from a Redis chord.
+- Task được chia theo từng item (một CV, một Score Result), acknowledge muộn (acks late), và idempotent nhờ khóa duy nhất như `(scoring_run_id, application_id)`. Task bị giao lại sẽ upsert thay vì tạo bản trùng.
+- Không dùng chord của Canvas. Tiến độ batch được tính bằng cách đếm các dòng item, không dựa vào chord trong Redis.

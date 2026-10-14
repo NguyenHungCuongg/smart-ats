@@ -1,8 +1,8 @@
-# Embeddings live in PostgreSQL via pgvector, not a separate vector database
+# Embedding lưu trong PostgreSQL bằng pgvector, không dùng vector database riêng
 
-CV Document and Job embeddings are stored in `vector(1536)` columns with HNSW indexes. Rediscovery therefore runs under the same RLS policies as every other query, and no second store has to be kept consistent or isolated per Tenant. We rejected Pinecone because it duplicates tenant isolation outside the database and adds a paid external dependency.
+Embedding của CV Document và Job được lưu trong cột `vector(1536)` với index HNSW. Nhờ vậy Rediscovery chạy dưới cùng các policy RLS như mọi truy vấn khác, và không có kho thứ hai nào phải giữ nhất quán hay cô lập theo Tenant. Chúng tôi loại Pinecone vì nó lặp lại việc cô lập tenant bên ngoài database và thêm một phụ thuộc trả phí bên ngoài.
 
-## Consequences
+## Hệ quả
 
-- `text-embedding-3-large` is called with `dimensions=1536`. pgvector's HNSW index supports at most 2,000 dimensions for `vector`, and the model's native 3,072 dimensions exceed that.
-- Changing the embedding model means re-embedding the whole Talent Pool. The model name and dimension are stored alongside each vector.
+- `text-embedding-3-large` được gọi với `dimensions=1536`. Index HNSW của pgvector hỗ trợ tối đa 2.000 chiều cho kiểu `vector`, trong khi số chiều gốc của model là 3.072.
+- Đổi model embedding nghĩa là phải embed lại toàn bộ Talent Pool. Tên model và số chiều được lưu cùng mỗi vector.
