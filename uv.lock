@@ -1141,6 +1141,12 @@ dev = [
 name = "smart-ats-eval"
 version = "0.0.0"
 source = { editable = "packages/eval" }
+dependencies = [
+    { name = "smart-ats-scoring" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "smart-ats-scoring", editable = "packages/scoring" }]
 
 [[package]]
 name = "smart-ats-scoring"

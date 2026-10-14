@@ -3,7 +3,10 @@ name = "smart-ats-eval"
 version = "0.0.0"
 description = "Smart ATS evaluation harness (docs/EVAL/experiment_plan.md)"
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = ["smart-ats-scoring"]
+
+[tool.uv.sources]
+smart-ats-scoring = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]

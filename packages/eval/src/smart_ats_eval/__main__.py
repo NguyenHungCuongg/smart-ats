@@ -1,14 +1,27 @@
 """Print the Experiment 1 comparison table: python -m smart_ats_eval DATASET [--split] [--runs]."""
 
 import argparse
+import os
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from smart_ats_eval import dataset, harness
 from smart_ats_eval.baseline import Bm25Baseline
+from smart_ats_eval.scoring_v0 import ScoringV0
+from smart_ats_scoring.llm import OpenAiLlm
 
-# Every Config compared on each run. A new one (e.g. scoring v0) only needs adding here.
-CONFIGS: list[harness.Config] = [Bm25Baseline()]
+
+def configs() -> list[harness.Config]:
+    """Every Config compared on each run. A new one only needs adding here."""
+    found: list[harness.Config] = [Bm25Baseline()]
+    if os.environ.get("OPENAI_API_KEY"):
+        model = os.environ["LLM_REASONING_MODEL"]
+        extraction = OpenAiLlm(os.environ["LLM_EXTRACTION_MODEL"])
+        found.append(ScoringV0(extraction, OpenAiLlm(model), model))
+    else:
+        print("Scoring v0 skipped: it needs OPENAI_API_KEY.", file=sys.stderr)
+    return found
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -21,7 +34,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.runs < 1:
         parser.error("--runs must be at least 1")
-    print(harness.compare(dataset.load(args.dataset), CONFIGS, args.split, args.runs))
+    print(harness.compare(dataset.load(args.dataset), configs(), args.split, args.runs))
 
 
 if __name__ == "__main__":

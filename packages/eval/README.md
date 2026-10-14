@@ -8,6 +8,8 @@ uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json --split t
 uv run pytest packages/eval
 ```
 
+The table always has the Baseline row. The Scoring v0 row (the core of `packages/scoring`: Must-have Coverage, anchored rubric, grounding) calls the OpenAI API, so it runs only with `OPENAI_API_KEY`, `LLM_EXTRACTION_MODEL` and `LLM_REASONING_MODEL` set, for example `uv run --env-file .env python -m smart_ats_eval ...`; without a key it is skipped with a note on stderr. Each JD and CV Document is parsed once per invocation, so `--runs` repeats only the scoring. It reports no cost yet.
+
 The default split is `dev`. Use `test` only for the frozen run the plan describes. Stability needs `--runs 2` or more; the plan (§4) sets the run count for the report.
 
 ## Datasets
@@ -78,4 +80,4 @@ The header also shows the weighted Cohen's Kappa (quadratic) between the two rat
 
 ## Adding a Config
 
-Implement `harness.Config` and add an instance to `CONFIGS` in `src/smart_ats_eval/__main__.py`. `score(job)` returns exactly one `harness.ScoreResult` per CV Document, carrying `total`, any `evidence` quotes and `cost_usd` when it is known. Set `model`, `prompt_version` and `rubric_version` so the table records them. Neither the metrics nor the table need changes. `baseline.py` (Okapi BM25 of the JD against the Job's CVs) is the smallest example.
+Implement `harness.Config` and add an instance in `configs()` in `src/smart_ats_eval/__main__.py`. `score(job)` returns exactly one `harness.ScoreResult` per CV Document, carrying `total`, any `evidence` quotes and `cost_usd` when it is known. Set `model`, `prompt_version` and `rubric_version` so the table records them. Neither the metrics nor the table need changes. `baseline.py` (Okapi BM25 of the JD against the Job's CVs) is the smallest example.

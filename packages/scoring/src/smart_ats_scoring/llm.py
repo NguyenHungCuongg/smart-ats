@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from openai import OpenAI
+from openai import OpenAI, omit
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,12 @@ class LlmResult:
 
 class Llm(Protocol):
     def structured(
-        self, system: str, user: str, name: str, schema: dict[str, Any]
+        self,
+        system: str,
+        user: str,
+        name: str,
+        schema: dict[str, Any],
+        temperature: float | None = None,
     ) -> LlmResult: ...
 
 
@@ -36,7 +41,14 @@ class OpenAiLlm:
         self.model = model
         self.client = OpenAI()
 
-    def structured(self, system: str, user: str, name: str, schema: dict[str, Any]) -> LlmResult:
+    def structured(
+        self,
+        system: str,
+        user: str,
+        name: str,
+        schema: dict[str, Any],
+        temperature: float | None = None,
+    ) -> LlmResult:
         response = self.client.responses.create(
             model=self.model,
             instructions=system,
@@ -46,6 +58,7 @@ class OpenAiLlm:
             },
             # CV and JD text is personal data: keep it out of OpenAI's stored responses.
             store=False,
+            temperature=omit if temperature is None else temperature,
         )
         # A refusal completes with no output text.
         if response.status != "completed" or response.usage is None or not response.output_text:
