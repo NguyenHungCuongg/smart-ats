@@ -1,12 +1,13 @@
 """Scoring v0: the scoring library's core (Must-have Coverage, anchored rubric, grounding)."""
 
+from collections.abc import Callable
 from typing import Any
 
 from smart_ats_eval.dataset import Job
 from smart_ats_eval.harness import ScoreResult
 from smart_ats_scoring import scoring
 from smart_ats_scoring.llm import Llm
-from smart_ats_scoring.parsing import parse_cv, parse_job
+from smart_ats_scoring.parsing import Parsed, parse_cv, parse_job
 
 
 class ScoringV0:
@@ -24,24 +25,18 @@ class ScoringV0:
         self.parsed: dict[str, dict[str, Any]] = {}
 
     def score(self, job: Job) -> list[ScoreResult]:
-        criteria = self._parse(job.jd_text, is_job=True)
+        criteria = self._parse(parse_job, job.jd_text)
         results = []
         for cv in job.cvs:
             result = scoring.score(
-                criteria, self._parse(cv.text, is_job=False), cv.text, job.jd_text, self.reasoning
+                criteria, self._parse(parse_cv, cv.text), cv.text, job.jd_text, self.reasoning
             )
-            claims = [
-                *result.rubric.values(),
-                *(claim for claims in result.fit_gap_report.values() for claim in claims),
-            ]
-            # Every quote the LLM made, dropped ones included: the harness measures Grounding.
-            evidence = tuple(q for claim in claims for q in (*claim["evidence"], *claim["dropped"]))
+            # The harness measures Grounding itself, so it gets the dropped quotes too.
             # ponytail: no price table yet, so Cost/App stays "-".
-            results.append(ScoreResult(cv.id, result.total, evidence))
+            results.append(ScoreResult(cv.id, result.total, tuple(result.quotes)))
         return results
 
-    def _parse(self, text: str, *, is_job: bool) -> dict[str, Any]:
+    def _parse(self, parse: Callable[[str, Llm], Parsed], text: str) -> dict[str, Any]:
         if text not in self.parsed:
-            parse = parse_job if is_job else parse_cv
             self.parsed[text] = parse(text, self.extraction).data
         return self.parsed[text]

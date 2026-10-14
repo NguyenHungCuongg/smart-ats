@@ -127,21 +127,23 @@ def test_evidence_missing_from_the_documents_is_dropped_and_its_claim_flagged() 
     answer["strengths"] = [
         _claim("API backend thực tế", "REST API bằng FastAPI"),
         _claim("Chuyên gia Kubernetes", "chứng chỉ CKA"),
+        _claim("Đúng yêu cầu", "Yêu cầu bắt buộc"),  # quotes the JD, not the CV
     ]
 
     result = _score(_criteria("Python"), _profile("Python"), answer)
 
-    # Matching ignores case, diacritics and spacing; a quote from the JD also counts.
+    # Matching ignores case, diacritics and spacing.
     assert result.rubric["technical"]["evidence"] == ["xây dựng  REST api bằng fastapi"]
     assert result.rubric["technical"]["dropped"] == ["10 năm Kubernetes"]
     assert result.rubric["technical"]["grounded"] is True
-    strong, invented = result.fit_gap_report["strengths"]
-    assert (strong["grounded"], invented["grounded"]) == (True, False)
+    strong, invented, from_jd = result.fit_gap_report["strengths"]
+    assert (strong["grounded"], invented["grounded"], from_jd["grounded"]) == (True, False, False)
     assert invented["evidence"] == [] and invented["dropped"] == ["chứng chỉ CKA"]
-    assert result.fit_gap_report["gaps"][0]["grounded"] is True  # "Kubernetes" is in the JD
+    # Only a Gap may rest on the JD: "Kubernetes" is required there and absent from the CV.
+    assert result.fit_gap_report["gaps"][0]["grounded"] is True
     assert set(result.fit_gap_report) == {"strengths", "gaps", "recommendations"}
-    # 8 quotes: 2 technical, 1 per other axis, 2 strengths, 1 gap, 1 recommendation; 2 dropped.
-    assert result.grounding_rate == pytest.approx(6 / 8)
+    # 9 quotes: 2 technical, 1 per other axis, 3 strengths, 1 gap, 1 recommendation; 3 dropped.
+    assert result.grounding_rate == pytest.approx(6 / 9)
 
 
 def test_a_claim_without_evidence_is_flagged() -> None:
