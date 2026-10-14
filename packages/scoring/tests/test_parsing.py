@@ -22,7 +22,14 @@ class FakeLlm:
         self.data = data
         self.calls: list[dict[str, Any]] = []
 
-    def structured(self, system: str, user: str, name: str, schema: dict[str, Any]) -> LlmResult:
+    def structured(
+        self,
+        system: str,
+        user: str,
+        name: str,
+        schema: dict[str, Any],
+        temperature: float | None = None,
+    ) -> LlmResult:
         self.calls.append({"system": system, "user": user, "name": name, "schema": schema})
         return LlmResult(self.data, USAGE)
 

@@ -96,4 +96,4 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; rea
 
 API tests need Docker: they start their own PostgreSQL and Redis with [testcontainers](https://testcontainers.com/), PostgreSQL bootstrapped from `infra/postgres/init` and the migrations.
 
-Scoring tests fake the LLM. `packages/scoring/tests/test_openai.py` calls the real OpenAI API and is skipped unless `OPENAI_API_KEY` is set: run it with `uv run --env-file .env pytest packages/scoring`.
+Scoring tests fake the LLM. `packages/scoring/tests/test_openai.py` calls the real OpenAI API and is skipped unless `OPENAI_API_KEY` is set: run it with `uv run --env-file .env pytest packages/scoring`. For free testing, set `GEMINI_API_KEY` and Gemini model names instead; it wins over `OPENAI_API_KEY`.

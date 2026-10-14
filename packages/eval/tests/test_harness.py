@@ -60,8 +60,11 @@ def test_compare_rejects_a_config_that_skips_a_cv_document() -> None:
 
 
 def test_cli_prints_the_baseline_row_and_flags_scratch_data(
-    capsys: pytest.CaptureFixture[str],
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)  # no paid Scoring v0 run
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
     main([str(SCRATCH), "--split", "test"])
 
     out = capsys.readouterr().out
