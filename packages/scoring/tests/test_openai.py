@@ -1,21 +1,21 @@
-"""Optional: the real OpenAI API. Runs only with a key, for example
+"""Optional: the real OpenAI (or Gemini) API. Runs only with a key, for example
 `uv run --env-file .env pytest packages/scoring/tests/test_openai.py`."""
 
 import os
 
 import pytest
 
-from smart_ats_scoring.llm import OpenAiLlm
+from smart_ats_scoring.llm import Llm, has_llm_key, llm_from_env
 from smart_ats_scoring.parsing import CV_SCHEMA, JOB_SCHEMA, parse_cv, parse_job
 
 pytestmark = pytest.mark.skipif(
-    not (os.environ.get("OPENAI_API_KEY") and os.environ.get("LLM_EXTRACTION_MODEL")),
-    reason="needs OPENAI_API_KEY and LLM_EXTRACTION_MODEL",
+    not (has_llm_key() and os.environ.get("LLM_EXTRACTION_MODEL")),
+    reason="needs OPENAI_API_KEY or GEMINI_API_KEY, and LLM_EXTRACTION_MODEL",
 )
 
 
-def _llm() -> OpenAiLlm:
-    return OpenAiLlm(os.environ["LLM_EXTRACTION_MODEL"])
+def _llm() -> Llm:
+    return llm_from_env(os.environ["LLM_EXTRACTION_MODEL"])
 
 
 def test_parse_job_with_openai() -> None:

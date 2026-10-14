@@ -9,18 +9,18 @@ from pathlib import Path
 from smart_ats_eval import dataset, harness
 from smart_ats_eval.baseline import Bm25Baseline
 from smart_ats_eval.scoring_v0 import ScoringV0
-from smart_ats_scoring.llm import OpenAiLlm
+from smart_ats_scoring.llm import has_llm_key, llm_from_env
 
 
 def configs() -> list[harness.Config]:
     """Every Config compared on each run. A new one only needs adding here."""
     found: list[harness.Config] = [Bm25Baseline()]
-    if os.environ.get("OPENAI_API_KEY"):
+    if has_llm_key():
         model = os.environ["LLM_REASONING_MODEL"]
-        extraction = OpenAiLlm(os.environ["LLM_EXTRACTION_MODEL"])
-        found.append(ScoringV0(extraction, OpenAiLlm(model), model))
+        extraction = llm_from_env(os.environ["LLM_EXTRACTION_MODEL"])
+        found.append(ScoringV0(extraction, llm_from_env(model), model))
     else:
-        print("Scoring v0 skipped: it needs OPENAI_API_KEY.", file=sys.stderr)
+        print("Scoring v0 skipped: it needs OPENAI_API_KEY or GEMINI_API_KEY.", file=sys.stderr)
     return found
 
 

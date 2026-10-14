@@ -78,8 +78,9 @@ def test_scoring_v0_row_reports_versions_and_raw_grounding() -> None:
     assert llm.calls == {"job_criteria": 1, "cv_profile": 6, "score_result": 12}
 
 
-def test_scoring_v0_is_compared_only_with_an_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scoring_v0_is_compared_only_with_an_llm_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert [config.name for config in configs()] == ["Baseline (BM25)"]
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
