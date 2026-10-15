@@ -218,16 +218,18 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 
 ### `upload_batch_items`
 
-| Cột                       | Kiểu                        | Ghi chú                             |
-| ------------------------- | --------------------------- | ----------------------------------- |
-| id                        | uuid PK                     |                                     |
-| tenant_id                 | uuid NN                     |                                     |
-| batch_id                  | uuid FK → upload_batches NN |                                     |
-| file_name                 | text NN                     |                                     |
-| status                    | text NN                     | `PENDING`, `SUCCEEDED`, `FAILED`    |
-| cv_document_id            | uuid FK → cv_documents      | có giá trị khi thành công           |
-| error_code, error_message | text                        | ví dụ `ENCRYPTED_PDF`, `UNREADABLE` |
-| attempts                  | int NN default 0            |                                     |
+| Cột                       | Kiểu                        | Ghi chú                                                                                                           |
+| ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| id                        | uuid PK                     |                                                                                                                   |
+| tenant_id                 | uuid NN                     |                                                                                                                   |
+| batch_id                  | uuid FK → upload_batches NN |                                                                                                                   |
+| file_name                 | text NN                     |                                                                                                                   |
+| storage_key               | text NN                     | object storage key của file đã upload; task parse đọc file từ đây                                                 |
+| status                    | text NN                     | `PENDING`, `SUCCEEDED`, `FAILED`                                                                                  |
+| cv_document_id            | uuid FK → cv_documents      | có giá trị khi thành công                                                                                         |
+| dedupe                    | text                        | kết quả chống trùng (FR-A1.2): `EXISTING_CANDIDATE`, `CV_REPLACED`, `ALREADY_APPLIED`; `NULL` khi mọi thứ đều mới |
+| error_code, error_message | text                        | ví dụ `ENCRYPTED_PDF`, `UNREADABLE`                                                                               |
+| attempts                  | int NN default 0            |                                                                                                                   |
 
 ---
 
