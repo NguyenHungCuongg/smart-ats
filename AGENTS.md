@@ -19,7 +19,7 @@ Run everything from the repo root; `README.md` owns the full command list (setup
 
 CI (`.github/workflows/ci.yml`) runs all of the above on PRs to `develop` and `main`. Hostnames in `.env` are Compose service names; use `localhost` when running a process on the host. Line endings are LF everywhere.
 
-`apps/web` runs Next.js 16, whose APIs differ from training data: read `apps/web/AGENTS.md` and the guide in `node_modules/next/dist/docs/` before writing web code.
+`apps/web` runs Next.js 16, whose APIs differ from training data: read `apps/web/AGENTS.md`, `DESIGN.md`, and the guide in `node_modules/next/dist/docs/` before writing web code.
 
 ## Architecture
 
@@ -29,6 +29,7 @@ Built so far: `/api/health`, per-user SSE progress events with one-time tickets 
 - **Tenant isolation is enforced in the database** (ADR-0001, SAD §4). Every tenant table has `tenant_id NOT NULL`, forced RLS and composite `(tenant_id, id)` foreign keys. The runtime role `ats_app` cannot bypass RLS; `ats_owner` only runs migrations. All DB access goes through `tenant_session(tenant_id)`; an authenticated route takes `auth: Authenticated` (`app/auth.py`), which opens it from the JWT's `tid`; every Celery task takes `tenant_id` as its first argument and uses `@tenant_task` (ADR-0002). A cross-tenant id returns 404, never 403.
 - **How that looks in code.** `app/db.py` has `tenant_session` (sync, workers) and `async_tenant_session` (API); each opens one transaction and sets `app.current_tenant_id` with `set_config(..., true)`, so the context dies at commit. Migrations in `apps/api/migrations` are raw SQL run as `ats_owner` by the one-shot `migrate` Compose service; a new tenant table copies the RLS block from `0001_tenants_and_users.py`. `tests/test_tenancy.py` checks the catalog, so any table with a `tenant_id` column that lacks forced RLS and the one standard policy fails CI. DB tests must run as `ats_app`: a test run as the table owner proves nothing.
 - **Next.js is UI only** (ADR-0003): the browser calls FastAPI directly; no Server Actions or route handlers as a backend.
+- **UI Design System:** All UI components, styles, and layouts in `apps/web` must strictly adhere to `DESIGN.md` (color tokens, Archivo/Rubik/JetBrains Mono typography, component behaviors, and Dark Mode contrast invariance). Ad-hoc colors, generic fonts, and banned anti-patterns in `DESIGN.md` are strictly forbidden. Before generating or editing frontend code, agents MUST read `DESIGN.md`.
 - **Scoring is hybrid** (ADR-0006): deterministic must-have coverage plus an anchored 1–5 LLM rubric with required Evidence; CV/JD text in prompts sits in an untrusted block.
 
 Before merging, check the security review checklist in `CONTRIBUTING.md`. Branch from `develop` as `feature/issue-<n>-<slug>`, write Conventional Commits in English, and open PRs into `develop` with `Closes #<n>`.
