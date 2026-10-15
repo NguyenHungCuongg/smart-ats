@@ -114,10 +114,13 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 | work_mode                                               | text                     | `REMOTE`, `HYBRID`, `ONSITE`                                                                                       |
 | status                                                  | text NN                  | `DRAFT`, `PUBLISHED`, `PAUSED`, `CLOSED`, `ARCHIVED`                                                               |
 | jd_document_key                                         | text                     | object storage key của JD Document                                                                                 |
+| parse_status                                            | text NN                  | `PENDING`, `SUCCEEDED`, `FAILED`: task parse JD Document (FR-A1.1)                                                 |
+| parse_error                                             | text                     | mã lỗi khi `FAILED`: mã của Document Extraction, `UNPRICED_MODEL` (model chưa có giá, FR-C1.4) hoặc `PARSE_FAILED` |
 | criteria                                                | jsonb                    | criteria đã parse và được Recruiter xác nhận (kỹ năng kèm cờ `must_have`, số năm, học vấn, trách nhiệm, dải lương) |
-| criteria_confirmed_at                                   | timestamptz              | chỉ được chấm điểm khi đã có giá trị                                                                               |
+| criteria_verification                                   | jsonb                    | `VERIFIED` hoặc `NEEDS_REVIEW` cho từng trường đã parse (FR-A1.1)                                                  |
+| criteria_confirmed_at                                   | timestamptz              | chỉ được chấm điểm khi đã có giá trị; `CHECK (criteria_confirmed_at IS NULL OR criteria IS NOT NULL)`              |
 | criteria_embedding                                      | vector(1536)             | dùng cho Rediscovery                                                                                               |
-| weight_technical, weight_soft_skills, weight_experience | numeric(3,2) NN          | `CHECK (sum = 1.00)`                                                                                               |
+| weight_technical, weight_soft_skills, weight_experience | numeric(3,2) NN          | `CHECK (sum = 1.00)`, mỗi trọng số `>= 0`                                                                          |
 | public_apply_enabled                                    | boolean NN default false |                                                                                                                    |
 | public_slug                                             | text UQ                  | Public Apply Link                                                                                                  |
 | apply_deadline                                          | date                     |                                                                                                                    |
