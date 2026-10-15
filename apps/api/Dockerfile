@@ -12,6 +12,8 @@ WORKDIR /repo
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/
 COPY packages/eval/pyproject.toml packages/eval/
+# The API and workers import the scoring library, installed editable: it needs its source.
+COPY packages/scoring/ packages/scoring/
 RUN uv sync --frozen --no-dev --package smart-ats-api
 
 WORKDIR /repo/apps/api

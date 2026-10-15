@@ -25,7 +25,18 @@ x-python-app: &python-app
         target: /repo/apps/api
       - action: rebuild
         path: ./uv.lock
+      # Installed into the image, outside the synced source tree.
+      - action: rebuild
+        path: ./packages/scoring
   restart: unless-stopped
+
+# Object storage for the API (readiness, SAD §8; JD uploads) and worker-llm (parsing).
+x-s3-env: &s3-env
+  S3_ENDPOINT: ${S3_ENDPOINT}
+  S3_REGION: ${S3_REGION:?set in .env}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in .env}
+  S3_BUCKET: ${S3_BUCKET:?set in .env}
 
 services:
   # One-shot: applies Alembic migrations, then exits; the app services start after it.
@@ -45,14 +56,8 @@ services:
   api:
     <<: *python-app
     environment:
-      <<: *python-env
+      <<: [*python-env, *s3-env]
       JWT_SECRET: ${JWT_SECRET:?set in .env}
-      # Readiness probes object storage (SAD §8).
-      S3_ENDPOINT: ${S3_ENDPOINT}
-      S3_REGION: ${S3_REGION:?set in .env}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set in .env}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set in .env}
-      S3_BUCKET: ${S3_BUCKET:?set in .env}
       # Uvicorn takes the client IP from Caddy's X-Forwarded-For only for listed proxies; Caddy's
       # address varies, so trust any. Per-IP login lockout (FR-C1.1) needs the browser's IP, and
       # port 8000 is published on loopback only, so only local processes could spoof the header.
@@ -72,6 +77,12 @@ services:
   # tune per queue once real tasks exist.
   worker-llm:
     <<: *python-app
+    environment:
+      <<: [*python-env, *s3-env]
+      # Parsing JD Documents (SAD §2); Gemini wins when its key is set (.env.example).
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_EXTRACTION_MODEL: ${LLM_EXTRACTION_MODEL:?set in .env}
     command:
       ["watchfiles", "--filter", "python", "celery -A app.worker worker -Q llm -n llm@%h -E -c 2"]
 

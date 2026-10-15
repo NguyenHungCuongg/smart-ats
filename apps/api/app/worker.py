@@ -9,7 +9,8 @@ from kombu import Queue
 
 from app.db import tenant_session
 
-celery_app = Celery("smart_ats", broker=os.environ["REDIS_URL"])
+# include: the modules that define tasks; the worker imports them at startup.
+celery_app = Celery("smart_ats", broker=os.environ["REDIS_URL"], include=["app.jobs"])
 celery_app.conf.update(
     task_queues=[Queue(name) for name in ("llm", "default", "agent", "email")],
     task_default_queue="default",

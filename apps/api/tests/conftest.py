@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -16,6 +17,10 @@ REPO_DIR = API_DIR.parents[1]
 # psycopg's async mode cannot run on the Proactor loop that Windows uses by default.
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+# app.main imports app.worker, whose Celery app reads the broker URL at import. Tests never send
+# to the broker (test_jobs fakes it), so any URL does until the redis fixture sets the real one.
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 
 @pytest.fixture(scope="session")
