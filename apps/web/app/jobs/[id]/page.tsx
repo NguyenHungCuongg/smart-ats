@@ -13,6 +13,7 @@ import {
   toConfirmation,
   weightTotal,
 } from "../criteria";
+import { Uploads } from "./uploads";
 
 const PARSE_ERRORS: Record<string, string> = {
   NO_TEXT: "JD không có lớp văn bản (bản scan hoặc file rỗng).",
@@ -68,6 +69,8 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
             onSaved={setJob}
           />
         )}
+        {/* CVs go into any Job; only scoring needs confirmed criteria. */}
+        {job && <Uploads jobId={id} />}
       </div>
     </main>
   );
