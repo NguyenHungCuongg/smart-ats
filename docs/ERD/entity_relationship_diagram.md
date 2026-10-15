@@ -115,7 +115,7 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 | status                                                  | text NN                  | `DRAFT`, `PUBLISHED`, `PAUSED`, `CLOSED`, `ARCHIVED`                                                               |
 | jd_document_key                                         | text                     | object storage key của JD Document                                                                                 |
 | parse_status                                            | text NN                  | `PENDING`, `SUCCEEDED`, `FAILED`: task parse JD Document (FR-A1.1)                                                 |
-| parse_error                                             | text                     | mã lỗi khi `FAILED` (mã của Document Extraction, hoặc `PARSE_FAILED`)                                              |
+| parse_error                                             | text                     | mã lỗi khi `FAILED`: mã của Document Extraction, `UNPRICED_MODEL` (model chưa có giá, FR-C1.4) hoặc `PARSE_FAILED` |
 | criteria                                                | jsonb                    | criteria đã parse và được Recruiter xác nhận (kỹ năng kèm cờ `must_have`, số năm, học vấn, trách nhiệm, dải lương) |
 | criteria_verification                                   | jsonb                    | `VERIFIED` hoặc `NEEDS_REVIEW` cho từng trường đã parse (FR-A1.1)                                                  |
 | criteria_confirmed_at                                   | timestamptz              | chỉ được chấm điểm khi đã có giá trị; `CHECK (criteria_confirmed_at IS NULL OR criteria IS NOT NULL)`              |

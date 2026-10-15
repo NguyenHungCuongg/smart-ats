@@ -38,7 +38,7 @@ export default function NewJobPage() {
   return (
     <main className="min-h-screen bg-white text-[#1f1633]">
       <form onSubmit={onSubmit} className="mx-auto flex max-w-2xl flex-col gap-4 p-6">
-        <h1 className="text-3xl font-medium">Tạo Job từ JD</h1>
+        <h1 className="text-3xl font-semibold">Tạo Job từ JD</h1>
         <label className="flex flex-col gap-1">
           <span className="font-medium">File JD (PDF, DOCX, TXT, tối đa 10 MB)</span>
           <input
@@ -60,7 +60,7 @@ export default function NewJobPage() {
         <button
           type="submit"
           disabled={pending}
-          className="self-start rounded-lg bg-[#150f23] px-4 py-3 text-sm font-bold tracking-[0.2px] text-white uppercase disabled:bg-[#e5e7eb] disabled:text-white/70"
+          className="self-start rounded-lg bg-[#150f23] px-4 py-3 text-sm font-bold tracking-[0.2px] text-white uppercase disabled:bg-[#e5e7eb] disabled:text-[rgba(255,255,255,0.72)]"
         >
           Tạo Job
         </button>

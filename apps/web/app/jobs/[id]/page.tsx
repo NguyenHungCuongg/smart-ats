@@ -19,12 +19,13 @@ const PARSE_ERRORS: Record<string, string> = {
   ENCRYPTED_PDF: "PDF của JD được đặt mật khẩu.",
   UNREADABLE: "File JD bị hỏng, không đọc được.",
   UNSUPPORTED_FORMAT: "Định dạng file JD không được hỗ trợ.",
+  UNPRICED_MODEL: "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
 };
 
 const INPUT =
   "rounded-md border border-[#cfcfdb] bg-white px-3 py-2 text-[#1f1633] focus:ring-2 focus:ring-[rgba(59,130,246,0.5)] focus:outline-none";
-const SECONDARY_BUTTON =
-  "rounded-lg border border-[#cfcfdb] px-3 py-2 text-sm font-medium tracking-[0.2px] uppercase";
+// Secondary actions read as link-on-light: one filled button per page (DESIGN.md).
+const LINK_BUTTON = "font-medium text-[#1f1633] underline";
 
 /** Follows the parse of a Job's JD, then lets the Recruiter edit and confirm the criteria. */
 export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
@@ -56,7 +57,7 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
           <p>Đang tải…</p>
         ) : job.parse_status === "PENDING" ? (
           <>
-            <h1 className="text-3xl font-medium">{job.title}</h1>
+            <h1 className="text-3xl font-semibold">{job.title}</h1>
             <p role="status">Đang phân tích JD…</p>
           </>
         ) : (
@@ -99,7 +100,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <h1 className="text-3xl font-medium">Xác nhận criteria</h1>
+      <h1 className="text-3xl font-semibold">Xác nhận criteria</h1>
       {job.parse_status === "FAILED" && (
         <p role="alert">
           {PARSE_ERRORS[job.parse_error ?? ""] ?? "Không phân tích được JD."} Hãy nhập criteria thủ
@@ -191,7 +192,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
             <button
               type="button"
               onClick={() => set({ skills: form.skills.toSpliced(i, 1) })}
-              className={SECONDARY_BUTTON}
+              className={LINK_BUTTON}
             >
               Xóa
             </button>
@@ -200,7 +201,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
         <button
           type="button"
           onClick={() => set({ skills: [...form.skills, { name: "", must_have: false }] })}
-          className={`${SECONDARY_BUTTON} self-start`}
+          className={`${LINK_BUTTON} self-start`}
         >
           Thêm kỹ năng
         </button>
@@ -277,7 +278,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
       <button
         type="submit"
         disabled={pending || total !== 100}
-        className="self-start rounded-lg bg-[#150f23] px-4 py-3 text-sm font-bold tracking-[0.2px] text-white uppercase disabled:bg-[#e5e7eb] disabled:text-white/70"
+        className="self-start rounded-lg bg-[#150f23] px-4 py-3 text-sm font-bold tracking-[0.2px] text-white uppercase disabled:bg-[#e5e7eb] disabled:text-[rgba(255,255,255,0.72)]"
       >
         Xác nhận criteria
       </button>
@@ -287,7 +288,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
 
 function ReviewBadge() {
   return (
-    <span className="rounded bg-[#fa7faa] px-2 text-[10px] font-semibold tracking-[0.25px] text-[#1f1633] uppercase">
+    <span className="rounded bg-[#150f23] px-2 text-[10px] font-semibold tracking-[0.25px] text-white uppercase">
       Cần kiểm tra
     </span>
   );

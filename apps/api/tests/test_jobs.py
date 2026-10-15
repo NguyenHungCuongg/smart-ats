@@ -4,8 +4,10 @@ Object storage, the LLM and the broker are faked; the API, the parse task and Po
 are real.
 """
 
+import io
 import json
 import uuid
+import zipfile
 from collections.abc import AsyncIterator
 from decimal import Decimal
 from typing import Any
@@ -152,6 +154,19 @@ async def test_document_type_is_told_by_magic_bytes_not_the_name(
     assert objects == {}
 
 
+async def test_a_zip_that_is_not_a_docx_is_rejected(
+    client: AsyncClient, recruiter: User, objects: dict[str, bytes]
+) -> None:
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("xl/workbook.xml", "<workbook/>")
+
+    response = await upload(client, recruiter, "jd.docx", archive.getvalue())
+
+    assert response.status_code == 415
+    assert objects == {}
+
+
 async def test_document_over_10_mb_is_rejected(
     client: AsyncClient, recruiter: User, objects: dict[str, bytes]
 ) -> None:
@@ -224,7 +239,8 @@ class FakeLlm:
 @pytest.fixture
 def llm(monkeypatch: pytest.MonkeyPatch) -> FakeLlm:
     fake = FakeLlm(PARSED)
-    monkeypatch.setattr(jobs, "_llm", lambda: fake)
+    monkeypatch.setenv("LLM_EXTRACTION_MODEL", "test-model")
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model: fake)
     monkeypatch.setitem(
         usage.PRICES, "test-model", usage.Price(Decimal("2"), Decimal("0.5"), Decimal("8"))
     )
@@ -344,16 +360,22 @@ async def test_unreadable_document_fails_with_its_extraction_code(
 
 
 @pytest.mark.usefixtures("redis")
-async def test_model_without_a_price_fails_the_parse(
-    client: AsyncClient, recruiter: User, llm: FakeLlm, enqueued: list[tuple[str, ...]]
+async def test_model_without_a_price_fails_the_parse_before_calling_it(
+    client: AsyncClient,
+    recruiter: User,
+    llm: FakeLlm,
+    enqueued: list[tuple[str, ...]],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    llm.model = "unpriced-model"
+    monkeypatch.setenv("LLM_EXTRACTION_MODEL", "unpriced-model")
     job_id = (await paste(client, recruiter, JD)).json()["id"]
 
     run_parse(enqueued)
 
     job = await get_job(client, recruiter, job_id)
-    assert (job["parse_status"], job["parse_error"]) == ("FAILED", "PARSE_FAILED")
+    assert (job["parse_status"], job["parse_error"]) == ("FAILED", "UNPRICED_MODEL")
+    # No tokens spent that the ledger could not record.
+    assert llm.calls == 0
 
 
 @pytest.mark.usefixtures("redis")
@@ -414,6 +436,8 @@ async def test_confirming_saves_the_recruiters_edits(
     assert job == await get_job(client, recruiter, parsed_job)
     assert job["criteria_confirmed_at"] is not None
     assert {k: job[k] for k in CONFIRMATION} == CONFIRMATION
+    # The Recruiter has reviewed every field: nothing is left to flag.
+    assert job["verification"] is None
 
 
 @pytest.mark.usefixtures("redis")

@@ -6,10 +6,12 @@ Scoring takes only Jobs whose criteria a Recruiter has confirmed (criteria_confi
 """
 
 import asyncio
+import io
 import json
 import logging
 import os
 import uuid
+import zipfile
 from datetime import datetime
 from decimal import Decimal
 from pathlib import PurePath
@@ -25,7 +27,7 @@ from app import events, storage, usage
 from app.auth import Auth, Authenticated
 from app.worker import tenant_task
 from smart_ats_scoring.extraction import ExtractionError, extract_text
-from smart_ats_scoring.llm import Llm, llm_from_env
+from smart_ats_scoring.llm import llm_from_env
 from smart_ats_scoring.parsing import parse_job
 
 log = logging.getLogger(__name__)
@@ -116,7 +118,12 @@ def _document_type(data: bytes) -> str | None:
     if data.startswith(b"%PDF"):
         return "pdf"
     if data.startswith(b"PK\x03\x04"):
-        return "docx"
+        # Any ZIP starts so (XLSX, JAR…): a DOCX is one holding a Word document.
+        try:
+            names = zipfile.ZipFile(io.BytesIO(data)).namelist()
+        except zipfile.BadZipFile:
+            return None
+        return "docx" if "word/document.xml" in names else None
     try:
         decoded = data.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -222,7 +229,9 @@ async def confirm_criteria(job_id: uuid.UUID, body: CriteriaConfirmation, auth: 
             "UPDATE jobs SET title = :title, level = :level, department = :department,"
             "  location = :location, work_mode = :work_mode, criteria = CAST(:criteria AS jsonb),"
             "  weight_technical = :technical, weight_soft_skills = :soft_skills,"
-            "  weight_experience = :experience, criteria_confirmed_at = now(), updated_at = now()"
+            "  weight_experience = :experience, criteria_confirmed_at = now(), updated_at = now(),"
+            # The Recruiter has reviewed every field, so nothing stays flagged Needs review.
+            "  criteria_verification = NULL"
             " WHERE id = :id"
         ),
         {
@@ -233,10 +242,6 @@ async def confirm_criteria(job_id: uuid.UUID, body: CriteriaConfirmation, auth: 
         },
     )
     return await _job(auth.db, job_id)
-
-
-def _llm() -> Llm:
-    return llm_from_env(os.environ["LLM_EXTRACTION_MODEL"])
 
 
 @tenant_task(name="jobs.parse", queue="llm")
@@ -253,18 +258,24 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
     )
     if key is None:
         return  # redelivered (acks_late) after it finished
+    model = os.environ["LLM_EXTRACTION_MODEL"]
     error = None
-    try:
-        parsed = parse_job(extract_text(storage.get(key)), _llm())
-        usage.record(
-            session, uuid.UUID(user_id), "JOB_PARSE", parsed.usage, "job", uuid.UUID(job_id)
-        )
-    except ExtractionError as e:
-        error = e.code
-    except Exception:
-        # The traceback may hold provider details: it goes to the log, the Job gets a code.
-        log.exception("parsing the JD Document of job %s failed", job_id)
-        error = "PARSE_FAILED"
+    if usage.price(model) is None:
+        # Checked before the call: tokens the ledger cannot price must not be spent.
+        log.error("no price for model %s in app.usage.PRICES", model)
+        error = "UNPRICED_MODEL"
+    else:
+        try:
+            parsed = parse_job(extract_text(storage.get(key)), llm_from_env(model))
+            usage.record(
+                session, uuid.UUID(user_id), "JOB_PARSE", parsed.usage, "job", uuid.UUID(job_id)
+            )
+        except ExtractionError as e:
+            error = e.code
+        except Exception:
+            # The traceback may hold provider details: it goes to the log, the Job gets a code.
+            log.exception("parsing the JD Document of job %s failed", job_id)
+            error = "PARSE_FAILED"
 
     if error is None:
         data = parsed.data

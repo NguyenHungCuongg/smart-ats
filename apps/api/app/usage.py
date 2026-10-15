@@ -19,8 +19,8 @@ class Price(NamedTuple):
 
 
 # By model name prefix, so a dated snapshot (gpt-6-luna-2026-08-01) takes its model's price.
-# Add each model set in LLM_*_MODEL from the provider's price page; an unpriced model fails
-# the call's task rather than record a wrong cost.
+# Add each model set in LLM_*_MODEL from the provider's price page; a task checks its model
+# with price() before calling it, so an unpriced model fails rather than spend unrecorded.
 PRICES: dict[str, Price] = {
     # Free tier, used for testing only (.env.example).
     "gemini-": Price(Decimal(0), Decimal(0), Decimal(0)),
@@ -29,15 +29,19 @@ PRICES: dict[str, Price] = {
 _PER_TOKENS = 1_000_000
 
 
+def price(model: str) -> Price | None:
+    prefix = max((p for p in PRICES if model.startswith(p)), key=len, default=None)
+    return None if prefix is None else PRICES[prefix]
+
+
 def cost(usage: Usage) -> Decimal:
-    prefix = max((p for p in PRICES if usage.model.startswith(p)), key=len, default=None)
-    if prefix is None:
+    rate = price(usage.model)
+    if rate is None:
         raise LookupError(f"no price for model {usage.model} in app.usage.PRICES")
-    price = PRICES[prefix]
     usd = (
-        (usage.input_tokens - usage.cached_tokens) * price.input
-        + usage.cached_tokens * price.cached_input
-        + usage.output_tokens * price.output
+        (usage.input_tokens - usage.cached_tokens) * rate.input
+        + usage.cached_tokens * rate.cached_input
+        + usage.output_tokens * rate.output
     ) / _PER_TOKENS
     return usd.quantize(Decimal("0.000001"))
 
