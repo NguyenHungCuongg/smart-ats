@@ -222,7 +222,9 @@ CHECKPOINT — dừng; lưu state; worker được giải phóng
 
 **Tách dữ liệu cá nhân:** Thông tin nhân khẩu học (giới tính, ngày sinh/tuổi, ảnh, tình trạng hôn nhân, quê quán) **không lưu** vào profile dùng để chấm điểm; hệ thống tạo **Blind Profile** riêng cho scoring (FR-C2.4).
 
-**Chống trùng lặp:** File trùng nội dung (SHA-256) trong cùng tenant → tái sử dụng CV Document cũ. Candidate trùng email (chuẩn hóa) trong cùng tenant → gắn CV mới vào Candidate cũ và báo cho Recruiter.
+**Chống trùng lặp:** File trùng nội dung (SHA-256) trong cùng tenant → tái sử dụng CV Document cũ. Candidate trùng email (chuẩn hóa) trong cùng tenant → gắn CV mới vào Candidate cũ và báo cho Recruiter. Nếu Candidate đó đã có Application ở Job này, Application chuyển sang CV mới và giữ nguyên stage. CV không có email luôn tạo Candidate mới.
+
+**Cơ sở xử lý dữ liệu:** Trước khi upload, Recruiter phải xác nhận đã có sự đồng ý của ứng viên hoặc cơ sở pháp lý hợp lệ để xử lý dữ liệu cá nhân; upload không kèm xác nhận bị từ chối. Candidate tạo từ upload được ghi nguồn consent `RECRUITER_ATTESTED`; Candidate đã có giữ nguyên nguồn consent ban đầu.
 
 **Fault Isolation:** Mỗi file là một task độc lập. File lỗi (hỏng, có mật khẩu, không đọc được) được ghi lại với mã lỗi và lý do; các file còn lại vẫn chạy. Người dùng thấy danh sách file lỗi và có thể tải lại riêng từng file.
 

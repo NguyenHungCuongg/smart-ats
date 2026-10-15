@@ -1,7 +1,7 @@
 from fastapi import APIRouter, FastAPI
 from fastapi.responses import JSONResponse
 
-from app import auth, events, jobs, readiness
+from app import auth, events, jobs, readiness, uploads
 
 router = APIRouter(prefix="/api")
 
@@ -25,3 +25,4 @@ app.include_router(router)
 app.include_router(auth.router)
 app.include_router(events.router)
 app.include_router(jobs.router)
+app.include_router(uploads.router)
