@@ -1,3 +1,5 @@
+import tracemalloc
+import zipfile
 from io import BytesIO
 
 import pytest
@@ -7,7 +9,7 @@ from docx.oxml.ns import nsdecls
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
-from smart_ats_scoring.extraction import ExtractionError, extract_text
+from smart_ats_scoring.extraction import MAX_DOCX_UNZIPPED_BYTES, ExtractionError, extract_text
 
 
 def _pdf(*lines: str, password: str | None = None, owner_password: str | None = None) -> bytes:
@@ -128,3 +130,43 @@ def test_docx_header_and_text_box() -> None:
 
     assert "an.nguyen@example.com" in text
     assert "Kỹ năng: Kubernetes" in text
+
+
+def _bomb(declared_size: int | None) -> bytes:
+    """Tens of KiB that unzip to more XML than a worker should hold, declaring `declared_size`
+    in the central directory if given: zipfile trusts that number, an attacker writes it."""
+    bomb = BytesIO()
+    with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("word/document.xml", b" " * (MAX_DOCX_UNZIPPED_BYTES + 1))
+    data = bytearray(bomb.getvalue())
+    if declared_size is not None:
+        central = data.index(b"PK")
+        data[central + 24 : central + 28] = declared_size.to_bytes(4, "little")
+    assert len(data) < 100 * 1024
+    return bytes(data)
+
+
+@pytest.mark.parametrize("declared_size", [None, 1], ids=["honest", "lying"])
+def test_docx_that_unzips_past_the_limit_is_too_large(declared_size: int | None) -> None:
+    bomb = _bomb(declared_size)
+    tracemalloc.start()
+
+    with pytest.raises(ExtractionError) as error:
+        extract_text(bomb)
+
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    assert error.value.code == "DOCX_TOO_LARGE"
+    assert peak < MAX_DOCX_UNZIPPED_BYTES / 4
+
+
+def test_docx_compressed_with_bzip2_is_unreadable() -> None:
+    # zipfile inflates bzip2 without a bound, so even a small read could hold a whole bomb.
+    archive = BytesIO()
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_BZIP2) as z:
+        z.writestr("word/document.xml", b" " * (MAX_DOCX_UNZIPPED_BYTES + 1))
+
+    with pytest.raises(ExtractionError) as error:
+        extract_text(archive.getvalue())
+
+    assert error.value.code == "UNREADABLE"

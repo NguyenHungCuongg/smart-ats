@@ -15,6 +15,7 @@ const START_ERRORS: Record<number, string> = {
 const RESULT_ERRORS: Record<string, string> = {
   NO_TEXT: "File CV hoặc JD không có lớp văn bản.",
   ENCRYPTED_PDF: "File CV hoặc JD được đặt mật khẩu.",
+  DOCX_TOO_LARGE: "File DOCX của CV hoặc JD quá lớn khi giải nén.",
   UNREADABLE: "File CV hoặc JD bị hỏng, không đọc được.",
   UNSUPPORTED_FORMAT: "Định dạng file CV hoặc JD không được hỗ trợ.",
   READ_FAILED: "Không đọc được file CV hoặc JD.",

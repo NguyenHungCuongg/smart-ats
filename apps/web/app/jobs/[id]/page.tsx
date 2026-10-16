@@ -19,6 +19,7 @@ import { Uploads } from "./uploads";
 const PARSE_ERRORS: Record<string, string> = {
   NO_TEXT: "JD không có lớp văn bản (bản scan hoặc file rỗng).",
   ENCRYPTED_PDF: "PDF của JD được đặt mật khẩu.",
+  DOCX_TOO_LARGE: "File DOCX của JD quá lớn khi giải nén.",
   UNREADABLE: "File JD bị hỏng, không đọc được.",
   UNSUPPORTED_FORMAT: "Định dạng file JD không được hỗ trợ.",
   UNPRICED_MODEL: "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",

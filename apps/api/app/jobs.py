@@ -121,7 +121,8 @@ def _document_type(data: bytes) -> str | None:
         # Any ZIP starts so (XLSX, JAR…): a DOCX is one holding a Word document.
         try:
             names = zipfile.ZipFile(io.BytesIO(data)).namelist()
-        except zipfile.BadZipFile:
+        except Exception:
+            # A malformed archive raises BadZipFile, NotImplementedError, UnicodeDecodeError…
             return None
         return "docx" if "word/document.xml" in names else None
     try:
@@ -143,8 +144,7 @@ async def create(
 ) -> JobCreated:
     """A DRAFT Job from an uploaded JD Document or pasted text; the parse runs on queue llm."""
     if file is not None and jd_text is None:
-        # ponytail: Starlette has already spooled the whole upload; cap request bodies at
-        # the edge (Caddy request_body) if oversized uploads become a problem.
+        # Caddy cuts a body off a little past the limit, so Starlette spools no more (Caddyfile).
         data = await file.read(MAX_DOCUMENT_BYTES + 1)
         title = _placeholder_title(PurePath(file.filename or "").stem)
     elif file is None and jd_text is not None and jd_text.strip():

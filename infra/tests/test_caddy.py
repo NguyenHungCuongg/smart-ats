@@ -81,3 +81,30 @@ def test_sse_events_pass_through_unbuffered() -> None:
         while r.publish(channel, json.dumps({"event": "smoke", "data": 1})) == 0:
             time.sleep(0.05)
         assert response.readline() == b"event: smoke\n"
+
+
+# The per-file limit of FR-A1.2, as MAX_DOCUMENT_BYTES in apps/api/app/jobs.py.
+MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+
+
+def post_file(path: str, size: int) -> int:
+    """The status of an unauthenticated multipart upload of a `size`-byte file."""
+    head = b'--smoke\r\nContent-Disposition: form-data; name="file"; filename="cv.pdf"\r\n\r\n'
+    request = urllib.request.Request(
+        f"https://localhost{path}",
+        data=head + b"0" * size + b"\r\n--smoke--\r\n",
+        method="POST",
+        headers={"Content-Type": "multipart/form-data; boundary=smoke"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60, context=TLS) as response:
+            return int(response.status)
+    except urllib.error.HTTPError as error:
+        return error.code
+
+
+@pytest.mark.parametrize("path", ["/api/jobs", f"/api/jobs/{uuid.uuid4()}/uploads"])
+def test_upload_routes_refuse_an_oversized_body_before_the_api(path: str) -> None:
+    # The API answers an unauthenticated upload with 401, so a 413 can only come from Caddy.
+    assert post_file(path, MAX_DOCUMENT_BYTES) == 401
+    assert post_file(path, MAX_DOCUMENT_BYTES + 1024 * 1024) == 413

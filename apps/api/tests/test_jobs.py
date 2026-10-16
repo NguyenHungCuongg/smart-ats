@@ -23,12 +23,42 @@ from app import events, jobs, storage, usage
 from app.auth import _access_token, _redis
 from app.db import tenant_session
 from app.main import app
+from smart_ats_scoring.extraction import MAX_DOCX_UNZIPPED_BYTES
 from smart_ats_scoring.llm import LlmResult, Usage
 from tests.test_tenancy import make_tenant
 
 pytestmark = pytest.mark.usefixtures("database")
 
 PDF = b"%PDF-1.7\n fake body: the parse task's extraction is not reached in API tests"
+
+
+def _malformed_zips() -> list[Any]:
+    """DOCX-named ZIPs that zipfile rejects with something other than BadZipFile."""
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("word/document.xml", "<w:document/>")
+    data = bytearray(archive.getvalue())
+    central = data.index(b"PK\x01\x02")  # the central directory entry
+    newer = data.copy()
+    newer[central + 6] = 99  # needs ZIP version 9.9: NotImplementedError
+    bad_name = data.copy()
+    bad_name[central + 9] |= 0x08  # flag bit 11: the name is UTF-8
+    bad_name[central + 46] = 0xFF  # which it is not: UnicodeDecodeError
+    return [
+        pytest.param(bytes(newer), id="unsupported zip version"),
+        pytest.param(bytes(bad_name), id="name not utf-8"),
+    ]
+
+
+MALFORMED_ZIPS = _malformed_zips()
+
+
+def docx_bomb() -> bytes:
+    """Tens of KiB that unzip past the DOCX limit of Document Extraction."""
+    bomb = io.BytesIO()
+    with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("word/document.xml", b" " * (MAX_DOCX_UNZIPPED_BYTES + 1))
+    return bomb.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -162,6 +192,16 @@ async def test_a_zip_that_is_not_a_docx_is_rejected(
         z.writestr("xl/workbook.xml", "<workbook/>")
 
     response = await upload(client, recruiter, "jd.docx", archive.getvalue())
+
+    assert response.status_code == 415
+    assert objects == {}
+
+
+@pytest.mark.parametrize("data", MALFORMED_ZIPS)
+async def test_a_malformed_zip_is_rejected(
+    client: AsyncClient, recruiter: User, objects: dict[str, bytes], data: bytes
+) -> None:
+    response = await upload(client, recruiter, "jd.docx", data)
 
     assert response.status_code == 415
     assert objects == {}
@@ -357,6 +397,19 @@ async def test_unreadable_document_fails_with_its_extraction_code(
     )
     assert llm.calls == 0
     assert usage_entries(recruiter) == []
+
+
+@pytest.mark.usefixtures("redis")
+async def test_docx_bomb_fails_with_its_extraction_code(
+    client: AsyncClient, recruiter: User, llm: FakeLlm, enqueued: list[tuple[str, ...]]
+) -> None:
+    job_id = (await upload(client, recruiter, "jd.docx", docx_bomb())).json()["id"]
+
+    run_parse(enqueued)
+
+    job = await get_job(client, recruiter, job_id)
+    assert (job["parse_status"], job["parse_error"]) == ("FAILED", "DOCX_TOO_LARGE")
+    assert llm.calls == 0
 
 
 @pytest.mark.usefixtures("redis")
