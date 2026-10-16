@@ -73,6 +73,7 @@ def test_tenant_task_acks_late_and_passes_the_check(worker: Celery) -> None:
 
 
 @pytest.mark.usefixtures("database")
+@pytest.mark.cross_tenant
 def test_task_for_tenant_a_cannot_read_or_write_tenant_b(worker: Celery) -> None:
     from app.worker import tenant_task
 

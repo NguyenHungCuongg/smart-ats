@@ -11,7 +11,9 @@ from app.db import tenant_session
 
 # include: the modules that define tasks; the worker imports them at startup.
 celery_app = Celery(
-    "smart_ats", broker=os.environ["REDIS_URL"], include=["app.jobs", "app.uploads"]
+    "smart_ats",
+    broker=os.environ["REDIS_URL"],
+    include=["app.jobs", "app.scoring_runs", "app.uploads"],
 )
 celery_app.conf.update(
     task_queues=[Queue(name) for name in ("llm", "default", "agent", "email")],

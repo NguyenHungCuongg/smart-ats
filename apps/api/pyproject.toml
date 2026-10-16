@@ -33,6 +33,10 @@ asyncio_mode = "auto"
 # One loop for all async tests: the cached async engine's pooled connections are bound to it.
 asyncio_default_test_loop_scope = "session"
 asyncio_default_fixture_loop_scope = "session"
+markers = [
+    # Roadmap M1 counts them: uv run pytest apps/api -m cross_tenant
+    "cross_tenant: one Tenant cannot see or change another's data",
+]
 
 [tool.uv.sources]
 smart-ats-scoring = { workspace = true }

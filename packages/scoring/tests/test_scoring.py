@@ -203,3 +203,16 @@ def test_coverage_normalises_skills_and_accepts_any_listed_alternative() -> None
 
 def test_a_job_without_must_have_skills_has_full_coverage() -> None:
     assert _score(_criteria(), _profile("Python"), _answer()).coverage.ratio == 1.0
+
+
+def test_total_is_the_weighted_sum_of_the_axis_scores_as_stored() -> None:
+    # Coverage 3/8 and grade 1: Technical is 60 x 3/8 = 22.5, which floats miss slightly.
+    skills = [f"Skill {i}" for i in range(8)]
+    result = _score(
+        _criteria(*skills), _profile(*skills[:3]), _answer(technical=1, soft_skills=1, experience=1)
+    )
+
+    # Axis Scores come at the 2 decimals the database keeps (ERD score_results)...
+    assert result.technical == 22.5
+    # ...and the Total is weighed from those: 0.55 x 22.5.
+    assert result.total == pytest.approx(12.375)
