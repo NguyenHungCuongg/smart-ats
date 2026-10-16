@@ -78,8 +78,9 @@ export function Scoring({ job, applications }: { job: Job; applications: number 
       {run && (
         <p className="text-sm">
           Lần chấm gần nhất: {new Date(run.created_at).toLocaleString("vi-VN")} ·{" "}
-          {RUN_STATUSES[run.status]} · model <code className="font-mono">{run.model}</code> · trọng
-          số Technical {run.weights.technical}%, Soft Skills {run.weights.soft_skills}%, Experience{" "}
+          {isExpired(run) ? "Quá hạn, có thể chấm lại" : RUN_STATUSES[run.status]} · model{" "}
+          <code className="font-mono">{run.model}</code> · trọng số Technical{" "}
+          {run.weights.technical}%, Soft Skills {run.weights.soft_skills}%, Experience{" "}
           {run.weights.experience}%
         </p>
       )}
@@ -98,13 +99,22 @@ export function Scoring({ job, applications }: { job: Job; applications: number 
         {run ? "Chấm lại" : "Chấm điểm"}
       </button>
       {run?.results.map((result) => (
-        <Result key={result.application_id} result={result} />
+        <Result key={result.application_id} result={result} expired={isExpired(run)} />
       ))}
     </section>
   );
 }
 
-function Result({ result }: { result: ScoreResult }) {
+/** A run left RUNNING past its time: its PENDING rows will not be scored. */
+const isExpired = (run: ScoringRun) => run.status === "RUNNING" && !run.running;
+
+const REPORT_PARTS = [
+  ["strengths", "Strengths"],
+  ["gaps", "Gaps"],
+  ["recommendations", "Recommendations"],
+] as const;
+
+function Result({ result, expired }: { result: ScoreResult; expired: boolean }) {
   const rubric = result.rubric_grades;
   const report = result.fit_gap_report;
   const detail = result.must_have_detail;
@@ -116,7 +126,8 @@ function Result({ result }: { result: ScoreResult }) {
           <Badge>CV đã thay đổi sau lần chấm</Badge>
         )}
       </header>
-      {result.status === "PENDING" && <p role="status">Đang chấm…</p>}
+      {result.status === "PENDING" &&
+        (expired ? <p>Chưa chấm xong.</p> : <p role="status">Đang chấm…</p>)}
       {result.status === "FAILED" && (
         <p role="alert">
           {RESULT_ERRORS[result.error_code ?? ""] ?? "Không chấm được Application này."}
@@ -157,27 +168,15 @@ function Result({ result }: { result: ScoreResult }) {
               </Item>
             ))}
           </Part>
-          <Part title="Strengths">
-            {report.strengths.map((claim, i) => (
-              <Item key={i} claim={claim}>
-                {claim.text}
-              </Item>
-            ))}
-          </Part>
-          <Part title="Gaps">
-            {report.gaps.map((claim, i) => (
-              <Item key={i} claim={claim}>
-                {claim.text}
-              </Item>
-            ))}
-          </Part>
-          <Part title="Recommendations">
-            {report.recommendations.map((claim, i) => (
-              <Item key={i} claim={claim}>
-                {claim.text}
-              </Item>
-            ))}
-          </Part>
+          {REPORT_PARTS.map(([part, title]) => (
+            <Part key={part} title={title}>
+              {report[part].map((claim, i) => (
+                <Item key={i} claim={claim}>
+                  {claim.text}
+                </Item>
+              ))}
+            </Part>
+          ))}
         </>
       )}
     </article>

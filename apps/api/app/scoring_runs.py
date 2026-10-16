@@ -85,7 +85,7 @@ async def create(job_id: uuid.UUID, auth: Recruiter) -> RunCreated:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
     # A statement of its own, so its snapshot is taken after the lock and sees the run that
     # the request it waited for committed.
-    job = (
+    checks = (
         await auth.db.execute(
             text(
                 "SELECT EXISTS (SELECT 1 FROM applications WHERE job_id = :id) AS has_applications,"
@@ -97,9 +97,9 @@ async def create(job_id: uuid.UUID, auth: Recruiter) -> RunCreated:
     ).one()
     if not confirmed:
         raise HTTPException(status.HTTP_409_CONFLICT, "Confirm the Job's criteria first")
-    if not job.has_applications:
+    if not checks.has_applications:
         raise HTTPException(status.HTTP_409_CONFLICT, "The Job has no Applications to score")
-    if job.running:
+    if checks.running:
         raise HTTPException(status.HTTP_409_CONFLICT, "The Job is already being scored")
     model = os.environ["LLM_REASONING_MODEL"]
     if usage.price(model) is None:

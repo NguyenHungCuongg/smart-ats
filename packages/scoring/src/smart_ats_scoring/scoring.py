@@ -241,7 +241,8 @@ def score(
         for part in ("strengths", "gaps", "recommendations")
     }
     # FR-A1.3 axis table: Technical Fit is 60% Must-have Coverage and 40% rubric.
-    technical = 0.6 * coverage.ratio * 100 + 0.4 * _scale(rubric["technical"]["grade"])
+    # Rounded to the 2 decimals stored, so the Total adds up from the Axis Scores shown.
+    technical = round(0.6 * coverage.ratio * 100 + 0.4 * _scale(rubric["technical"]["grade"]), 2)
     soft_skills = _scale(rubric["soft_skills"]["grade"])
     experience = _scale(rubric["experience"]["grade"])
     total = (
