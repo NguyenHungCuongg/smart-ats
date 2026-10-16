@@ -23,7 +23,7 @@ from app import events, storage, uploads, usage
 from app.auth import _redis
 from app.db import tenant_session
 from app.main import app
-from tests.test_jobs import FakeLlm, User, make_user
+from tests.test_jobs import MALFORMED_ZIPS, FakeLlm, User, docx_bomb, make_user
 
 pytestmark = pytest.mark.usefixtures("database")
 
@@ -179,6 +179,16 @@ async def test_only_pdf_and_docx_are_accepted_by_magic_bytes(
     data: bytes,
 ) -> None:
     response = await upload(client, recruiter, job, data, filename)
+
+    assert response.status_code == 415
+    assert objects == {}
+
+
+@pytest.mark.parametrize("data", MALFORMED_ZIPS)
+async def test_a_malformed_zip_is_rejected(
+    client: AsyncClient, recruiter: User, job: str, objects: dict[str, bytes], data: bytes
+) -> None:
+    response = await upload(client, recruiter, job, data)
 
     assert response.status_code == 415
     assert objects == {}
@@ -620,6 +630,20 @@ async def test_unreadable_file_fails_its_item_with_a_code_and_reason(
     assert query(recruiter, "SELECT id FROM candidates") == []
     [batch] = query(recruiter, "SELECT status FROM upload_batches")
     assert batch == {"status": "COMPLETED"}
+
+
+@pytest.mark.usefixtures("redis")
+async def test_docx_bomb_fails_its_item_with_its_extraction_code(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    llm: FakeLlm,
+    enqueued: list[tuple[str, ...]],
+) -> None:
+    item = await uploaded(client, recruiter, job, enqueued, docx_bomb())
+
+    assert (item["status"], item["error_code"]) == ("FAILED", "DOCX_TOO_LARGE")
+    assert llm.calls == 0
 
 
 @pytest.mark.usefixtures("redis")

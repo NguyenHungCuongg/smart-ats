@@ -33,7 +33,7 @@ select = ["E", "W", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.13"
 files = ["apps/api", "infra/tests", "packages/eval", "packages/scoring"]
-mypy_path = ["apps/api", "packages/eval/src", "packages/scoring/src"]
+mypy_path = ["apps/api", "packages/eval/src", "packages/scoring/src", "packages/scoring/tests"]
 explicit_package_bases = true
 strict = true
 

@@ -138,9 +138,14 @@ def _words(text: str) -> str:
     return " ".join(re.findall(r"\w+[+#]*", text))
 
 
+_BLOCK_NAME = re.compile(r"untrusted\s*_\s*document", re.IGNORECASE)
+
+
 def _untrusted(text: str) -> str:
-    # FR-C2.2 structural isolation: the document must not be able to close its own block.
-    text = re.sub(r"</?\s*untrusted_document\s*>", "", text, flags=re.IGNORECASE)
+    # FR-C2.2 structural isolation: the document must not be able to close its own block, so
+    # it may not even name it. Repeated, since removing one name can join two halves of another.
+    while (named := _BLOCK_NAME.sub("", text)) != text:
+        text = named
     return f"<untrusted_document>\n{text}\n</untrusted_document>"
 
 

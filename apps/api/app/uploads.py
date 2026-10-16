@@ -89,7 +89,7 @@ async def create(
             "Confirm the lawful basis for processing the Candidate's personal data",
         )
     await _require_job(auth.db, job_id)
-    # ponytail: Starlette has already spooled the whole upload, as in jobs.create.
+    # Caddy cuts a body off a little past the limit, as in jobs.create.
     data = await file.read(MAX_DOCUMENT_BYTES + 1)
     if len(data) > MAX_DOCUMENT_BYTES:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "The CV exceeds 10 MB")

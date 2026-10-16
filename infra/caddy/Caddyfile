@@ -1,6 +1,18 @@
 localhost {
 	# Prefix kept: FastAPI declares its routes under /api, so no root_path.
 	# SSE needs no flush setting: Caddy flushes text/event-stream responses immediately.
+	# FR-A1.2 allows 10 MB per file; the spare MiB is the multipart framing. Caddy cuts an
+	# oversized upload off there and answers 413, so the API, which spools a body to disk
+	# before its own check, never holds more.
+	# ponytail: one file per request; raise it when an Upload Batch sends its 50 files at once.
+	@upload {
+		method POST
+		path /api/jobs /api/jobs/*/uploads
+	}
+	request_body @upload {
+		max_size 11MiB
+	}
+
 	@api path /api /api/* /openapi.json /docs
 	handle @api {
 		reverse_proxy api:8000

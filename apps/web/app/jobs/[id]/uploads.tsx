@@ -31,6 +31,7 @@ const UPLOAD_ERRORS: Record<number, string> = {
 const ITEM_ERRORS: Record<string, string> = {
   NO_TEXT: "CV không có lớp văn bản (bản scan hoặc file rỗng).",
   ENCRYPTED_PDF: "PDF được đặt mật khẩu.",
+  DOCX_TOO_LARGE: "File DOCX quá lớn khi giải nén.",
   UNREADABLE: "File bị hỏng, không đọc được.",
   UNSUPPORTED_FORMAT: "Định dạng file không được hỗ trợ.",
   UNPRICED_MODEL: "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
