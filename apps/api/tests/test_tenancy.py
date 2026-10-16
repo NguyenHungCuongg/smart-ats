@@ -53,16 +53,19 @@ def test_tenant_sees_its_own_rows(tenant: uuid.UUID) -> None:
         assert session.scalar(COUNT_USERS) == 1
 
 
+@pytest.mark.cross_tenant
 def test_no_context_sees_no_rows(tenant: uuid.UUID) -> None:
     with sync_engine().connect() as conn:
         assert conn.scalar(COUNT_USERS) == 0
 
 
+@pytest.mark.cross_tenant
 def test_other_tenant_context_sees_no_rows(tenant: uuid.UUID) -> None:
     with tenant_session(make_tenant()) as session:
         assert session.scalar(COUNT_USERS) == 0
 
 
+@pytest.mark.cross_tenant
 def test_insert_for_other_tenant_is_rejected(tenant: uuid.UUID) -> None:
     other = make_tenant()
     with pytest.raises(ProgrammingError) as exc, tenant_session(tenant) as session:
@@ -70,6 +73,7 @@ def test_insert_for_other_tenant_is_rejected(tenant: uuid.UUID) -> None:
     assert isinstance(exc.value.orig, psycopg.errors.InsufficientPrivilege)
 
 
+@pytest.mark.cross_tenant
 def test_moving_a_row_to_other_tenant_is_rejected(tenant: uuid.UUID) -> None:
     other = make_tenant()
     with pytest.raises(ProgrammingError) as exc, tenant_session(tenant) as session:
@@ -77,6 +81,7 @@ def test_moving_a_row_to_other_tenant_is_rejected(tenant: uuid.UUID) -> None:
     assert isinstance(exc.value.orig, psycopg.errors.InsufficientPrivilege)
 
 
+@pytest.mark.cross_tenant
 def test_context_does_not_outlive_the_transaction(tenant: uuid.UUID) -> None:
     with tenant_session(tenant) as session:
         pid, _ = session.execute(PID_AND_TENANT).one()
@@ -87,6 +92,7 @@ def test_context_does_not_outlive_the_transaction(tenant: uuid.UUID) -> None:
         assert conn.scalar(COUNT_USERS) == 0
 
 
+@pytest.mark.cross_tenant
 async def test_async_session_is_scoped_to_its_tenant(tenant: uuid.UUID) -> None:
     async with async_tenant_session(tenant) as session:
         assert await session.scalar(COUNT_USERS) == 1
@@ -94,6 +100,7 @@ async def test_async_session_is_scoped_to_its_tenant(tenant: uuid.UUID) -> None:
         assert await session.scalar(COUNT_USERS) == 0
 
 
+@pytest.mark.cross_tenant
 async def test_async_context_does_not_outlive_the_transaction(tenant: uuid.UUID) -> None:
     # Start from an empty pool so the next checkout returns the same connection; concurrent
     # requests in other tests leave several idle ones behind.

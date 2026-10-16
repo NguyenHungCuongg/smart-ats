@@ -50,7 +50,14 @@ const DEDUPES: Record<NonNullable<Item["dedupe"]>, string> = {
 };
 
 /** Upload one CV into the Job (FR-A1.2), follow its parse, and list the Job's Applications. */
-export function Uploads({ jobId }: { jobId: string }) {
+export function Uploads({
+  jobId,
+  onApplications,
+}: {
+  jobId: string;
+  /** Told how many Applications the Job has, after each load. */
+  onApplications: (count: number) => void;
+}) {
   const [items, setItems] = useState<Item[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   // Bumped to reload both lists.
@@ -61,10 +68,13 @@ export function Uploads({ jobId }: { jobId: string }) {
 
   useEffect(() => {
     apiFetch(`/api/jobs/${jobId}/uploads`).then(async (r) => r.ok && setItems(await r.json()));
-    apiFetch(`/api/jobs/${jobId}/applications`).then(
-      async (r) => r.ok && setApplications(await r.json()),
-    );
-  }, [jobId, version]);
+    apiFetch(`/api/jobs/${jobId}/applications`).then(async (r) => {
+      if (!r.ok) return;
+      const list: Application[] = await r.json();
+      setApplications(list);
+      onApplications(list.length);
+    });
+  }, [jobId, version, onApplications]);
   useProgressEvents("upload.item", (data) => {
     if ((data as { job_id: string }).job_id === jobId) setVersion((v) => v + 1);
   });

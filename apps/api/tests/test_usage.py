@@ -33,3 +33,8 @@ def test_gemini_is_free() -> None:
 def test_a_model_without_a_price_is_an_error() -> None:
     with pytest.raises(LookupError, match="unpriced-model"):
         usage.cost(Usage("unpriced-model", 1000, 500, 0))
+
+
+def test_the_reasoning_model_is_priced() -> None:
+    # $2 input + $10 output per 1M tokens (OpenAI Standard tier, short context).
+    assert usage.cost(Usage("gpt-6-sol-2026-09-01", 1_000_000, 1_000_000, 0)) == Decimal("12")

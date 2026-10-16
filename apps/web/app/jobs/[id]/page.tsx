@@ -13,6 +13,7 @@ import {
   toConfirmation,
   weightTotal,
 } from "../criteria";
+import { Scoring } from "./scoring";
 import { Uploads } from "./uploads";
 
 const PARSE_ERRORS: Record<string, string> = {
@@ -35,6 +36,7 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const [missing, setMissing] = useState(false);
   // Bumped to reload the Job.
   const [version, setVersion] = useState(0);
+  const [applications, setApplications] = useState(0);
 
   useEffect(() => {
     apiFetch(`/api/jobs/${id}`).then(async (response) => {
@@ -70,7 +72,8 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
           />
         )}
         {/* CVs go into any Job; only scoring needs confirmed criteria. */}
-        {job && <Uploads jobId={id} />}
+        {job && <Uploads jobId={id} onApplications={setApplications} />}
+        {job && <Scoring job={job} applications={applications} />}
       </div>
     </main>
   );

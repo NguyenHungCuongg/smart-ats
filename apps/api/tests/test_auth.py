@@ -263,6 +263,7 @@ async def test_logout_revokes_the_token_family(client: AsyncClient) -> None:
     assert (await refresh(client, second)).status_code == 401
 
 
+@pytest.mark.cross_tenant
 async def test_refresh_tokens_of_one_tenant_are_invisible_to_another(client: AsyncClient) -> None:
     tenants = []
     for _ in range(2):
@@ -276,6 +277,7 @@ async def test_refresh_tokens_of_one_tenant_are_invisible_to_another(client: Asy
         assert visible == [tenant_id]
 
 
+@pytest.mark.cross_tenant
 def test_auth_find_user_leaves_the_callers_tenant_context() -> None:
     own, other = make_user(), make_user()
     find = text("SELECT tenant_id FROM auth_find_user(:email)")

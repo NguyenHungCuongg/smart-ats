@@ -79,6 +79,7 @@ async def test_ticket_requires_authentication(client: AsyncClient) -> None:
     assert (await client.post("/api/events/ticket")).status_code == 401
 
 
+@pytest.mark.cross_tenant
 async def test_stream_delivers_only_the_users_own_events(client: AsyncClient) -> None:
     tenant, other_tenant = uuid.uuid4(), uuid.uuid4()
     a, b = uuid.uuid4(), uuid.uuid4()

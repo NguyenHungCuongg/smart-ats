@@ -193,6 +193,7 @@ async def test_cv_over_10_mb_is_rejected(
     assert objects == {}
 
 
+@pytest.mark.cross_tenant
 async def test_other_tenants_job_is_not_found_on_every_endpoint(
     client: AsyncClient, job: str, objects: dict[str, bytes]
 ) -> None:
@@ -510,6 +511,7 @@ async def test_cv_without_a_valid_email_creates_a_new_candidate(
 
 
 @pytest.mark.usefixtures("redis")
+@pytest.mark.cross_tenant
 async def test_dedupe_never_crosses_tenants(
     client: AsyncClient,
     recruiter: User,
@@ -655,6 +657,7 @@ async def test_redelivered_parse_does_nothing(
     assert len(query(recruiter, "SELECT id FROM ai_usage_entries")) == 1
 
 
+@pytest.mark.cross_tenant
 async def test_parse_cannot_reach_another_tenants_item(
     client: AsyncClient,
     recruiter: User,

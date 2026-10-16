@@ -462,6 +462,7 @@ async def test_criteria_cannot_be_confirmed_while_the_parse_is_pending(
 
 
 @pytest.mark.usefixtures("redis")
+@pytest.mark.cross_tenant
 async def test_other_tenants_job_is_not_found_on_every_endpoint(
     client: AsyncClient, recruiter: User, parsed_job: str
 ) -> None:
