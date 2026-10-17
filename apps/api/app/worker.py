@@ -26,14 +26,20 @@ celery_app.conf.update(
 # explicit declaration the CI check (untenanted_tasks) asks for.
 NON_TENANT_TASKS = frozenset({"demo.llm", "demo.default", "demo.agent", "demo.email"})
 
+# The wrappers @tenant_task built. The check matches a task's body against these rather than a
+# flag on the task, which any task could set without the decorator.
+_tenant_runs: set[Callable[..., Any]] = set()
+
 
 def tenant_task(**options: Any) -> Callable[[Callable[..., Any]], Any]:
     """Register a Celery task that runs in one tenant's RLS context (ADR-0002, SAD §4).
 
     The function takes (tenant_id: UUID, session: Session, *args); callers send only
-    (tenant_id, *args). The task acks late, so a worker that dies mid-task is redelivered:
-    write idempotently.
+    (tenant_id, *args). The task acks late and is rejected (so requeued) if its worker process
+    dies, so a task cut off mid-run is redelivered: write idempotently (SAD §6).
     """
+    if options.get("bind"):
+        raise TypeError("@tenant_task does not take bind: Celery would pass the task as tenant_id")
 
     def decorate(fn: Callable[..., Any]) -> Any:
         if list(inspect.signature(fn).parameters)[:2] != ["tenant_id", "session"]:
@@ -47,18 +53,24 @@ def tenant_task(**options: Any) -> Callable[[Callable[..., Any]], Any]:
         # Not functools.wraps: its __wrapped__ would make Celery check callers' args against fn's
         # signature, which has the extra `session`.
         run.__name__, run.__module__, run.__doc__ = fn.__name__, fn.__module__, fn.__doc__
-        return celery_app.task(acks_late=True, tenant_scoped=True, **options)(run)
+        _tenant_runs.add(run)
+        return celery_app.task(acks_late=True, reject_on_worker_lost=True, **options)(run)
 
     return decorate
 
 
 def untenanted_tasks(app: Celery) -> list[str]:
-    """Names of registered tasks that neither use @tenant_task nor are in NON_TENANT_TASKS."""
+    """Names of registered tasks that neither use @tenant_task nor are in NON_TENANT_TASKS.
+
+    Imports the app's task modules first, as a worker does at startup, so no task escapes the
+    check by living in a module nothing else imported.
+    """
+    app.loader.import_default_modules()
     return sorted(
         name
         for name, task in app.tasks.items()
         if not name.startswith("celery.")  # Celery's own built-ins
-        and not getattr(task, "tenant_scoped", False)
+        and task.run not in _tenant_runs
         and name not in NON_TENANT_TASKS
     )
 

@@ -18,11 +18,12 @@ def worker(monkeypatch: pytest.MonkeyPatch) -> Iterator[Celery]:
     """app.worker with a throwaway broker URL (importing it needs REDIS_URL, never connects).
 
     Tasks a test registers on the shared app are dropped afterwards, so the registry check
-    below only ever sees the real ones.
+    below only ever sees the real ones. The real ones are loaded first so they are never dropped.
     """
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     from app import worker
 
+    worker.celery_app.loader.import_default_modules()
     before = set(worker.celery_app.tasks)
     yield worker.celery_app
     for name in set(worker.celery_app.tasks) - before:
@@ -37,6 +38,19 @@ def test_every_registered_task_uses_tenant_task_or_is_a_declared_exception(
     assert untenanted_tasks(worker) == []
 
 
+def test_check_loads_every_task_module_and_each_is_redelivered_if_its_worker_dies(
+    worker: Celery,
+) -> None:
+    from app.worker import untenanted_tasks
+
+    untenanted_tasks(worker)
+
+    for name in ("jobs.parse", "uploads.parse_cv", "scoring_runs.score_application"):
+        task = worker.tasks[name]
+        assert task.acks_late is True
+        assert task.reject_on_worker_lost is True
+
+
 def test_check_flags_a_task_registered_without_tenant_task() -> None:
     from app.worker import untenanted_tasks
 
@@ -46,6 +60,15 @@ def test_check_flags_a_task_registered_without_tenant_task() -> None:
     def plain() -> None: ...
 
     assert untenanted_tasks(app) == ["violator.plain"]
+
+
+def test_check_flags_a_task_that_claims_tenant_scope_without_tenant_task(worker: Celery) -> None:
+    from app.worker import untenanted_tasks
+
+    @worker.task(name="violator.self_declared", tenant_scoped=True)
+    def self_declared(tenant_id: str) -> None: ...
+
+    assert untenanted_tasks(worker) == ["violator.self_declared"]
 
 
 def test_tenant_task_requires_tenant_id_then_session(worker: Celery) -> None:
@@ -60,6 +83,17 @@ def test_tenant_task_requires_tenant_id_then_session(worker: Celery) -> None:
 
         @tenant_task(name="bad.no_session")
         def no_session(tenant_id: uuid.UUID) -> None: ...
+
+
+def test_tenant_task_refuses_bind_which_would_put_the_task_where_tenant_id_goes(
+    worker: Celery,
+) -> None:
+    from app.worker import tenant_task
+
+    with pytest.raises(TypeError, match="bind"):
+
+        @tenant_task(name="bad.bound", bind=True)
+        def bound(tenant_id: uuid.UUID, session: Session) -> None: ...
 
 
 def test_tenant_task_acks_late_and_passes_the_check(worker: Celery) -> None:
