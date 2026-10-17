@@ -1,4 +1,4 @@
-"""Forced RLS on tenant tables (ADR-0001, SAD Ãƒâ€šÃ‚Â§4.2, ERD Ãƒâ€šÃ‚Â§1), checked as ats_app."""
+"""Forced RLS on tenant tables (ADR-0001, SAD §4.2, ERD §1), checked as ats_app."""
 
 import os
 import uuid
@@ -191,10 +191,10 @@ def nullable_tenant_ids(conn: Connection) -> set[str]:
     )
 
 
-def single_column_tenant_fks(conn: Connection) -> set[str]:
+def tenant_fks_without_tenant_id(conn: Connection) -> set[str]:
     """Foreign keys between two tenant tables that do not match tenant_id to tenant_id.
 
-    Referential checks skip RLS, so such a key can point at another Tenant's row (ERD Â§1).
+    Referential checks skip RLS, so such a key can point at another Tenant's row (ERD §1).
     """
     return set(
         conn.scalars(
@@ -216,14 +216,14 @@ def test_every_tenant_table_has_forced_rls_and_one_standard_policy() -> None:
 
 
 def test_tenant_id_is_not_null_except_for_system_admins() -> None:
-    # The one exception: a System Admin's users row has no Tenant (ERD Â§2).
+    # The one exception: a System Admin's users row has no Tenant (ERD §2).
     with sync_engine().connect() as conn:
         assert nullable_tenant_ids(conn) == {"users"}
 
 
 def test_foreign_keys_between_tenant_tables_include_tenant_id() -> None:
     with sync_engine().connect() as conn:
-        assert single_column_tenant_fks(conn) == set()
+        assert tenant_fks_without_tenant_id(conn) == set()
 
 
 def test_catalog_checks_catch_a_violating_table() -> None:
@@ -237,7 +237,7 @@ def test_catalog_checks_catch_a_violating_table() -> None:
         )
         assert "violation" in rls_violations(conn)
         assert "violation" in nullable_tenant_ids(conn)
-        assert single_column_tenant_fks(conn) == {"violation.violation_job_id_fkey"}
+        assert tenant_fks_without_tenant_id(conn) == {"violation.violation_job_id_fkey"}
 
 
 def test_app_role_owns_nothing_and_cannot_bypass_rls() -> None:

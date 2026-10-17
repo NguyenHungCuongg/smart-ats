@@ -33,7 +33,7 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 
 ## 2. Nền tảng & Định danh
 
-### `tenants` — RLS không force (bảng nền tảng; `ats_app` chỉ có `SELECT` và chỉ thấy dòng có `id` bằng `app.current_tenant_id`; `ats_owner` thấy tất cả, dùng cho seed và `auth_find_user`)
+### `tenants` — RLS không force (bảng nền tảng; `ats_app` chỉ có `SELECT` và chỉ thấy dòng có `id` bằng `app.current_tenant_id`; `ats_owner` thấy tất cả, dùng cho seed và `auth_find_user`; System Admin đọc tất cả, chưa làm)
 
 | Cột                   | Kiểu              | Ghi chú                             |
 | --------------------- | ----------------- | ----------------------------------- |
