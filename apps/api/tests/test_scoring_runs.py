@@ -19,7 +19,7 @@ from app import events, scoring_runs, storage, usage
 from app.auth import _redis
 from app.db import tenant_session
 from app.main import app
-from tests.test_jobs import FakeLlm, User, make_user
+from tests.test_jobs import FakeLlm, UnusableLlm, User, make_user
 from tests.test_uploads import PROFILE, docx
 
 pytestmark = pytest.mark.usefixtures("database")
@@ -469,6 +469,39 @@ async def test_run_whose_every_result_failed_is_still_partial(
     ]
     # Nothing came back to bill.
     assert query(recruiter, "SELECT id FROM ai_usage_entries") == []
+
+
+@pytest.mark.usefixtures("redis")
+async def test_billed_response_it_cannot_use_fails_the_result_and_is_recorded_once(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    application: dict[str, str],
+    enqueued: list[tuple[str, ...]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model: UnusableLlm({}, MODEL))
+    await start(client, recruiter, job)
+    [args] = enqueued
+    run_scoring(enqueued)
+
+    scoring_runs.score_application.apply(args=args).get()  # redelivered
+
+    run = (await latest(client, recruiter, job)).json()
+    assert [(r["status"], r["error_code"]) for r in run["results"]] == [
+        ("FAILED", "SCORING_FAILED")
+    ]
+    [result] = query(recruiter, "SELECT id FROM score_results")
+    assert query(
+        recruiter, "SELECT feature, input_tokens, ref_type, ref_id FROM ai_usage_entries"
+    ) == [
+        {
+            "feature": "SCORING",
+            "input_tokens": 1000,
+            "ref_type": "score_result",
+            "ref_id": result["id"],
+        }
+    ]
 
 
 @pytest.mark.usefixtures("redis", "application")

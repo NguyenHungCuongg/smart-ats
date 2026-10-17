@@ -26,7 +26,7 @@ from app.jobs import MAX_DOCUMENT_BYTES, Recruiter, _document_type
 from app.worker import tenant_task
 from smart_ats_scoring import parsing
 from smart_ats_scoring.extraction import ExtractionError, extract_text
-from smart_ats_scoring.llm import llm_from_env
+from smart_ats_scoring.llm import UnusableResponse, llm_from_env
 
 log = logging.getLogger(__name__)
 
@@ -199,7 +199,7 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
     ).one_or_none()
 
     if cv is None:
-        parsed = _parse(data)
+        parsed = _parse(session, item, data)
         if isinstance(parsed, tuple):
             _finish(session, item, "FAILED", error=parsed)
             return
@@ -286,7 +286,7 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
     _finish(session, item, "SUCCEEDED", cv_id=cv_id, dedupe=dedupe)
 
 
-def _parse(data: bytes) -> parsing.Parsed | tuple[str, str]:
+def _parse(session: Session, item: Any, data: bytes) -> parsing.Parsed | tuple[str, str]:
     """The parsed CV, or the item's (error_code, error_message)."""
     try:
         cv_text = extract_text(data)
@@ -299,9 +299,14 @@ def _parse(data: bytes) -> parsing.Parsed | tuple[str, str]:
         return "UNPRICED_MODEL", "the AI model has no price in the AI Usage Ledger"
     try:
         return parsing.parse_cv(cv_text, llm_from_env(model))
-    except Exception:
+    except Exception as e:
         # The traceback may hold provider details: it goes to the log, the item gets a code.
         log.exception("parsing CV upload item failed")
+        if isinstance(e, UnusableResponse):
+            # Billed all the same (FR-C1.4); no CV Document exists to refer to.
+            usage.record(
+                session, item.created_by, "CV_PARSE", e.usage, "upload_batch_item", item.id
+            )
         return "PARSE_FAILED", "the CV could not be parsed"
 
 
