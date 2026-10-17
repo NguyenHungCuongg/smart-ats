@@ -28,7 +28,7 @@ NON_TENANT_TASKS = frozenset({"demo.llm", "demo.default", "demo.agent", "demo.em
 
 # The wrappers @tenant_task built. The check matches a task's body against these rather than a
 # flag on the task, which any task could set without the decorator.
-_tenant_runs: set[Callable[..., Any]] = set()
+_tenant_task_wrappers: set[Callable[..., Any]] = set()
 
 
 def tenant_task(**options: Any) -> Callable[[Callable[..., Any]], Any]:
@@ -53,7 +53,7 @@ def tenant_task(**options: Any) -> Callable[[Callable[..., Any]], Any]:
         # Not functools.wraps: its __wrapped__ would make Celery check callers' args against fn's
         # signature, which has the extra `session`.
         run.__name__, run.__module__, run.__doc__ = fn.__name__, fn.__module__, fn.__doc__
-        _tenant_runs.add(run)
+        _tenant_task_wrappers.add(run)
         return celery_app.task(acks_late=True, reject_on_worker_lost=True, **options)(run)
 
     return decorate
@@ -70,7 +70,8 @@ def untenanted_tasks(app: Celery) -> list[str]:
         name
         for name, task in app.tasks.items()
         if not name.startswith("celery.")  # Celery's own built-ins
-        and task.run not in _tenant_runs
+        # autoretry_for swaps task.run for a retrying wrapper and keeps the body in _orig_run.
+        and getattr(task, "_orig_run", task.run) not in _tenant_task_wrappers
         and name not in NON_TENANT_TASKS
     )
 
