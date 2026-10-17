@@ -8,7 +8,7 @@ uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json --split t
 uv run pytest packages/eval
 ```
 
-The table always has the Baseline row. The Scoring v0 row (the core of `packages/scoring`: Must-have Coverage, anchored rubric, grounding) calls the OpenAI API, so it runs only with `OPENAI_API_KEY`, `LLM_EXTRACTION_MODEL` and `LLM_REASONING_MODEL` set, for example `uv run --env-file .env python -m smart_ats_eval ...`; without a key it is skipped with a note on stderr. Each JD and CV Document is parsed once per invocation, so `--runs` repeats only the scoring. It reports no cost yet.
+The table always has the Baseline row. The Scoring v0 row (the core of `packages/scoring`: Must-have Coverage, anchored rubric, grounding) calls the OpenAI API, so it runs only with `OPENAI_API_KEY`, `LLM_EXTRACTION_MODEL` and `LLM_REASONING_MODEL` set, for example `uv run --env-file .env python -m smart_ats_eval ...`; without a key it is skipped with a note on stderr. Each JD and CV Document is parsed once per invocation, so `--runs` repeats only the scoring. Both models must have a price in `smart_ats_scoring.pricing.PRICES`, or the run stops before any call.
 
 The default split is `dev`. Use `test` only for the frozen run the plan describes. Stability needs `--runs 2` or more; the plan (§4) sets the run count for the report.
 
@@ -67,17 +67,18 @@ The loader rejects a file that breaks any of these rules.
 
 Each metric is computed per run and per Job, then averaged.
 
-| Column       | Definition                                                                                                                                      |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Spearman rho | Between the Config's Total and the HR score (the mean of the two labels), with ties ranked by their average. `nan` when either side is constant |
-| NDCG@5       | Against each rater's Top 5, then averaged over raters. Relevance is 5 for the rater's first pick down to 1 for the fifth, and 0 outside it      |
-| P@5          | Share of the Config's first five that are in the rater's Top 5, averaged over raters                                                            |
-| Grounding    | Share of Evidence quotes found verbatim in the CV Document or JD Document, treating any run of whitespace as one space                          |
-| Stability    | Sample standard deviation of each Application's Total across runs, averaged over Applications                                                   |
-| Cost/App     | Mean `cost_usd` per Application, over the Scores that report one                                                                                |
+| Column       | Definition                                                                                                                                                                                                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spearman rho | Between the Config's Total and the HR score (the mean of the two labels), with ties ranked by their average. A Job whose Totals or HR scores are all equal has no rho and is left out of the mean; `-` when no Job has one                                                                                                                  |
+| Rho excluded | How many (run, Job) pairs were left out of Spearman rho for that reason                                                                                                                                                                                                                                                                     |
+| NDCG@5       | Against each rater's Top 5, then averaged over raters. Relevance is 5 for the rater's first pick down to 1 for the fifth, and 0 outside it                                                                                                                                                                                                  |
+| P@5          | Share of the Config's first five that are in the rater's Top 5, averaged over raters                                                                                                                                                                                                                                                        |
+| Grounding    | Share of Evidence quotes the Config made that pass the grounding rule of `smart_ats_scoring.scoring` (`is_grounded`), the rule the product applies: found as whole words in the CV Document (a Gap may also use the JD Document), ignoring case, diacritics, punctuation and spacing; empty, stopword-only and too short quotes never count |
+| Stability    | Sample standard deviation of each Application's Total across runs, averaged over Applications                                                                                                                                                                                                                                               |
+| Cost/App     | Mean `cost_usd` per Application, over the Scores that report one. Scoring v0 counts the Application's CV parse, its share of the JD parse and its scoring, priced from `smart_ats_scoring.pricing.PRICES`                                                                                                                                   |
 
 The header also shows the weighted Cohen's Kappa (quadratic) between the two raters over the split, and the split's real/synthetic count. A Config's ranking orders CV Documents by Total and breaks ties by a hash of the id, so ids that follow quality give no advantage. Targets are in the plan, not here.
 
 ## Adding a Config
 
-Implement `harness.Config` and add an instance in `configs()` in `src/smart_ats_eval/__main__.py`. `score(job)` returns exactly one `harness.ScoreResult` per CV Document, carrying `total`, any `evidence` quotes and `cost_usd` when it is known. Set `model`, `prompt_version` and `rubric_version` so the table records them. Neither the metrics nor the table need changes. `baseline.py` (Okapi BM25 of the JD against the Job's CVs) is the smallest example.
+Implement `harness.Config` and add an instance in `configs()` in `src/smart_ats_eval/__main__.py`. `score(job)` returns exactly one `harness.ScoreResult` per CV Document, carrying `total`, a `grounded` flag per Evidence quote (from the rule of `smart_ats_scoring.scoring`, as `ScoringV0` takes them from its result; never a second rule) and `cost_usd` when it is known. Set `model`, `prompt_version` and `rubric_version` so the table records them. Neither the metrics nor the table need changes. `baseline.py` (Okapi BM25 of the JD against the Job's CVs) is the smallest example.

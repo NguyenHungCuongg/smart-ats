@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app import events, storage, usage
 from app.jobs import Recruiter, Weights
 from app.worker import tenant_task
+from smart_ats_scoring import pricing
 from smart_ats_scoring.extraction import ExtractionError, extract_text
 from smart_ats_scoring.llm import UnusableResponse, llm_from_env
 from smart_ats_scoring.scoring import PROMPT_VERSION, RUBRIC_VERSION, score
@@ -102,7 +103,7 @@ async def create(job_id: uuid.UUID, auth: Recruiter) -> RunCreated:
     if checks.running:
         raise HTTPException(status.HTTP_409_CONFLICT, "The Job is already being scored")
     model = os.environ["LLM_REASONING_MODEL"]
-    if usage.price(model) is None:
+    if pricing.price(model) is None:
         # Tokens the ledger cannot price must not be spent: a server configuration error.
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "The AI model has no price in the ledger"

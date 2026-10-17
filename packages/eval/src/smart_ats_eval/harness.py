@@ -1,5 +1,6 @@
 """Runs scoring Configs over one dataset split and builds the Experiment 1 comparison table."""
 
+import math
 import statistics
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -12,11 +13,15 @@ from smart_ats_eval.dataset import Dataset, Job
 
 @dataclass(frozen=True)
 class ScoreResult:
-    """One Application's result from a Config: its Total and the Evidence quoted for it."""
+    """One Application's result from a Config: its Total and how its Evidence quotes fared.
+
+    `grounded` has one flag per quote, from the rule of `smart_ats_scoring.scoring` (the
+    one grounding rule), so the table measures what the product stores.
+    """
 
     cv_id: str
     total: float
-    evidence: tuple[str, ...] = ()
+    grounded: tuple[bool, ...] = ()
     cost_usd: float | None = None
 
 
@@ -39,6 +44,7 @@ COLUMNS = (
     "Prompt",
     "Rubric",
     "Spearman rho",
+    "Rho excluded",
     "NDCG@5",
     "P@5",
     "Grounding",
@@ -90,14 +96,15 @@ def _evaluate(config: Config, jobs: Sequence[Job], runs: int) -> list[str]:
             ndcg += [metrics.ndcg_at_k(ranking, top) for top in job.top5.values()]
             p5 += [metrics.precision_at_k(ranking, top) for top in job.top5.values()]
 
-    # Evidence may quote the CV Document or the JD Document.
-    evidence = [
-        (quote, f"{cv.text}\n{job.jd_text}")
+    grounded = [
+        flag
         for result in results
-        for job in jobs
-        for cv in job.cvs
-        for quote in result[job.id][cv.id].evidence
+        for scores in result.values()
+        for s in scores.values()
+        for flag in s.grounded
     ]
+    # A Job whose Totals or HR scores are all equal has no rho; it stays out of the mean.
+    defined_rho = [r for r in rho if not math.isnan(r)]
     stability = (
         metrics.stability(
             [[result[job.id][cv.id].total for result in results] for job in jobs for cv in job.cvs]
@@ -117,10 +124,11 @@ def _evaluate(config: Config, jobs: Sequence[Job], runs: int) -> list[str]:
         config.model or "-",
         config.prompt_version or "-",
         config.rubric_version or "-",
-        _fmt(statistics.fmean(rho), 3),
+        _fmt(statistics.fmean(defined_rho) if defined_rho else None, 3),
+        str(len(rho) - len(defined_rho)),
         _fmt(statistics.fmean(ndcg), 3),
         _fmt(statistics.fmean(p5), 3),
-        _fmt(metrics.grounding_rate(evidence), 3),
+        _fmt(statistics.fmean(grounded) if grounded else None, 3),
         _fmt(stability, 3),
         _fmt(statistics.fmean(costs) if costs else None, 4),
     ]

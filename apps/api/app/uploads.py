@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app import events, storage, usage
 from app.jobs import MAX_DOCUMENT_BYTES, Recruiter, _document_type
 from app.worker import tenant_task
-from smart_ats_scoring import parsing
+from smart_ats_scoring import parsing, pricing
 from smart_ats_scoring.extraction import ExtractionError, extract_text
 from smart_ats_scoring.llm import UnusableResponse, llm_from_env
 
@@ -293,9 +293,9 @@ def _parse(session: Session, item: Any, data: bytes) -> parsing.Parsed | tuple[s
     except ExtractionError as e:
         return e.code, e.reason
     model = os.environ["LLM_EXTRACTION_MODEL"]
-    if usage.price(model) is None:
+    if pricing.price(model) is None:
         # Checked before the call: tokens the ledger cannot price must not be spent.
-        log.error("no price for model %s in app.usage.PRICES", model)
+        log.error("no price for model %s in smart_ats_scoring.pricing.PRICES", model)
         return "UNPRICED_MODEL", "the AI model has no price in the AI Usage Ledger"
     try:
         return parsing.parse_cv(cv_text, llm_from_env(model))
