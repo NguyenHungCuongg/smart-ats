@@ -23,7 +23,7 @@ from app import events, storage, uploads, usage
 from app.auth import _redis
 from app.db import tenant_session
 from app.main import app
-from tests.test_jobs import MALFORMED_ZIPS, FakeLlm, User, docx_bomb, make_user
+from tests.test_jobs import MALFORMED_ZIPS, FakeLlm, UnusableLlm, User, docx_bomb, make_user
 
 pytestmark = pytest.mark.usefixtures("database")
 
@@ -679,6 +679,35 @@ async def test_redelivered_parse_does_nothing(
 
     assert llm.calls == 1
     assert len(query(recruiter, "SELECT id FROM ai_usage_entries")) == 1
+
+
+@pytest.mark.usefixtures("redis", "llm")
+async def test_billed_response_it_cannot_use_fails_the_item_and_is_recorded_once(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    enqueued: list[tuple[str, ...]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(uploads, "llm_from_env", lambda model: UnusableLlm({}))
+    await upload(client, recruiter, job)
+    args = enqueued[0]
+    run_parse(enqueued)
+
+    uploads.parse_cv.apply(args=args).get()  # redelivered
+
+    [item] = await items(client, recruiter, job)
+    assert (item["status"], item["error_code"]) == ("FAILED", "PARSE_FAILED")
+    assert query(
+        recruiter, "SELECT feature, input_tokens, ref_type, ref_id FROM ai_usage_entries"
+    ) == [
+        {
+            "feature": "CV_PARSE",
+            "input_tokens": 1000,
+            "ref_type": "upload_batch_item",
+            "ref_id": uuid.UUID(item["id"]),
+        }
+    ]
 
 
 @pytest.mark.cross_tenant

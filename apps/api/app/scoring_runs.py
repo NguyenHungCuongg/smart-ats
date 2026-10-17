@@ -21,7 +21,7 @@ from app import events, storage, usage
 from app.jobs import Recruiter, Weights
 from app.worker import tenant_task
 from smart_ats_scoring.extraction import ExtractionError, extract_text
-from smart_ats_scoring.llm import llm_from_env
+from smart_ats_scoring.llm import UnusableResponse, llm_from_env
 from smart_ats_scoring.scoring import PROMPT_VERSION, RUBRIC_VERSION, score
 from smart_ats_scoring.scoring import Weights as ScoringWeights
 
@@ -230,10 +230,13 @@ def score_application(
                 llm_from_env(row.model),
                 ScoringWeights(**row.weights),
             )
-        except Exception:
+        except Exception as e:
             # The traceback may hold provider details: it goes to the log, the row gets a code.
             log.exception("scoring score result %s failed", row.id)
             error = "SCORING_FAILED"
+            if isinstance(e, UnusableResponse):
+                # Billed all the same (FR-C1.4).
+                usage.record(session, row.created_by, "SCORING", e.usage, "score_result", row.id)
 
     if error is None:
         usage.record(session, row.created_by, "SCORING", result.usage, "score_result", row.id)

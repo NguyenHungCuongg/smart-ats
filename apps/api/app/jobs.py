@@ -27,7 +27,7 @@ from app import events, storage, usage
 from app.auth import Auth, Authenticated
 from app.worker import tenant_task
 from smart_ats_scoring.extraction import ExtractionError, extract_text
-from smart_ats_scoring.llm import llm_from_env
+from smart_ats_scoring.llm import UnusableResponse, llm_from_env
 from smart_ats_scoring.parsing import parse_job
 
 log = logging.getLogger(__name__)
@@ -249,10 +249,12 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
     """Parse the Job's JD Document into criteria for the Recruiter to confirm (FR-A1.1)."""
     # ponytail: the row lock and the transaction stay open through the LLM call (NFR-PERF-02);
     # split into claim / call / write transactions if connections run short.
+    # NO KEY UPDATE: rows inserted with a foreign key to the Job (an upload into it) take
+    # KEY SHARE on it, which FOR UPDATE would make wait for the whole LLM call.
     key = session.scalar(
         text(
             "SELECT jd_document_key FROM jobs WHERE id = :id AND parse_status = 'PENDING'"
-            " FOR UPDATE"
+            " FOR NO KEY UPDATE"
         ),
         {"id": job_id},
     )
@@ -272,10 +274,15 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
             )
         except ExtractionError as e:
             error = e.code
-        except Exception:
+        except Exception as e:
             # The traceback may hold provider details: it goes to the log, the Job gets a code.
             log.exception("parsing the JD Document of job %s failed", job_id)
             error = "PARSE_FAILED"
+            if isinstance(e, UnusableResponse):
+                # Billed all the same (FR-C1.4).
+                usage.record(
+                    session, uuid.UUID(user_id), "JOB_PARSE", e.usage, "job", uuid.UUID(job_id)
+                )
 
     if error is None:
         data = parsed.data

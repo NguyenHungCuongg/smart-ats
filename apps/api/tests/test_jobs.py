@@ -4,8 +4,10 @@ Object storage, the LLM and the broker are faked; the API, the parse task and Po
 are real.
 """
 
+import asyncio
 import io
 import json
+import threading
 import uuid
 import zipfile
 from collections.abc import AsyncIterator
@@ -19,12 +21,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import events, jobs, storage, usage
+from app import events, jobs, storage, uploads, usage
 from app.auth import _access_token, _redis
 from app.db import tenant_session
 from app.main import app
 from smart_ats_scoring.extraction import MAX_DOCX_UNZIPPED_BYTES
-from smart_ats_scoring.llm import LlmResult, Usage
+from smart_ats_scoring.llm import LlmResult, UnusableResponse, Usage
 from tests.test_tenancy import make_tenant
 
 pytestmark = pytest.mark.usefixtures("database")
@@ -276,6 +278,14 @@ class FakeLlm:
         return LlmResult(self.data, Usage(self.model, 1000, 500, 400))
 
 
+class UnusableLlm(FakeLlm):
+    """Bills the call but returns nothing usable, as on hitting the token limit."""
+
+    def structured(self, *args: Any, **kwargs: Any) -> LlmResult:
+        self.calls += 1
+        raise UnusableResponse("cut off", Usage(self.model, 1000, 500, 400))
+
+
 @pytest.fixture
 def llm(monkeypatch: pytest.MonkeyPatch) -> FakeLlm:
     fake = FakeLlm(PARSED)
@@ -442,6 +452,72 @@ async def test_redelivered_parse_does_nothing(
 
     assert llm.calls == 1
     assert len(usage_entries(recruiter)) == 1
+
+
+@pytest.mark.usefixtures("redis", "llm")
+async def test_billed_response_it_cannot_use_fails_the_parse_and_is_recorded_once(
+    client: AsyncClient,
+    recruiter: User,
+    enqueued: list[tuple[str, ...]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model: UnusableLlm({}))
+    job_id = (await paste(client, recruiter, JD)).json()["id"]
+
+    run_parse(enqueued)
+    run_parse(enqueued)  # redelivered
+
+    job = await get_job(client, recruiter, job_id)
+    assert (job["parse_status"], job["parse_error"]) == ("FAILED", "PARSE_FAILED")
+    assert [(e[1], e[3], e[7], e[8]) for e in usage_entries(recruiter)] == [
+        ("JOB_PARSE", 1000, "job", uuid.UUID(job_id))
+    ]
+
+
+class BlockingLlm(FakeLlm):
+    """Holds the call open until released, so the test acts while the parse is mid-call."""
+
+    def __init__(self, data: dict[str, Any]) -> None:
+        super().__init__(data)
+        self.calling, self.release = threading.Event(), threading.Event()
+
+    def structured(self, *args: Any, **kwargs: Any) -> LlmResult:
+        self.calling.set()
+        self.release.wait(10)
+        return super().structured(*args, **kwargs)
+
+
+@pytest.mark.usefixtures("redis", "llm")
+async def test_cv_upload_into_a_job_being_parsed_does_not_wait_for_the_parse(
+    client: AsyncClient,
+    recruiter: User,
+    enqueued: list[tuple[str, ...]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llm = BlockingLlm(PARSED)
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model: llm)
+    monkeypatch.setattr(uploads.parse_cv, "delay", lambda *args: None)
+    job_id = (await paste(client, recruiter, JD)).json()["id"]
+    parse = asyncio.create_task(asyncio.to_thread(run_parse, enqueued))
+    assert await asyncio.to_thread(llm.calling.wait, 10)
+
+    try:
+        # Inserting the Upload Batch checks its foreign key to the Job the parse holds.
+        response = await asyncio.wait_for(
+            client.post(
+                f"/api/jobs/{job_id}/uploads",
+                headers=recruiter.headers,
+                files={"file": ("cv.pdf", PDF)},
+                data={"consent_confirmed": "true"},
+            ),
+            5,
+        )
+    finally:
+        llm.release.set()
+        await parse
+
+    assert response.status_code == 202
+    assert (await get_job(client, recruiter, job_id))["parse_status"] == "SUCCEEDED"
 
 
 # Confirming the criteria.

@@ -24,6 +24,26 @@ class LlmResult:
     usage: Usage
 
 
+class UnusableResponse(Exception):
+    """The provider billed a response that holds no usable JSON (cut off, refused, malformed).
+
+    It carries the usage, so the caller still records the AI Usage Entry (FR-C1.4).
+    """
+
+    def __init__(self, message: str, usage: Usage) -> None:
+        super().__init__(message)
+        self.usage = usage
+
+
+def _result(output: str | None, usage: Usage, status: str) -> LlmResult:
+    if not output:
+        raise UnusableResponse(f"{usage.model} returned no structured output ({status})", usage)
+    try:
+        return LlmResult(json.loads(output), usage)
+    except json.JSONDecodeError as e:
+        raise UnusableResponse(f"{usage.model} returned malformed JSON ({status})", usage) from e
+
+
 class Llm(Protocol):
     def structured(
         self,
@@ -61,18 +81,19 @@ class OpenAiLlm:
             store=False,
             temperature=omit if temperature is None else temperature,
         )
-        # A refusal completes with no output text.
-        if response.status != "completed" or response.usage is None or not response.output_text:
-            raise RuntimeError(f"{self.model} returned no structured output ({response.status})")
+        if response.usage is None:
+            raise RuntimeError(f"{self.model} returned no usage ({response.status})")
         usage = response.usage
-        return LlmResult(
-            json.loads(response.output_text),
+        # A refusal completes with no output text; an incomplete response is cut off.
+        return _result(
+            response.output_text if response.status == "completed" else None,
             Usage(
                 response.model,
                 usage.input_tokens,
                 usage.output_tokens,
                 usage.input_tokens_details.cached_tokens,
             ),
+            str(response.status),
         )
 
 
@@ -106,19 +127,20 @@ class GeminiLlm:
             },
             temperature=omit if temperature is None else temperature,
         )
-        content = response.choices[0].message.content
-        if response.usage is None or not content:
-            raise RuntimeError(f"{self.model} returned no structured output")
+        if response.usage is None:
+            raise RuntimeError(f"{self.model} returned no usage")
         usage = response.usage
         details = usage.prompt_tokens_details
-        return LlmResult(
-            json.loads(content),
+        # A reply cut off at the token limit is malformed JSON.
+        return _result(
+            response.choices[0].message.content,
             Usage(
                 response.model,
                 usage.prompt_tokens,
                 usage.completion_tokens,
                 (details.cached_tokens or 0) if details else 0,
             ),
+            "completed",
         )
 
 
