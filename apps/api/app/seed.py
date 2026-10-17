@@ -1,22 +1,22 @@
 """Create the demo Tenant and its Recruiter for dev and demo; rerunning changes nothing.
 
 Usage: SEED_PASSWORD=... python -m app.seed  (see README "Development")
+
+Runs as ats_owner (DATABASE_MIGRATION_URL): ats_app can read only its own Tenant and write none.
 """
 
 import os
 
 from pwdlib import PasswordHash
-from sqlalchemy import text
-
-from app.db import sync_engine, tenant_session
+from sqlalchemy import create_engine, text
 
 DEMO_SLUG = "demo"
 DEMO_EMAIL = "recruiter@demo.local"
 
 
 def seed(password: str) -> None:
-    # tenants has no RLS; users does, so the Recruiter is inserted inside the tenant's context.
-    with sync_engine().begin() as conn:
+    # Forced RLS binds the owner on users too, so the Recruiter goes in under the Tenant's context.
+    with create_engine(os.environ["DATABASE_MIGRATION_URL"]).begin() as conn:
         conn.execute(
             text(
                 "INSERT INTO tenants (name, slug, plan_type, ai_budget_monthly_usd, status)"
@@ -28,9 +28,11 @@ def seed(password: str) -> None:
         tenant_id = conn.scalar(
             text("SELECT id FROM tenants WHERE slug = :slug"), {"slug": DEMO_SLUG}
         )
-
-    with tenant_session(tenant_id) as session:
-        session.execute(
+        conn.execute(
+            text("SELECT set_config('app.current_tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(tenant_id)},
+        )
+        conn.execute(
             text(
                 "INSERT INTO users (tenant_id, email, password_hash, full_name, role, is_active)"
                 " VALUES (:tenant_id, :email, :password_hash, 'Demo Recruiter', 'RECRUITER', true)"

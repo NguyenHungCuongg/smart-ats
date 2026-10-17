@@ -19,7 +19,7 @@
   USING      (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
   WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
   ```
-- **Role:** `ats_owner` sở hữu mọi bảng và chạy migration. `ats_app` được API và worker dùng; chỉ có quyền DML, không có `BYPASSRLS`.
+- **Role:** `ats_owner` sở hữu mọi bảng và chạy migration. `ats_app` được API và worker dùng; chỉ có quyền DML (riêng `tenants` chỉ `SELECT`), không có `BYPASSRLS`.
 - **Quy ước:**
   - Khóa chính là `uuid`, sinh bằng `uuidv7()` (có sẵn trong PostgreSQL 18, tăng theo thời gian, thân thiện với index).
   - Thời gian dùng `timestamptz`.
@@ -33,7 +33,7 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 
 ## 2. Nền tảng & Định danh
 
-### `tenants` — _không RLS_ (bảng nền tảng; ứng dụng chỉ đọc dòng của chính mình qua `app.current_tenant_id`, System Admin đọc tất cả)
+### `tenants` — RLS không force (bảng nền tảng; `ats_app` chỉ có `SELECT` và chỉ thấy dòng có `id` bằng `app.current_tenant_id`; `ats_owner` thấy tất cả, dùng cho seed và `auth_find_user`; System Admin đọc tất cả, chưa làm)
 
 | Cột                   | Kiểu              | Ghi chú                             |
 | --------------------- | ----------------- | ----------------------------------- |

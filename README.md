@@ -78,17 +78,17 @@ Run from the repo root. Hostnames in `.env` are Compose service names; use `loca
 | Celery worker (one queue)              | `uv run --env-file .env celery --workdir apps/api -A app.worker worker -Q default` |
 | Celery Beat                            | `uv run --env-file .env celery --workdir apps/api -A app.worker beat`              |
 | New migration                          | `uv run --directory apps/api alembic revision -m "<message>"`                      |
-| Seed demo tenant and Recruiter         | `docker compose exec -e SEED_PASSWORD=<password> api python -m app.seed`           |
+| Seed demo tenant and Recruiter         | `docker compose run --rm -e SEED_PASSWORD=<password> migrate python -m app.seed`   |
 | Eval comparison table (Experiment 1)   | `uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json`           |
 
-Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; readiness (DB, Redis, object storage): `GET /api/ready`. Progress events (SSE): `POST /api/events/ticket` with the access token returns a one-time ticket (lifetime: ADR-0003) for `GET /api/events?ticket=...`; workers send with `app.events.publish`. The seed creates tenant `demo` with Recruiter `recruiter@demo.local`; rerunning it changes nothing. Sign in at https://localhost/login: the refresh cookie is `Secure` and `SameSite=Strict`, so the web app and the API must share the Caddy origin (`NEXT_PUBLIC_API_URL`), not run on separate ports.
+Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; readiness (DB, Redis, object storage): `GET /api/ready`. Progress events (SSE): `POST /api/events/ticket` with the access token returns a one-time ticket (lifetime: ADR-0003) for `GET /api/events?ticket=...`; workers send with `app.events.publish`. The seed creates tenant `demo` with Recruiter `recruiter@demo.local`; rerunning it changes nothing. It runs in the `migrate` service as `ats_owner`, because `ats_app` can read only its own tenant and write none. Sign in at https://localhost/login: the refresh cookie is `Secure` and `SameSite=Strict`, so the web app and the API must share the Caddy origin (`NEXT_PUBLIC_API_URL`), not run on separate ports.
 
 ## Demo: Job → CV → Score → Fit-Gap
 
 The end-to-end flow of Roadmap M1, on Docker Compose:
 
 1. In `.env`, set `OPENAI_API_KEY`, or for free testing `GEMINI_API_KEY` with Gemini names in `LLM_EXTRACTION_MODEL` and `LLM_REASONING_MODEL` (synthetic CVs only, see `.env.example`). Each model must have a price in `app.usage.PRICES`, or parsing and scoring refuse to call it.
-2. Start the stack and seed: `docker compose up -d --build --wait`, then `docker compose exec -e SEED_PASSWORD=<password> api python -m app.seed`.
+2. Start the stack and seed: `docker compose up -d --build --wait`, then `docker compose run --rm -e SEED_PASSWORD=<password> migrate python -m app.seed`.
 3. Sign in at https://localhost/login as `recruiter@demo.local`.
 4. **Create a Job:** on the home page, open "Tạo Job từ JD", upload a JD Document or paste its text. Once the parse finishes, review the criteria (fields marked "Cần kiểm tra" were not found verbatim in the JD) and press "Xác nhận criteria".
 5. **Upload a CV:** in "Ứng viên" on the same page, pick a PDF or DOCX, confirm the lawful basis and press "Tải CV lên". The Application appears once the parse succeeds.

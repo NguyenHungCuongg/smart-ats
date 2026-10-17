@@ -42,7 +42,7 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 
 ## Checklist review bảo mật
 
-- [ ] Mọi truy cập DB đi qua `tenant_session`; Celery task nhận `tenant_id` làm tham số đầu và dùng `@tenant_task` (ADR-0002).
+- [ ] Mọi truy cập DB đi qua `tenant_session` (ngoại lệ duy nhất: `app.seed` chạy bằng `ats_owner` vì `ats_app` không ghi được `tenants`); Celery task nhận `tenant_id` làm tham số đầu và dùng `@tenant_task` (ADR-0002).
 - [ ] Bảng mới thuộc tenant có `tenant_id NOT NULL`, RLS `ENABLE` + `FORCE`, policy chuẩn, khóa ngoại ghép `(tenant_id, id)` (ERD §1).
 - [ ] Endpoint mới kiểm tra role và Reviewer Assignment; id thuộc tenant khác trả về 404 (SAD §4.3).
 - [ ] File chỉ phục vụ qua presigned URL sau khi kiểm tra quyền (NFR-SEC-09).
