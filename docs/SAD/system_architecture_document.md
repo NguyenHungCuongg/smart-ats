@@ -265,7 +265,7 @@ Index HNSW giữ truy vấn nhanh. Cô lập không cần thêm điều kiện l
 - **Blind Profile:** thông tin nhân khẩu học bị loại trước khi chấm điểm. Các proxy đã biết được liệt kê ở SRS FR-C2.4.
 - **Quyền quyết định của con người:** tập capability của agent loại trừ mọi thao tác thay đổi (§5.3). Bất biến này được thực thi bằng code và test, không bằng prompt.
 - **Tái lập:** mỗi Scoring Run và Score Result lưu model, prompt version, rubric version và trọng số. Prompt là file có version trong repo.
-- **Tối thiểu hóa dữ liệu:** chỉ gửi văn bản cho nhà cung cấp LLM, không gửi ảnh. Nhà cung cấp được dùng theo điều khoản API không huấn luyện trên dữ liệu.
+- **Tối thiểu hóa dữ liệu:** chỉ gửi văn bản cho nhà cung cấp LLM, không gửi ảnh. Nhà cung cấp được dùng theo điều khoản API không huấn luyện trên dữ liệu: production chỉ dùng OpenAI. Gemini (free tier có dùng dữ liệu để cải thiện sản phẩm) chỉ để thử nghiệm với dữ liệu tổng hợp, bật bằng `LLM_PROVIDER=gemini`; mặc định là OpenAI và eval từ chối CV thật khi bật cờ này.
 
 ---
 

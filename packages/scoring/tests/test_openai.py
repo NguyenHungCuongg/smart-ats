@@ -10,7 +10,7 @@ from smart_ats_scoring.parsing import CV_SCHEMA, JOB_SCHEMA, parse_cv, parse_job
 
 pytestmark = pytest.mark.skipif(
     not (has_llm_key() and os.environ.get("LLM_EXTRACTION_MODEL")),
-    reason="needs OPENAI_API_KEY or GEMINI_API_KEY, and LLM_EXTRACTION_MODEL",
+    reason="needs the API key of LLM_PROVIDER, and LLM_EXTRACTION_MODEL",
 )
 
 

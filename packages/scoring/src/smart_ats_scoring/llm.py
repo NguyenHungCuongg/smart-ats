@@ -98,12 +98,14 @@ class OpenAiLlm:
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+GEMINI_SEED = 20260101  # fixed, so repeated runs are comparable (ADR-0006)
 
 
 class GeminiLlm:
     """Gemini's OpenAI-compatible Chat Completions (it has no Responses API), for free testing.
 
-    The free tier uses prompts to improve Google products: send synthetic data only.
+    The free tier uses prompts to improve Google products: send synthetic data only, so
+    llm_from_env builds it only when LLM_PROVIDER=gemini (FR-C1.5).
     """
 
     def __init__(self, model: str, api_key: str) -> None:
@@ -126,30 +128,41 @@ class GeminiLlm:
                 "json_schema": {"name": name, "schema": schema, "strict": True},
             },
             temperature=omit if temperature is None else temperature,
+            seed=GEMINI_SEED,
         )
         if response.usage is None:
             raise RuntimeError(f"{self.model} returned no usage")
         usage = response.usage
         details = usage.prompt_tokens_details
-        # A reply cut off at the token limit is malformed JSON.
+        choice = response.choices[0]
+        # A reply cut off at the token limit (or filtered) can still parse as JSON, so only
+        # a normal stop is usable.
         return _decode(
-            response.choices[0].message.content,
+            choice.message.content if choice.finish_reason == "stop" else None,
             Usage(
                 response.model,
                 usage.prompt_tokens,
                 usage.completion_tokens,
                 (details.cached_tokens or 0) if details else 0,
             ),
-            str(response.choices[0].finish_reason),
+            str(choice.finish_reason),
         )
 
 
+def llm_provider() -> str:
+    """OpenAI unless LLM_PROVIDER=gemini says otherwise: a Gemini key alone never selects it."""
+    provider = os.environ.get("LLM_PROVIDER") or "openai"
+    if provider not in ("openai", "gemini"):
+        raise ValueError(f"LLM_PROVIDER must be openai or gemini, not {provider!r}")
+    return provider
+
+
 def has_llm_key() -> bool:
-    return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY"))
+    key = "GEMINI_API_KEY" if llm_provider() == "gemini" else "OPENAI_API_KEY"
+    return bool(os.environ.get(key))
 
 
 def llm_from_env(model: str) -> Llm:
-    """Gemini when GEMINI_API_KEY is set (free testing), OpenAI otherwise."""
-    if key := os.environ.get("GEMINI_API_KEY"):
-        return GeminiLlm(model, key)
+    if llm_provider() == "gemini":
+        return GeminiLlm(model, os.environ["GEMINI_API_KEY"])
     return OpenAiLlm(model)

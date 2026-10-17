@@ -1,5 +1,6 @@
 """Price of a model call, the one table the API's AI Usage Ledger and the eval harness share."""
 
+import re
 from decimal import Decimal
 from typing import NamedTuple
 
@@ -14,12 +15,15 @@ class Price(NamedTuple):
     output: Decimal
 
 
-# By model name prefix, so a dated snapshot (gpt-6-luna-2026-08-01) takes its model's price.
+# By model name, so a dated snapshot (gpt-6-luna-2026-08-01) takes its model's price; any other
+# suffix (gemini-3.5-flash-image) is another model and stays unpriced.
 # Add each model set in LLM_*_MODEL from the provider's price page; a task checks its model
 # with price() before calling it, so an unpriced model fails rather than spend unrecorded.
 PRICES: dict[str, Price] = {
-    # Free tier, used for testing only (.env.example).
-    "gemini-": Price(Decimal(0), Decimal(0), Decimal(0)),
+    # Free tier, synthetic data only (LLM_PROVIDER=gemini, .env.example). Listed one by one: any
+    # other Gemini model, whose free tier may not exist, stays unpriced and is refused.
+    "gemini-3.5-flash": Price(Decimal(0), Decimal(0), Decimal(0)),
+    "gemini-3.5-flash-lite": Price(Decimal(0), Decimal(0), Decimal(0)),
     # OpenAI Standard tier, short context (<= 272K input tokens), as of 2026-10-16.
     # ponytail: cache writes ($2.50 / $0.125) are billed here as plain input, since Usage does
     # not count them apart; split them out if the ledger drifts from the invoice.
@@ -31,8 +35,8 @@ _PER_TOKENS = 1_000_000
 
 
 def price(model: str) -> Price | None:
-    prefix = max((p for p in PRICES if model.startswith(p)), key=len, default=None)
-    return None if prefix is None else PRICES[prefix]
+    name = next((p for p in PRICES if re.fullmatch(rf"{re.escape(p)}(-\d.*)?", model)), None)
+    return None if name is None else PRICES[name]
 
 
 def cost(usage: Usage) -> Decimal:

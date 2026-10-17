@@ -81,7 +81,8 @@ services:
     <<: *python-app
     environment:
       <<: [*python-env, *s3-env]
-      # Parsing JD Documents (SAD §2); Gemini wins when its key is set (.env.example).
+      # Parsing JD Documents (SAD §2); Gemini only when LLM_PROVIDER=gemini (.env.example).
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LLM_EXTRACTION_MODEL: ${LLM_EXTRACTION_MODEL:?set in .env}

@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -108,3 +109,27 @@ def test_a_split_where_every_rho_is_undefined_shows_dashes_not_nan() -> None:
 
     assert row(table, "Fake")[4:6] == ["-", "1"]
     assert "nan" not in table
+
+
+def test_cli_refuses_a_dataset_with_real_cvs_when_the_provider_is_gemini(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw = json.loads(SCRATCH.read_text(encoding="utf-8"))
+    raw["jobs"][0]["cvs"][0]["source"] = "real"
+    path = tmp_path / "with-real-cv.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+
+    with pytest.raises(SystemExit, match="real"):
+        main([str(path)])
+
+
+def test_cli_runs_a_synthetic_dataset_when_the_provider_is_gemini(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)  # no Scoring v0 call
+
+    main([str(SCRATCH)])
+
+    assert "Baseline (BM25)" in capsys.readouterr().out

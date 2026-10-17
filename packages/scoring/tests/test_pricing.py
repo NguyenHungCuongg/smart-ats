@@ -26,8 +26,15 @@ def test_a_dated_snapshot_takes_its_models_price() -> None:
     assert pricing.cost(Usage("test-model-2026-08-01", 1_000_000, 0, 0)) == Decimal("2.000000")
 
 
-def test_gemini_is_free() -> None:
-    assert pricing.cost(Usage("gemini-2.5-flash", 1000, 500, 0)) == 0
+@pytest.mark.parametrize("model", ["gemini-3.5-flash", "gemini-3.5-flash-lite"])
+def test_the_listed_free_tier_models_are_free(model: str) -> None:
+    assert pricing.cost(Usage(model, 1000, 500, 0)) == 0
+
+
+@pytest.mark.parametrize("model", ["gemini-4-pro", "gemini-3.5-flash-image"])
+def test_a_gemini_model_that_is_not_listed_is_unpriced(model: str) -> None:
+    with pytest.raises(LookupError, match=model):
+        pricing.cost(Usage(model, 1000, 500, 0))
 
 
 def test_a_model_without_a_price_is_an_error() -> None:
