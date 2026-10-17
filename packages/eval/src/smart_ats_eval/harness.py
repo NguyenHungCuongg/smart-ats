@@ -15,7 +15,7 @@ from smart_ats_eval.dataset import Dataset, Job
 class ScoreResult:
     """One Application's result from a Config: its Total and how its Evidence quotes fared.
 
-    `grounded` has one flag per quote, from `smart_ats_scoring.scoring.is_grounded` (the
+    `grounded` has one flag per quote, from the rule of `smart_ats_scoring.scoring` (the
     one grounding rule), so the table measures what the product stores.
     """
 

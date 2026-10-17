@@ -99,8 +99,7 @@ class ScoreResult:
         return [
             kept
             for claim in self._claims()
-            for kept, count in ((True, len(claim["evidence"])), (False, len(claim["dropped"])))
-            for _ in range(count)
+            for kept in [True] * len(claim["evidence"]) + [False] * len(claim["dropped"])
         ]
 
     @property
