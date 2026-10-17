@@ -61,7 +61,6 @@ def test_tenant_sees_its_own_rows(tenant: uuid.UUID) -> None:
         assert session.scalar(COUNT_USERS) == 1
 
 
-@pytest.mark.cross_tenant
 def test_no_context_sees_no_rows(tenant: uuid.UUID) -> None:
     with sync_engine().connect() as conn:
         assert conn.scalar(COUNT_USERS) == 0
@@ -89,7 +88,6 @@ def test_moving_a_row_to_other_tenant_is_rejected(tenant: uuid.UUID) -> None:
     assert isinstance(exc.value.orig, psycopg.errors.InsufficientPrivilege)
 
 
-@pytest.mark.cross_tenant
 def test_context_does_not_outlive_the_transaction(tenant: uuid.UUID) -> None:
     with tenant_session(tenant) as session:
         pid, _ = session.execute(PID_AND_TENANT).one()
@@ -108,7 +106,6 @@ async def test_async_session_is_scoped_to_its_tenant(tenant: uuid.UUID) -> None:
         assert await session.scalar(COUNT_USERS) == 0
 
 
-@pytest.mark.cross_tenant
 async def test_async_context_does_not_outlive_the_transaction(tenant: uuid.UUID) -> None:
     # Start from an empty pool so the next checkout returns the same connection; concurrent
     # requests in other tests leave several idle ones behind.
@@ -128,7 +125,6 @@ def test_tenant_reads_only_its_own_tenant_row(tenant: uuid.UUID) -> None:
         assert session.scalars(text("SELECT id FROM tenants")).all() == [tenant]
 
 
-@pytest.mark.cross_tenant
 def test_no_context_reads_no_tenant_row(tenant: uuid.UUID) -> None:
     with sync_engine().connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM tenants")) == 0
@@ -148,6 +144,87 @@ def test_tenant_cannot_write_tenants(tenant: uuid.UUID, statement: str) -> None:
     params = {"slug": f"t-{uuid.uuid4().hex}", "own": tenant, "other": make_tenant()}
     with pytest.raises(ProgrammingError) as exc, tenant_session(tenant) as session:
         session.execute(text(statement), params)
+    assert isinstance(exc.value.orig, psycopg.errors.InsufficientPrivilege)
+
+
+# One INSERT per tenant table, in foreign-key order. Every value comes from :t (the Tenant) or
+# ids[...], so the same statements seed Tenant A and then attempt to write into it from B.
+
+TENANT_TABLES = {
+    "jobs": (
+        "INSERT INTO jobs (id, tenant_id, title, level, status, parse_status, weight_technical,"
+        " weight_soft_skills, weight_experience, created_by)"
+        " VALUES (:jobs, :t, 'Engineer', 'MID', 'DRAFT', 'PENDING', 0.5, 0.25, 0.25, :users)"
+    ),
+    "candidates": (
+        "INSERT INTO candidates (id, tenant_id, consent_source, consent_at, last_activity_at)"
+        " VALUES (:candidates, :t, 'RECRUITER_ATTESTED', now(), now())"
+    ),
+    "cv_documents": (
+        "INSERT INTO cv_documents (id, tenant_id, candidate_id, storage_key, file_name, mime_type,"
+        " sha256, parse_status) VALUES (:cv_documents, :t, :candidates, 'k', 'cv.pdf',"
+        " 'application/pdf', :cv_documents, 'PENDING')"
+    ),
+    "applications": (
+        "INSERT INTO applications (id, tenant_id, job_id, candidate_id, cv_document_id, source,"
+        " stage) VALUES (:applications, :t, :jobs, :candidates, :cv_documents, 'UPLOAD', 'APPLIED')"
+    ),
+    "upload_batches": (
+        "INSERT INTO upload_batches (id, tenant_id, job_id, created_by, total_count, status)"
+        " VALUES (:upload_batches, :t, :jobs, :users, 1, 'PROCESSING')"
+    ),
+    "upload_batch_items": (
+        "INSERT INTO upload_batch_items (id, tenant_id, batch_id, file_name, storage_key, status)"
+        " VALUES (:upload_batch_items, :t, :upload_batches, 'cv.pdf', 'k', 'PENDING')"
+    ),
+    "scoring_runs": (
+        "INSERT INTO scoring_runs (id, tenant_id, job_id, trigger_mode, weights, criteria_snapshot,"
+        " model, prompt_version, rubric_version, status)"
+        " VALUES (:scoring_runs, :t, :jobs, 'MANUAL', '{}', '{}', 'm', 'p', 'r', 'RUNNING')"
+    ),
+    "score_results": (
+        "INSERT INTO score_results (id, tenant_id, scoring_run_id, application_id, cv_document_id,"
+        " status) VALUES (:score_results, :t, :scoring_runs, :applications, :cv_documents,"
+        " 'PENDING')"
+    ),
+    "ai_usage_entries": (
+        "INSERT INTO ai_usage_entries (id, tenant_id, feature, model, input_tokens, output_tokens,"
+        " cached_tokens, cost_usd) VALUES (:ai_usage_entries, :t, 'SCORING', 'm', 1, 1, 0, 0.01)"
+    ),
+}
+
+
+def insert_rows(session: Session, tenant_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    ids = {name: uuid.uuid4() for name in TENANT_TABLES} | {"users": user_id}
+    for statement in TENANT_TABLES.values():
+        session.execute(text(statement), {"t": tenant_id} | ids)
+
+
+@pytest.fixture
+def tenant_with_rows(tenant: uuid.UUID) -> uuid.UUID:
+    with tenant_session(tenant) as session:
+        user_id = session.scalar(text("SELECT id FROM users"))
+        assert user_id is not None
+        insert_rows(session, tenant, user_id)
+    return tenant
+
+
+@pytest.mark.cross_tenant
+@pytest.mark.parametrize("table", TENANT_TABLES)
+def test_other_tenant_context_reads_no_rows_of(table: str, tenant_with_rows: uuid.UUID) -> None:
+    count = text(f"SELECT count(*) FROM {table}")
+    with tenant_session(tenant_with_rows) as session:
+        assert session.scalar(count) == 1
+    with tenant_session(make_tenant()) as session:
+        assert session.scalar(count) == 0
+
+
+@pytest.mark.cross_tenant
+@pytest.mark.parametrize("table", TENANT_TABLES)
+def test_other_tenant_context_cannot_write_rows_of(table: str, tenant_with_rows: uuid.UUID) -> None:
+    ids = {name: uuid.uuid4() for name in [*TENANT_TABLES, "users"]}
+    with pytest.raises(ProgrammingError) as exc, tenant_session(make_tenant()) as session:
+        session.execute(text(TENANT_TABLES[table]), {"t": tenant_with_rows} | ids)
     assert isinstance(exc.value.orig, psycopg.errors.InsufficientPrivilege)
 
 
