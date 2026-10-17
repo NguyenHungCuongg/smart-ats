@@ -1,5 +1,7 @@
 """@tenant_task and the CI check that every registered task uses it (ADR-0002, FR-C1.3)."""
 
+import subprocess
+import sys
 import uuid
 from collections.abc import Iterator
 
@@ -10,6 +12,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.db import tenant_session
+from tests.conftest import API_DIR
 from tests.test_tenancy import COUNT_USERS, insert_user, make_tenant
 
 
@@ -18,11 +21,12 @@ def worker(monkeypatch: pytest.MonkeyPatch) -> Iterator[Celery]:
     """app.worker with a throwaway broker URL (importing it needs REDIS_URL, never connects).
 
     Tasks a test registers on the shared app are dropped afterwards, so the registry check
-    below only ever sees the real ones.
+    below only ever sees the real ones. The real ones are loaded first so they are never dropped.
     """
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     from app import worker
 
+    worker.celery_app.loader.import_default_modules()
     before = set(worker.celery_app.tasks)
     yield worker.celery_app
     for name in set(worker.celery_app.tasks) - before:
@@ -37,6 +41,28 @@ def test_every_registered_task_uses_tenant_task_or_is_a_declared_exception(
     assert untenanted_tasks(worker) == []
 
 
+def test_check_loads_every_task_module_itself() -> None:
+    # A fresh interpreter: here the worker fixture and other tests have already imported them.
+    script = (
+        "from app.worker import celery_app, untenanted_tasks\n"
+        "untenanted_tasks(celery_app)\n"
+        "print(sorted(n for n in celery_app.tasks if not n.startswith(('celery.', 'demo.'))))"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", script], cwd=API_DIR, capture_output=True, text=True, check=True
+    )
+    assert out.stdout.strip() == str(
+        ["jobs.parse", "scoring_runs.score_application", "uploads.parse_cv"]
+    )
+
+
+def test_every_tenant_task_is_redelivered_if_its_worker_dies(worker: Celery) -> None:
+    for name in ("jobs.parse", "uploads.parse_cv", "scoring_runs.score_application"):
+        task = worker.tasks[name]
+        assert task.acks_late is True
+        assert task.reject_on_worker_lost is True
+
+
 def test_check_flags_a_task_registered_without_tenant_task() -> None:
     from app.worker import untenanted_tasks
 
@@ -46,6 +72,16 @@ def test_check_flags_a_task_registered_without_tenant_task() -> None:
     def plain() -> None: ...
 
     assert untenanted_tasks(app) == ["violator.plain"]
+
+
+def test_check_flags_a_task_that_claims_tenant_scope_without_tenant_task(worker: Celery) -> None:
+    from app.worker import untenanted_tasks
+
+    # tenant_scoped was the flag the check once trusted; setting it must not pass.
+    @worker.task(name="violator.self_declared", tenant_scoped=True)
+    def self_declared(tenant_id: str) -> None: ...
+
+    assert untenanted_tasks(worker) == ["violator.self_declared"]
 
 
 def test_tenant_task_requires_tenant_id_then_session(worker: Celery) -> None:
@@ -62,6 +98,17 @@ def test_tenant_task_requires_tenant_id_then_session(worker: Celery) -> None:
         def no_session(tenant_id: uuid.UUID) -> None: ...
 
 
+def test_tenant_task_refuses_bind_which_would_put_the_task_where_tenant_id_goes(
+    worker: Celery,
+) -> None:
+    from app.worker import tenant_task
+
+    with pytest.raises(TypeError, match="bind"):
+
+        @tenant_task(name="bad.bound", bind=True)
+        def bound(tenant_id: uuid.UUID, session: Session) -> None: ...
+
+
 def test_tenant_task_acks_late_and_passes_the_check(worker: Celery) -> None:
     from app.worker import tenant_task, untenanted_tasks
 
@@ -69,6 +116,16 @@ def test_tenant_task_acks_late_and_passes_the_check(worker: Celery) -> None:
     def noop(tenant_id: uuid.UUID, session: Session) -> None: ...
 
     assert noop.acks_late is True
+    assert untenanted_tasks(worker) == []
+
+
+def test_tenant_task_that_autoretries_still_passes_the_check(worker: Celery) -> None:
+    from app.worker import tenant_task, untenanted_tasks
+
+    # autoretry_for makes Celery swap task.run for a retrying wrapper.
+    @tenant_task(name="test.retrying", autoretry_for=(ValueError,))
+    def retrying(tenant_id: uuid.UUID, session: Session) -> None: ...
+
     assert untenanted_tasks(worker) == []
 
 
