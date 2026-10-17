@@ -87,7 +87,7 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; rea
 
 The end-to-end flow of Roadmap M1, on Docker Compose:
 
-1. In `.env`, set `OPENAI_API_KEY`, or for free testing `GEMINI_API_KEY` with Gemini names in `LLM_EXTRACTION_MODEL` and `LLM_REASONING_MODEL` (synthetic CVs only, see `.env.example`). Each model must have a price in `smart_ats_scoring.pricing.PRICES`, or parsing and scoring refuse to call it.
+1. In `.env`, set `OPENAI_API_KEY`, or for free testing `LLM_PROVIDER=gemini` and `GEMINI_API_KEY` with Gemini names in `LLM_EXTRACTION_MODEL` and `LLM_REASONING_MODEL` (synthetic CVs only, never in production; see `.env.example`). Each model must have a price in `smart_ats_scoring.pricing.PRICES`, or parsing and scoring refuse to call it.
 2. Start the stack and seed: `docker compose up -d --build --wait`, then `docker compose run --rm -e SEED_PASSWORD=<password> migrate python -m app.seed`.
 3. Sign in at https://localhost/login as `recruiter@demo.local`.
 4. **Create a Job:** on the home page, open "Tạo Job từ JD", upload a JD Document or paste its text. Once the parse finishes, review the criteria (fields marked "Cần kiểm tra" were not found verbatim in the JD) and press "Xác nhận criteria".
@@ -108,4 +108,4 @@ The end-to-end flow of Roadmap M1, on Docker Compose:
 
 API tests need Docker: they start their own PostgreSQL and Redis with [testcontainers](https://testcontainers.com/), PostgreSQL bootstrapped from `infra/postgres/init` and the migrations.
 
-Scoring tests fake the LLM. `packages/scoring/tests/test_openai.py` calls the real OpenAI API and is skipped unless `OPENAI_API_KEY` is set: run it with `uv run --env-file .env pytest packages/scoring`. For free testing, set `GEMINI_API_KEY` and Gemini model names instead; it wins over `OPENAI_API_KEY`.
+Scoring tests fake the LLM. `packages/scoring/tests/test_openai.py` calls the real OpenAI API and is skipped unless `OPENAI_API_KEY` is set: run it with `uv run --env-file .env pytest packages/scoring`. For free testing, set `LLM_PROVIDER=gemini`, `GEMINI_API_KEY` and Gemini model names instead; a Gemini key alone changes nothing.

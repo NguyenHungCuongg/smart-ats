@@ -9,7 +9,7 @@ from pathlib import Path
 from smart_ats_eval import dataset, harness
 from smart_ats_eval.baseline import Bm25Baseline
 from smart_ats_eval.scoring_v0 import ScoringV0
-from smart_ats_scoring.llm import has_llm_key, llm_from_env
+from smart_ats_scoring.llm import has_llm_key, llm_from_env, llm_provider
 from smart_ats_scoring.pricing import price
 
 
@@ -25,7 +25,7 @@ def configs() -> list[harness.Config]:
         extraction = llm_from_env(extraction_model)
         found.append(ScoringV0(extraction, llm_from_env(model), model))
     else:
-        print("Scoring v0 skipped: it needs OPENAI_API_KEY or GEMINI_API_KEY.", file=sys.stderr)
+        print("Scoring v0 skipped: it needs the API key of LLM_PROVIDER.", file=sys.stderr)
     return found
 
 
@@ -39,7 +39,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.runs < 1:
         parser.error("--runs must be at least 1")
-    print(harness.compare(dataset.load(args.dataset), configs(), args.split, args.runs))
+    data = dataset.load(args.dataset)
+    # Gemini's free tier trains on prompts (FR-C1.5): refuse before any call, key or not.
+    if llm_provider() == "gemini" and any(
+        cv.source != "synthetic" for job in data.jobs for cv in job.cvs
+    ):
+        sys.exit("LLM_PROVIDER=gemini takes synthetic CVs only; this dataset has real ones.")
+    print(harness.compare(data, configs(), args.split, args.runs))
 
 
 if __name__ == "__main__":

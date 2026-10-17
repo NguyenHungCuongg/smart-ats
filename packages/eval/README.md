@@ -77,6 +77,8 @@ Each metric is computed per run and per Job, then averaged.
 | Stability    | Sample standard deviation of each Application's Total across runs, averaged over Applications                                                                                                                                                                                                                                               |
 | Cost/App     | Mean `cost_usd` per Application, over the Scores that report one. Scoring v0 counts the Application's CV parse, its share of the JD parse and its scoring, priced from `smart_ats_scoring.pricing.PRICES`                                                                                                                                   |
 
+With `LLM_PROVIDER=gemini` (free testing, `.env.example`) the run exits if any CV Document is `real`: Gemini's free tier trains on prompts.
+
 The header also shows the weighted Cohen's Kappa (quadratic) between the two raters over the split, and the split's real/synthetic count. A Config's ranking orders CV Documents by Total and breaks ties by a hash of the id, so ids that follow quality give no advantage. Targets are in the plan, not here.
 
 ## Adding a Config

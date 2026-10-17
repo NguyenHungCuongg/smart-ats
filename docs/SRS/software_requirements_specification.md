@@ -554,6 +554,7 @@ Những ràng buộc mà yêu cầu ở §3–§4 phụ thuộc vào. Công ngh�
 | PostgreSQL 18 trở lên, có pgvector; một shared schema cho mọi tenant              | Forced RLS (ADR-0001), tìm kiếm vector chạy dưới cùng RLS (ADR-0005), `uuidv7()` có sẵn                                       |
 | Next.js chỉ làm frontend; FastAPI sở hữu auth và toàn bộ nghiệp vụ                | Một nơi duy nhất kiểm tra RBAC, tenant context và audit (ADR-0003)                                                            |
 | Một nhà cung cấp LLM (OpenAI); model chọn qua cấu hình, không hard-code           | Thực nghiệm so sánh được nhiều model (Config D vs D-luna); mỗi nhà cung cấp cần tinh chỉnh prompt riêng nên không có fallback |
+| Production chỉ dùng OpenAI; Gemini chỉ thử với dữ liệu tổng hợp                   | Free tier Gemini dùng dữ liệu cải thiện sản phẩm Google (FR-C1.5); bật bằng `LLM_PROVIDER=gemini`                             |
 | Không dùng thư viện giấy phép AGPL (ví dụ PyMuPDF)                                | Sản phẩm hướng tới SaaS thương mại                                                                                            |
 | Email gửi qua dịch vụ transactional (SES hoặc Resend); local dùng sandbox bắt thư | Không vận hành mail server (§6)                                                                                               |
 | Object storage tương thích S3                                                     | Cùng code cho production (S3) và local                                                                                        |
