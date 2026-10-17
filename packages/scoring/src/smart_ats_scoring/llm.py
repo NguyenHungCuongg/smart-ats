@@ -35,7 +35,7 @@ class UnusableResponse(Exception):
         self.usage = usage
 
 
-def _result(output: str | None, usage: Usage, status: str) -> LlmResult:
+def _decode(output: str | None, usage: Usage, status: str) -> LlmResult:
     if not output:
         raise UnusableResponse(f"{usage.model} returned no structured output ({status})", usage)
     try:
@@ -85,7 +85,7 @@ class OpenAiLlm:
             raise RuntimeError(f"{self.model} returned no usage ({response.status})")
         usage = response.usage
         # A refusal completes with no output text; an incomplete response is cut off.
-        return _result(
+        return _decode(
             response.output_text if response.status == "completed" else None,
             Usage(
                 response.model,
@@ -132,7 +132,7 @@ class GeminiLlm:
         usage = response.usage
         details = usage.prompt_tokens_details
         # A reply cut off at the token limit is malformed JSON.
-        return _result(
+        return _decode(
             response.choices[0].message.content,
             Usage(
                 response.model,
@@ -140,7 +140,7 @@ class GeminiLlm:
                 usage.completion_tokens,
                 (details.cached_tokens or 0) if details else 0,
             ),
-            "completed",
+            str(response.choices[0].finish_reason),
         )
 
 

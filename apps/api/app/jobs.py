@@ -248,7 +248,8 @@ async def confirm_criteria(job_id: uuid.UUID, body: CriteriaConfirmation, auth: 
 def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> None:
     """Parse the Job's JD Document into criteria for the Recruiter to confirm (FR-A1.1)."""
     # ponytail: the row lock and the transaction stay open through the LLM call (NFR-PERF-02);
-    # split into claim / call / write transactions if connections run short.
+    # split into claim / call / write transactions if connections run short. A worker that dies
+    # after the call rolls back its AI Usage Entry too, so the redelivered call bills uncounted.
     # NO KEY UPDATE: rows inserted with a foreign key to the Job (an upload into it) take
     # KEY SHARE on it, which FOR UPDATE would make wait for the whole LLM call.
     key = session.scalar(

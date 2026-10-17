@@ -29,7 +29,7 @@ def _gemini(content: str) -> GeminiLlm:
     llm.model = "gemini-test"
     response = SimpleNamespace(
         model="gemini-test",
-        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content), finish_reason="length")],
         usage=SimpleNamespace(prompt_tokens=100, completion_tokens=50, prompt_tokens_details=None),
     )
     completions = SimpleNamespace(create=lambda **_: response)
