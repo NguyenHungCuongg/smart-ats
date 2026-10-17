@@ -257,6 +257,8 @@ _Trọng số mặc định: $w_1 = 0.55$, $w_2 = 0.15$, $w_3 = 0.30$. Soft-Skil
 | **Soft-Skill Claims** | Làm việc nhóm, giao tiếp, lãnh đạo — **như CV tuyên bố** | LLM rubric, bắt buộc Evidence; nhãn UI ghi rõ "cần kiểm chứng khi phỏng vấn"                                                                              |
 | **Experience Fit**    | Số năm liên quan, quy mô dự án, domain                   | Số năm tính tất định từ mốc thời gian + LLM rubric cho mức độ liên quan                                                                                   |
 
+**Job không có must-have:** không có Must-have Coverage để tính, nên Technical Fit = 100% điểm rubric Technical (quy đổi từ thang 1–5), không lấy mặc định 60% từ Coverage.
+
 **Rubric có neo:** Mỗi trục do LLM chấm theo thang 1–5, mỗi mức có mô tả cụ thể (ví dụ Technical 5 = "đáp ứng mọi must-have với bằng chứng dự án thực tế và ≥ 2 nice-to-have"). Điểm 1–5 được quy đổi tuyến tính sang 0–100. Rubric có version (`rubric_version`).
 
 **Fit-Gap Report (bắt buộc cho mọi Score Result):**
@@ -265,7 +267,7 @@ _Trọng số mặc định: $w_1 = 0.55$, $w_2 = 0.15$, $w_3 = 0.30$. Soft-Skil
 - **Gaps** — must-have còn thiếu, có số liệu (ví dụ "yêu cầu 3 năm React, CV thể hiện 1,5 năm").
 - **Recommendations** — khả năng đào tạo bù (trainability).
 
-**Grounding:** Mọi Evidence được kiểm tra tồn tại trong văn bản gốc (khớp gần đúng). Evidence không tìm thấy → bị loại, nhận định tương ứng bị gắn cờ "không có bằng chứng". Tỷ lệ Evidence hợp lệ là một metric (Experiment 1).
+**Grounding:** Mọi Evidence được kiểm tra tồn tại trong văn bản gốc (khớp gần đúng) bằng một luật duy nhất của thư viện Scoring, cũng là luật Experiment 1 dùng để đo. Evidence rỗng, chỉ gồm stopword hoặc ngắn hơn ngưỡng tối thiểu của thư viện không được tính là bằng chứng. Evidence không tìm thấy → bị loại, nhận định tương ứng bị gắn cờ "không có bằng chứng". Tỷ lệ Evidence hợp lệ là một metric (Experiment 1).
 
 **Tái lập:** Mỗi Score Result lưu `model`, `prompt_version`, `rubric_version`, trọng số, và gọi LLM với `temperature=0` (+ seed nếu model hỗ trợ).
 

@@ -4,7 +4,7 @@ import pytest
 from test_parsing import CLOSING_TAGS, assert_sealed
 
 from smart_ats_scoring.llm import LlmResult, Usage
-from smart_ats_scoring.scoring import Weights, score
+from smart_ats_scoring.scoring import Weights, is_grounded, score
 
 USAGE = Usage(model="fake-reasoning", input_tokens=900, output_tokens=300, cached_tokens=0)
 
@@ -218,3 +218,37 @@ def test_total_is_the_weighted_sum_of_the_axis_scores_as_stored() -> None:
     assert result.technical == 22.5
     # ...and the Total is weighed from those: 0.55 x 22.5.
     assert result.total == pytest.approx(12.375)
+
+
+@pytest.mark.parametrize("quote", ["", "  ...  ", "and", "A", "và của", "The and a", "R"])
+def test_a_quote_without_content_is_never_evidence(quote: str) -> None:
+    # Empty, punctuation only, stopwords only (English or Vietnamese) or under the minimum length:
+    # each occurs in almost any document, so finding it proves nothing.
+    assert not is_grounded(quote, "R and a Python và của the")
+
+
+def test_a_quote_is_evidence_when_its_words_are_in_a_document_ignoring_case_and_spacing() -> None:
+    assert is_grounded("  XÂY dựng   REST api ", "Xây dựng REST API bằng FastAPI")
+    assert is_grounded("C#", "Kỹ năng: C#, Go")
+    assert not is_grounded("REST", "Xây dựng RESTful API")  # whole words only
+    # Any of several documents will do.
+    assert is_grounded("Kubernetes", "CV", "Yêu cầu Kubernetes")
+
+
+def test_score_drops_a_stopword_quote_even_when_the_cv_contains_it() -> None:
+    answer = _answer()
+    answer["technical"]["evidence"] = ["và", "Xây dựng REST API bằng FastAPI"]
+    answer["strengths"] = [_claim("Chung chung", "và")]
+
+    result = _score(_criteria("Python"), _profile("Python"), answer)
+
+    assert result.rubric["technical"]["evidence"] == ["Xây dựng REST API bằng FastAPI"]
+    assert result.rubric["technical"]["dropped"] == ["và"]
+    assert result.fit_gap_report["strengths"][0]["grounded"] is False
+
+
+def test_technical_fit_without_must_have_skills_is_the_rubric_alone() -> None:
+    # No must-have to cover: Technical Fit is 100% of the rubric (grade 4 -> 75), not 60 + 30.
+    result = _score(_criteria(), _profile("Python"), _answer(technical=4))
+
+    assert result.technical == 75

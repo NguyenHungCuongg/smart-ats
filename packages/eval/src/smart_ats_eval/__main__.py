@@ -10,6 +10,7 @@ from smart_ats_eval import dataset, harness
 from smart_ats_eval.baseline import Bm25Baseline
 from smart_ats_eval.scoring_v0 import ScoringV0
 from smart_ats_scoring.llm import has_llm_key, llm_from_env
+from smart_ats_scoring.pricing import price
 
 
 def configs() -> list[harness.Config]:
@@ -17,6 +18,9 @@ def configs() -> list[harness.Config]:
     found: list[harness.Config] = [Bm25Baseline()]
     if has_llm_key():
         model = os.environ["LLM_REASONING_MODEL"]
+        for name in (model, os.environ["LLM_EXTRACTION_MODEL"]):
+            if price(name) is None:  # before any call, so no spend goes unpriced
+                sys.exit(f"No price for model {name} in smart_ats_scoring.pricing.PRICES.")
         extraction = llm_from_env(os.environ["LLM_EXTRACTION_MODEL"])
         found.append(ScoringV0(extraction, llm_from_env(model), model))
     else:

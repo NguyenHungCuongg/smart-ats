@@ -27,22 +27,6 @@ def precision_at_k(ranking: Sequence[str], hr_top: Sequence[str], k: int = 5) ->
     return len(set(ranking[:k]) & set(hr_top[:k])) / k
 
 
-def _squash(text: str) -> str:
-    return " ".join(text.split())
-
-
-def grounding_rate(evidence: Sequence[tuple[str, str]]) -> float | None:
-    """Share of (quote, source text) pairs whose quote occurs verbatim in its source.
-
-    Whitespace runs count as one space, so a quote spanning a line break still matches.
-    None when there is no Evidence to check.
-    """
-    if not evidence:
-        return None
-    found = sum(_squash(quote) in _squash(source) for quote, source in evidence)
-    return found / len(evidence)
-
-
 def stability(totals: Sequence[Sequence[float]]) -> float:
     """Mean over Applications of the sample standard deviation of Total across repeated runs."""
     return statistics.fmean(statistics.stdev(runs) for runs in totals)

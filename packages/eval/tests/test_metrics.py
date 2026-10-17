@@ -38,16 +38,6 @@ def test_precision_at_5_counts_hr_top5_hits() -> None:
     assert metrics.precision_at_k(SYSTEM_RANKING, HR_TOP5) == pytest.approx(0.6)
 
 
-def test_grounding_rate_counts_verbatim_quotes_ignoring_whitespace() -> None:
-    cv = "Kinh nghiệm:\n5 năm   Python\nI led a team of 4."
-    evidence = [
-        ("5 năm Python", cv),  # line break and spaces differ: still verbatim
-        ("led a team of 4", cv),
-        ("led a team of 10", cv),  # altered quote
-    ]
-    assert metrics.grounding_rate(evidence) == pytest.approx(2 / 3)
-
-
 def test_stability_is_the_mean_per_application_standard_deviation() -> None:
     # Sample standard deviations 2 and 0.
     assert metrics.stability([[70, 72, 74], [50, 50, 50]]) == pytest.approx(1.0)

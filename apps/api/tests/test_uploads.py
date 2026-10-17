@@ -19,10 +19,11 @@ from docx import Document
 from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import text
 
-from app import events, storage, uploads, usage
+from app import events, storage, uploads
 from app.auth import _redis
 from app.db import tenant_session
 from app.main import app
+from smart_ats_scoring import pricing
 from tests.test_jobs import MALFORMED_ZIPS, FakeLlm, UnusableLlm, User, docx_bomb, make_user
 
 pytestmark = pytest.mark.usefixtures("database")
@@ -266,7 +267,7 @@ def llm(monkeypatch: pytest.MonkeyPatch) -> FakeLlm:
     monkeypatch.setenv("LLM_EXTRACTION_MODEL", "test-model")
     monkeypatch.setattr(uploads, "llm_from_env", lambda model: fake)
     monkeypatch.setitem(
-        usage.PRICES, "test-model", usage.Price(Decimal("2"), Decimal("0.5"), Decimal("8"))
+        pricing.PRICES, "test-model", pricing.Price(Decimal("2"), Decimal("0.5"), Decimal("8"))
     )
     return fake
 

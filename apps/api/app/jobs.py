@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app import events, storage, usage
 from app.auth import Auth, Authenticated
 from app.worker import tenant_task
+from smart_ats_scoring import pricing
 from smart_ats_scoring.extraction import ExtractionError, extract_text
 from smart_ats_scoring.llm import UnusableResponse, llm_from_env
 from smart_ats_scoring.parsing import parse_job
@@ -263,9 +264,9 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
         return  # redelivered (acks_late) after it finished
     model = os.environ["LLM_EXTRACTION_MODEL"]
     error = None
-    if usage.price(model) is None:
+    if pricing.price(model) is None:
         # Checked before the call: tokens the ledger cannot price must not be spent.
-        log.error("no price for model %s in app.usage.PRICES", model)
+        log.error("no price for model %s in smart_ats_scoring.pricing.PRICES", model)
         error = "UNPRICED_MODEL"
     else:
         try:

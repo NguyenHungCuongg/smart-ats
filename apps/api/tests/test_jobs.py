@@ -21,10 +21,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import events, jobs, storage, uploads, usage
+from app import events, jobs, storage, uploads
 from app.auth import _access_token, _redis
 from app.db import tenant_session
 from app.main import app
+from smart_ats_scoring import pricing
 from smart_ats_scoring.extraction import MAX_DOCX_UNZIPPED_BYTES
 from smart_ats_scoring.llm import LlmResult, UnusableResponse, Usage
 from tests.test_tenancy import make_tenant
@@ -292,7 +293,7 @@ def llm(monkeypatch: pytest.MonkeyPatch) -> FakeLlm:
     monkeypatch.setenv("LLM_EXTRACTION_MODEL", "test-model")
     monkeypatch.setattr(jobs, "llm_from_env", lambda model: fake)
     monkeypatch.setitem(
-        usage.PRICES, "test-model", usage.Price(Decimal("2"), Decimal("0.5"), Decimal("8"))
+        pricing.PRICES, "test-model", pricing.Price(Decimal("2"), Decimal("0.5"), Decimal("8"))
     )
     return fake
 

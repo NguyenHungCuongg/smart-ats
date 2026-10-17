@@ -15,10 +15,11 @@ import pytest
 from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import text
 
-from app import events, scoring_runs, storage, usage
+from app import events, scoring_runs, storage
 from app.auth import _redis
 from app.db import tenant_session
 from app.main import app
+from smart_ats_scoring import pricing
 from tests.test_jobs import FakeLlm, UnusableLlm, User, make_user
 from tests.test_uploads import PROFILE, docx
 
@@ -36,7 +37,7 @@ def jwt_secret(monkeypatch: pytest.MonkeyPatch) -> None:
 def reasoning_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_REASONING_MODEL", MODEL)
     monkeypatch.setitem(
-        usage.PRICES, MODEL, usage.Price(Decimal("2"), Decimal("0.2"), Decimal("10"))
+        pricing.PRICES, MODEL, pricing.Price(Decimal("2"), Decimal("0.2"), Decimal("10"))
     )
 
 
