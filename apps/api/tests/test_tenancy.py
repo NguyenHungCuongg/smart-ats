@@ -125,7 +125,6 @@ def test_tenant_reads_only_its_own_tenant_row(tenant: uuid.UUID) -> None:
         assert session.scalars(text("SELECT id FROM tenants")).all() == [tenant]
 
 
-@pytest.mark.cross_tenant
 def test_no_context_reads_no_tenant_row(tenant: uuid.UUID) -> None:
     with sync_engine().connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM tenants")) == 0
