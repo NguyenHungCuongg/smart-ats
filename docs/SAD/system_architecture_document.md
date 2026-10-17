@@ -112,8 +112,8 @@ Thuộc tính chất lượng theo thứ tự ưu tiên: **cô lập tenant**, *
 - Mọi bảng thuộc tenant có `tenant_id NOT NULL`, RLS `ENABLE` **và** `FORCE`, và một policy dùng `NULLIF(current_setting('app.current_tenant_id', true), '')::uuid` cho cả `USING` lẫn `WITH CHECK`.
 - Khóa ngoại giữa các bảng tenant là khóa ghép `(tenant_id, id)`, nên một dòng không thể trỏ tới dòng của tenant khác.
 - Role:
-  - `ats_owner` sở hữu bảng và chỉ dùng để chạy migration.
-  - `ats_app` dùng lúc runtime: chỉ có quyền DML, không sở hữu bảng, không có `BYPASSRLS`.
+  - `ats_owner` sở hữu bảng và chỉ dùng để chạy migration và seed demo.
+  - `ats_app` dùng lúc runtime: chỉ có quyền DML (riêng `tenants` chỉ `SELECT` dòng của tenant hiện tại), không sở hữu bảng, không có `BYPASSRLS`.
   - Không role runtime nào bỏ qua được RLS.
 
 ### 4.2. Đặt tenant context — một helper, ba điểm vào

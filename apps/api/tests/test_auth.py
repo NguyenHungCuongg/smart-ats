@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from app.db import sync_engine, tenant_session
 from app.main import app
+from tests.test_tenancy import make_tenant
 
 pytestmark = pytest.mark.usefixtures("database", "redis")
 
@@ -50,16 +51,8 @@ async def login(client: AsyncClient, email: str, password: str = PASSWORD) -> Re
 
 def make_user(*, is_active: bool = True) -> str:
     """A new Tenant with one Recruiter; returns the email."""
-    slug = f"t-{uuid.uuid4().hex}"
     email = f"{uuid.uuid4().hex}@example.com"
-    with sync_engine().begin() as conn:
-        tenant_id = conn.execute(
-            text(
-                "INSERT INTO tenants (name, slug, plan_type, ai_budget_monthly_usd, status)"
-                " VALUES (:slug, :slug, 'FREE', 10, 'ACTIVE') RETURNING id"
-            ),
-            {"slug": slug},
-        ).scalar_one()
+    tenant_id = make_tenant()
     with tenant_session(tenant_id) as session:
         session.execute(
             text(

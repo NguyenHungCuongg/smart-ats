@@ -1,10 +1,12 @@
-"""Forced RLS on tenant tables (ADR-0001, SAD §4.2, ERD §1), checked as ats_app."""
+"""Forced RLS on tenant tables (ADR-0001, SAD Ãƒâ€šÃ‚Â§4.2, ERD Ãƒâ€šÃ‚Â§1), checked as ats_app."""
 
+import os
 import uuid
+from functools import cache
 
 import psycopg
 import pytest
-from sqlalchemy import text
+from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -16,9 +18,15 @@ COUNT_USERS = text("SELECT count(*) FROM users")
 PID_AND_TENANT = text("SELECT pg_backend_pid(), current_setting('app.current_tenant_id', true)")
 
 
+@cache
+def owner_engine() -> Engine:
+    """ats_owner: ats_app cannot write tenants, so tests create them as the owner, like the seed."""
+    return create_engine(os.environ["DATABASE_MIGRATION_URL"])
+
+
 def make_tenant() -> uuid.UUID:
     slug = f"t-{uuid.uuid4().hex}"
-    with sync_engine().begin() as conn:
+    with owner_engine().begin() as conn:
         tenant_id: uuid.UUID = conn.execute(
             text(
                 "INSERT INTO tenants (name, slug, plan_type, ai_budget_monthly_usd, status)"
@@ -113,32 +121,123 @@ async def test_async_context_does_not_outlive_the_transaction(tenant: uuid.UUID)
         assert await conn.scalar(COUNT_USERS) == 0
 
 
-# Catalog checks: cover every table, including ones later migrations add.
+@pytest.mark.cross_tenant
+def test_tenant_reads_only_its_own_tenant_row(tenant: uuid.UUID) -> None:
+    make_tenant()
+    with tenant_session(tenant) as session:
+        assert session.scalars(text("SELECT id FROM tenants")).all() == [tenant]
+
+
+@pytest.mark.cross_tenant
+def test_no_context_reads_no_tenant_row(tenant: uuid.UUID) -> None:
+    with sync_engine().connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM tenants")) == 0
+
+
+@pytest.mark.cross_tenant
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "INSERT INTO tenants (name, slug, plan_type, ai_budget_monthly_usd, status)"
+        " VALUES ('x', :slug, 'FREE', 10, 'ACTIVE')",
+        "UPDATE tenants SET ai_budget_monthly_usd = 1000 WHERE id IN (:own, :other)",
+        "DELETE FROM tenants WHERE id IN (:own, :other)",
+    ],
+)
+def test_tenant_cannot_write_tenants(tenant: uuid.UUID, statement: str) -> None:
+    params = {"slug": f"t-{uuid.uuid4().hex}", "own": tenant, "other": make_tenant()}
+    with pytest.raises(ProgrammingError) as exc, tenant_session(tenant) as session:
+        session.execute(text(statement), params)
+    assert isinstance(exc.value.orig, psycopg.errors.InsufficientPrivilege)
+
+
+# Catalog checks: each query covers every table, including ones later migrations add, and
+# returns the violations, so test_catalog_checks_catch_a_violating_table can prove it works.
+
+CURRENT = "NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text)"
+STANDARD = f"(tenant_id = ({CURRENT})::uuid)"
+
+
+def rls_violations(conn: Connection) -> set[str]:
+    """Tenant tables without forced RLS and exactly the one standard policy."""
+    rows = conn.execute(
+        text(
+            "SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,"
+            "  array_agg(format('%s %s %s %s', p.polcmd, p.polpermissive,"
+            "    pg_get_expr(p.polqual, c.oid), pg_get_expr(p.polwithcheck, c.oid)))"
+            "    FILTER (WHERE p.oid IS NOT NULL)"
+            " FROM pg_class c"
+            " JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id'"
+            " LEFT JOIN pg_policy p ON p.polrelid = c.oid"
+            " WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p')"
+            " GROUP BY c.oid"
+        )
+    ).all()
+    # '*': applies to all commands; 't': permissive.
+    standard = (True, True, [f"* t {STANDARD} {STANDARD}"])
+    return {name for name, *rls in rows if tuple(rls) != standard}
+
+
+def nullable_tenant_ids(conn: Connection) -> set[str]:
+    return set(
+        conn.scalars(
+            text(
+                "SELECT c.relname FROM pg_class c"
+                " JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id'"
+                " WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p')"
+                "  AND NOT a.attnotnull"
+            )
+        )
+    )
+
+
+def single_column_tenant_fks(conn: Connection) -> set[str]:
+    """Foreign keys between two tenant tables that do not match tenant_id to tenant_id.
+
+    Referential checks skip RLS, so such a key can point at another Tenant's row (ERD Â§1).
+    """
+    return set(
+        conn.scalars(
+            text(
+                "SELECT format('%s.%s', k.conrelid::regclass, k.conname) FROM pg_constraint k"
+                " JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attname = 'tenant_id'"
+                " JOIN pg_attribute r ON r.attrelid = k.confrelid AND r.attname = 'tenant_id'"
+                " WHERE k.contype = 'f' AND k.connamespace = 'public'::regnamespace"
+                "  AND NOT EXISTS (SELECT FROM unnest(k.conkey, k.confkey) AS key (col, ref)"
+                "    WHERE (key.col, key.ref) = (a.attnum, r.attnum))"
+            )
+        )
+    )
 
 
 def test_every_tenant_table_has_forced_rls_and_one_standard_policy() -> None:
     with sync_engine().connect() as conn:
-        rows = conn.execute(
-            text(
-                "SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,"
-                "  array_agg(format('%s %s %s %s', p.polcmd, p.polpermissive,"
-                "    pg_get_expr(p.polqual, c.oid), pg_get_expr(p.polwithcheck, c.oid)))"
-                "    FILTER (WHERE p.oid IS NOT NULL)"
-                " FROM pg_class c"
-                " JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id'"
-                " LEFT JOIN pg_policy p ON p.polrelid = c.oid"
-                " WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p')"
-                " GROUP BY c.oid"
-            )
-        ).all()
+        assert rls_violations(conn) == set()
 
-    current = "NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text)"
-    standard = f"(tenant_id = ({current})::uuid)"
-    assert "users" in {row[0] for row in rows}
-    for name, enabled, forced, policies in rows:
-        assert (name, enabled, forced) == (name, True, True)
-        # '*': applies to all commands; 't': permissive.
-        assert (name, policies) == (name, [f"* t {standard} {standard}"])
+
+def test_tenant_id_is_not_null_except_for_system_admins() -> None:
+    # The one exception: a System Admin's users row has no Tenant (ERD Â§2).
+    with sync_engine().connect() as conn:
+        assert nullable_tenant_ids(conn) == {"users"}
+
+
+def test_foreign_keys_between_tenant_tables_include_tenant_id() -> None:
+    with sync_engine().connect() as conn:
+        assert single_column_tenant_fks(conn) == set()
+
+
+def test_catalog_checks_catch_a_violating_table() -> None:
+    # Never committed: the connection rolls back on exit, so no other test sees the table.
+    with owner_engine().connect() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE violation (id uuid PRIMARY KEY,"
+                " tenant_id uuid REFERENCES tenants (id), job_id uuid REFERENCES jobs (id))"
+            )
+        )
+        assert "violation" in rls_violations(conn)
+        assert "violation" in nullable_tenant_ids(conn)
+        assert single_column_tenant_fks(conn) == {"violation.violation_job_id_fkey"}
 
 
 def test_app_role_owns_nothing_and_cannot_bypass_rls() -> None:
