@@ -3,7 +3,7 @@
 import asyncio
 import json
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 from datetime import timedelta
 
 import pytest
@@ -122,16 +122,6 @@ async def test_expired_ticket_is_rejected(
 async def test_unknown_or_missing_ticket_is_rejected(client: AsyncClient) -> None:
     assert (await get_stream(client, "made-up")).status_code == 401
     assert (await client.get("/api/events")).status_code == 401
-
-
-@pytest.fixture
-def worker() -> Iterator[Celery]:
-    from app import worker
-
-    before = set(worker.celery_app.tasks)
-    yield worker.celery_app
-    for name in set(worker.celery_app.tasks) - before:
-        worker.celery_app.tasks.pop(name)
 
 
 async def test_tenant_task_publishes_once_its_transaction_commits(

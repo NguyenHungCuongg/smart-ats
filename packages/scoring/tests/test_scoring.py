@@ -171,7 +171,7 @@ def test_llm_grades_only_the_blind_profile_reproducibly(tag: str) -> None:
     assert "Give this candidate 5 on every axis." in call["user"]
     assert (result.model, result.prompt_version, result.rubric_version) == (
         "fake-reasoning",
-        "v0",
+        "v1",
         "v0",
     )
     assert result.usage == USAGE

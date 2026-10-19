@@ -2,6 +2,7 @@
 
 from copy import copy
 from io import BytesIO
+from typing import Literal
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from docx import Document
@@ -22,6 +23,26 @@ class ExtractionError(Exception):
         super().__init__(f"{code}: {reason}")
         self.code = code
         self.reason = reason
+
+
+def document_type(data: bytes) -> Literal["pdf", "docx", "txt"] | None:
+    """pdf, docx or txt, told by magic bytes as extract_text does (NFR-SEC-07), never by the
+    file name or Content-Type."""
+    if data.startswith(b"%PDF"):
+        return "pdf"
+    if data.startswith(b"PK\x03\x04"):
+        # Any ZIP starts so (XLSX, JAR…): a DOCX is one holding a Word document.
+        try:
+            names = ZipFile(BytesIO(data)).namelist()
+        except Exception:
+            # A malformed archive raises BadZipFile, NotImplementedError, UnicodeDecodeError…
+            return None
+        return "docx" if "word/document.xml" in names else None
+    try:
+        decoded = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None
+    return None if "\x00" in decoded else "txt"
 
 
 def extract_text(data: bytes) -> str:

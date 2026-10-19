@@ -14,13 +14,12 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import events, storage, usage
+from app import events, outbox, storage, usage
 from app.jobs import Recruiter, Weights
 from app.worker import tenant_task
-from smart_ats_scoring import pricing
 from smart_ats_scoring.extraction import ExtractionError, extract_text
 from smart_ats_scoring.llm import UnusableResponse, llm_from_env
 from smart_ats_scoring.scoring import PROMPT_VERSION, RUBRIC_VERSION, score
@@ -102,8 +101,8 @@ async def create(job_id: uuid.UUID, auth: Recruiter) -> RunCreated:
     if checks.running:
         raise HTTPException(status.HTTP_409_CONFLICT, "The Job is already being scored")
     model = os.environ["LLM_REASONING_MODEL"]
-    if pricing.price(model) is None:
-        # Tokens the ledger cannot price must not be spent: a server configuration error.
+    if not usage.priced(model):
+        # A server configuration error.
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "The AI model has no price in the ledger"
         )
@@ -142,12 +141,11 @@ async def create(job_id: uuid.UUID, auth: Recruiter) -> RunCreated:
         )
     ).all()
 
-    def enqueue(_: Any) -> None:
-        for application_id in application_ids:
-            score_application.delay(str(auth.tenant_id), str(run_id), str(application_id))
-
-    # After commit (SAD §5.1): a task sent earlier could run before its row is visible.
-    event.listen(auth.db.sync_session, "after_commit", enqueue, once=True)
+    outbox.enqueue_after_commit(
+        auth.db,
+        score_application,
+        *[(str(auth.tenant_id), str(run_id), str(id)) for id in application_ids],
+    )
     return RunCreated(run_id=run_id)
 
 
@@ -294,18 +292,15 @@ def _finished(
     application_id: str,
     status: Literal["SCORED", "FAILED"],
 ) -> None:
-    # Tasks finishing together each lock the run first, so the last one to commit sees every
-    # other row done and finishes it (counts come from the rows, SAD §5.1).
-    session.execute(text("SELECT 1 FROM scoring_runs WHERE id = :id FOR UPDATE"), {"id": run_id})
-    session.execute(
-        text(
-            "UPDATE scoring_runs SET completed_at = now(), status = CASE WHEN EXISTS ("
-            "  SELECT 1 FROM score_results WHERE scoring_run_id = :id AND status = 'FAILED')"
-            "  THEN 'PARTIAL' ELSE 'COMPLETED' END"
-            " WHERE id = :id AND NOT EXISTS ("
-            "  SELECT 1 FROM score_results WHERE scoring_run_id = :id AND status = 'PENDING')"
-        ),
-        {"id": run_id},
+    outbox.complete_parent(
+        session,
+        "scoring_runs",
+        run_id,
+        "score_results",
+        "scoring_run_id",
+        "completed_at = now(), status = CASE WHEN EXISTS ("
+        "  SELECT 1 FROM score_results WHERE scoring_run_id = :id AND status = 'FAILED')"
+        "  THEN 'PARTIAL' ELSE 'COMPLETED' END",
     )
     events.publish(
         session,

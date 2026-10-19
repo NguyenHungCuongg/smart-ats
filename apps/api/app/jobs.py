@@ -6,12 +6,10 @@ Scoring takes only Jobs whose criteria a Recruiter has confirmed (criteria_confi
 """
 
 import asyncio
-import io
 import json
 import logging
 import os
 import uuid
-import zipfile
 from datetime import datetime
 from decimal import Decimal
 from pathlib import PurePath
@@ -19,15 +17,14 @@ from typing import Annotated, Any, Literal, Self
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app import events, storage, usage
+from app import events, outbox, storage, usage
 from app.auth import Auth, Authenticated
 from app.worker import tenant_task
-from smart_ats_scoring import pricing
-from smart_ats_scoring.extraction import ExtractionError, extract_text
+from smart_ats_scoring.extraction import ExtractionError, document_type, extract_text
 from smart_ats_scoring.llm import UnusableResponse, llm_from_env
 from smart_ats_scoring.parsing import parse_job
 
@@ -113,26 +110,6 @@ class CriteriaConfirmation(BaseModel):
     weights: Weights
 
 
-def _document_type(data: bytes) -> str | None:
-    """pdf, docx or txt, told by magic bytes as extract_text does (NFR-SEC-07), never by the
-    file name or Content-Type."""
-    if data.startswith(b"%PDF"):
-        return "pdf"
-    if data.startswith(b"PK\x03\x04"):
-        # Any ZIP starts so (XLSX, JAR…): a DOCX is one holding a Word document.
-        try:
-            names = zipfile.ZipFile(io.BytesIO(data)).namelist()
-        except Exception:
-            # A malformed archive raises BadZipFile, NotImplementedError, UnicodeDecodeError…
-            return None
-        return "docx" if "word/document.xml" in names else None
-    try:
-        decoded = data.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        return None
-    return None if "\x00" in decoded else "txt"
-
-
 def _placeholder_title(name: str) -> str:
     return name.strip()[:200] or "JD"
 
@@ -157,15 +134,15 @@ async def create(
         )
     if len(data) > MAX_DOCUMENT_BYTES:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "The JD Document exceeds 10 MB")
-    document_type = _document_type(data)
-    if document_type is None:
+    kind = document_type(data)
+    if kind is None:
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "The JD Document must be PDF, DOCX or text"
         )
 
     # Pasted text is stored too, so the task reads every JD the same way.
     # ponytail: an object stays behind if the insert below fails; a sweep can collect those.
-    key = f"t/{auth.tenant_id}/jd/{uuid.uuid4()}.{document_type}"
+    key = f"t/{auth.tenant_id}/jd/{uuid.uuid4()}.{kind}"
     await asyncio.to_thread(storage.put, key, data)
     job_id: uuid.UUID = (
         await auth.db.execute(
@@ -180,12 +157,8 @@ async def create(
             {"tenant_id": auth.tenant_id, "title": title, "key": key, "user_id": auth.user_id},
         )
     ).scalar_one()
-    # After commit (SAD §5.1): a task sent earlier could run before its Job is visible.
-    event.listen(
-        auth.db.sync_session,
-        "after_commit",
-        lambda _: parse.delay(str(auth.tenant_id), str(job_id), str(auth.user_id)),
-        once=True,
+    outbox.enqueue_after_commit(
+        auth.db, parse, (str(auth.tenant_id), str(job_id), str(auth.user_id))
     )
     return JobCreated(id=job_id)
 
@@ -265,9 +238,7 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
         return  # redelivered (acks_late) after it finished
     model = os.environ["LLM_EXTRACTION_MODEL"]
     error = None
-    if pricing.price(model) is None:
-        # Checked before the call: tokens the ledger cannot price must not be spent.
-        log.error("no price for model %s in smart_ats_scoring.pricing.PRICES", model)
+    if not usage.priced(model):
         error = "UNPRICED_MODEL"
     else:
         try:

@@ -17,15 +17,15 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app import events, storage, usage
-from app.jobs import MAX_DOCUMENT_BYTES, Recruiter, _document_type
+from app import events, outbox, storage, usage
+from app.jobs import MAX_DOCUMENT_BYTES, Recruiter
 from app.worker import tenant_task
-from smart_ats_scoring import parsing, pricing
-from smart_ats_scoring.extraction import ExtractionError, extract_text
+from smart_ats_scoring import parsing
+from smart_ats_scoring.extraction import ExtractionError, document_type, extract_text
 from smart_ats_scoring.llm import UnusableResponse, llm_from_env
 
 log = logging.getLogger(__name__)
@@ -93,12 +93,12 @@ async def create(
     data = await file.read(MAX_DOCUMENT_BYTES + 1)
     if len(data) > MAX_DOCUMENT_BYTES:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "The CV exceeds 10 MB")
-    document_type = _document_type(data)
-    if document_type not in MIME_TYPES:
+    kind = document_type(data)
+    if kind not in MIME_TYPES:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "The CV must be PDF or DOCX")
 
     # ponytail: an object stays behind if the inserts below fail; a sweep can collect those.
-    key = f"t/{auth.tenant_id}/cv/{uuid.uuid4()}.{document_type}"
+    key = f"t/{auth.tenant_id}/cv/{uuid.uuid4()}.{kind}"
     await asyncio.to_thread(storage.put, key, data)
     batch_id: uuid.UUID = (
         await auth.db.execute(
@@ -125,13 +125,7 @@ async def create(
             },
         )
     ).scalar_one()
-    # After commit (SAD §5.1): a task sent earlier could run before its item is visible.
-    event.listen(
-        auth.db.sync_session,
-        "after_commit",
-        lambda _: parse_cv.delay(str(auth.tenant_id), str(item_id)),
-        once=True,
-    )
+    outbox.enqueue_after_commit(auth.db, parse_cv, (str(auth.tenant_id), str(item_id)))
     return UploadCreated(batch_id=batch_id, item_id=item_id)
 
 
@@ -294,9 +288,7 @@ def _parse(session: Session, item: Any, data: bytes) -> parsing.Parsed | tuple[s
     except ExtractionError as e:
         return e.code, e.reason
     model = os.environ["LLM_EXTRACTION_MODEL"]
-    if pricing.price(model) is None:
-        # Checked before the call: tokens the ledger cannot price must not be spent.
-        log.error("no price for model %s in smart_ats_scoring.pricing.PRICES", model)
+    if not usage.priced(model):
         return "UNPRICED_MODEL", "the AI model has no price in the AI Usage Ledger"
     try:
         return parsing.parse_cv(cv_text, llm_from_env(model))
@@ -334,18 +326,13 @@ def finish_item(
             "message": message,
         },
     )
-    # Items finishing together each lock the batch first, so the last one to commit sees
-    # every other item done and completes it (counts come from the items, SAD §5.1).
-    session.execute(
-        text("SELECT 1 FROM upload_batches WHERE id = :id FOR UPDATE"), {"id": item.batch_id}
-    )
-    session.execute(
-        text(
-            "UPDATE upload_batches SET status = 'COMPLETED', completed_at = now()"
-            " WHERE id = :id AND NOT EXISTS ("
-            "  SELECT 1 FROM upload_batch_items WHERE batch_id = :id AND status = 'PENDING')"
-        ),
-        {"id": item.batch_id},
+    outbox.complete_parent(
+        session,
+        "upload_batches",
+        item.batch_id,
+        "upload_batch_items",
+        "batch_id",
+        "status = 'COMPLETED', completed_at = now()",
     )
     events.publish(
         session,

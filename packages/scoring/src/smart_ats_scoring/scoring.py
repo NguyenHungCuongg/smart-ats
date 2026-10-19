@@ -6,10 +6,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from smart_ats_scoring.llm import Llm, Usage
+from smart_ats_scoring.llm import Llm, UnusableResponse, Usage
 from smart_ats_scoring.parsing import _list, _obj, _untrusted, _words, blind_profile
 
-PROMPT_VERSION = "v0"
+# v1: the schema asks for at least one item in every part of the Fit-Gap Report.
+PROMPT_VERSION = "v1"
 RUBRIC_VERSION = "v0"
 
 # Canonical skill -> other ways CVs and JDs write it, compared after `_words`.
@@ -142,13 +143,13 @@ _AXIS = _obj(
     grade={"type": "integer", "enum": [1, 2, 3, 4, 5]},
 )
 _CLAIM = _obj(text={"type": "string"}, evidence=_list({"type": "string"}))
+_REPORT_PARTS = ("strengths", "gaps", "recommendations")
 SCORE_SCHEMA = _obj(
     technical=_AXIS,
     soft_skills=_AXIS,
     experience=_AXIS,
-    strengths=_list(_CLAIM),
-    gaps=_list(_CLAIM),
-    recommendations=_list(_CLAIM),
+    # FR-A1.3: every Score Result has all three parts of the Fit-Gap Report.
+    **{part: _list(_CLAIM) | {"minItems": 1} for part in _REPORT_PARTS},
 )
 
 _PROMPT = """\
@@ -259,6 +260,9 @@ def score(
         SCORE_SCHEMA,
         temperature=0,
     )
+    # A provider that does not enforce minItems can still leave a part out.
+    if empty := [part for part in _REPORT_PARTS if not result.data[part]]:
+        raise UnusableResponse(f"the Fit-Gap Report has no {', '.join(empty)}", result.usage)
     cv = f" {_words(cv_text)} "
     cv_and_jd = f"{cv}{_words(jd_text)} "
     rubric = {
@@ -266,7 +270,7 @@ def score(
     }
     report = {
         part: [_ground(claim, cv_and_jd if part == "gaps" else cv) for claim in result.data[part]]
-        for part in ("strengths", "gaps", "recommendations")
+        for part in _REPORT_PARTS
     }
     # FR-A1.3 axis table: Technical Fit is 60% Must-have Coverage and 40% rubric, or the rubric
     # alone when the Job has no must-have skill. Rounded to the 2 decimals stored, so the Total
