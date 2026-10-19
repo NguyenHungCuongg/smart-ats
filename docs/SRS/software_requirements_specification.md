@@ -5,8 +5,8 @@
 ### Smart ATS — Software Requirements Specification (SRS)
 
 > **Mã tài liệu / Document ID**: UIT-KHOALUAN-SRS-2026-V3
-> **Phiên bản / Version**: 3.2 — Tái cấu trúc tài liệu
-> **Ngày ban hành / Date**: 2026-10-08
+> **Phiên bản / Version**: 3.3 — Hạ Google và giao diện tiếng Anh xuống P2
+> **Ngày ban hành / Date**: 2026-10-19
 > **Tác giả / Author**: Nhóm nghiên cứu Đồ án Tốt nghiệp
 > **Giảng viên hướng dẫn / Advisor**: [Tên GVHD]
 > **Đơn vị / Institution**: Khoa Kỹ thuật Phần mềm / Hệ thống Thông tin — Đại học Công nghệ Thông tin, ĐHQG TP.HCM (UIT)
@@ -20,6 +20,7 @@
 > - v3.0 (2026-09-25): Chuyển sang ATS thuần, loại bỏ Side B, loại bỏ Offer/Contract Generator, refine Agent, Multi-Tenant bằng PostgreSQL RLS
 > - v3.1 (2026-09-28): Đồng bộ PRD/SAD/ERD; sửa RBAC mâu thuẫn; bổ sung thực thể `Application`; sửa thiết kế RLS (FORCE RLS, worker tenant context, pre-auth lookup); Checkpoint bền vững bằng LangGraph interrupt; phương pháp chấm điểm lai (deterministic + rubric); thêm Public Apply Link, gửi email thật, Talent Rediscovery, AI Usage Ledger, bảo vệ dữ liệu cá nhân; sửa thực nghiệm; roadmap 26 tuần; cập nhật tech stack (tra cứu 2026-09-28)
 > - **v3.2 (2026-10-08)**: Tái cấu trúc, không đổi yêu cầu. Bối cảnh, định vị và quyết định phạm vi chuyển sang PRD; phân loại, đóng góp và thực nghiệm chuyển sang Kế hoạch Thực nghiệm; lộ trình, phân công và rủi ro chuyển sang Roadmap; tech stack và hạ tầng chuyển sang SAD; thêm mục Ràng buộc Thiết kế; mỗi con số chỉ định nghĩa ở một chỗ; NFR-REL-05 không còn quy định đường dẫn endpoint; đổi tên file thành `software_requirements_specification.md`
+> - **v3.3 (2026-10-19)**: Chỉ còn một thành viên làm nên cắt sớm theo Roadmap §5: đăng nhập Google (FR-C1.1) và giao diện Tiếng Anh (NFR-USE-03) hạ xuống P2; xử lý CV/JD song ngữ giữ P1
 
 ---
 
@@ -413,7 +414,7 @@ Ghi nhận (append-only): tạo/nhận Application, chạy parsing/scoring, đ�
 
 #### `FR-C1.1` [P1] Xác thực
 
-- Email + mật khẩu (Argon2id); OAuth2 Google.
+- Email + mật khẩu (Argon2id); OAuth2 Google — P2.
 - Access Token 15 phút (giữ trong bộ nhớ trình duyệt); Refresh Token 7 ngày, rotate mỗi lần dùng, phát hiện dùng lại theo token family → thu hồi cả family; lưu dạng hash trong DB; cookie `HttpOnly; Secure; SameSite=Strict`.
 - Khóa tạm 15 phút sau 5 lần đăng nhập sai liên tiếp (theo tài khoản và theo IP).
 - Đăng xuất = thu hồi refresh token family.
@@ -540,7 +541,7 @@ Toàn bộ nội dung từ file là **untrusted input**:
 | -------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | **NFR-USE-01** | Onboarding          | Recruiter mới hoàn thành lần chấm điểm đầu tiên (từ tạo Job tới xem Fit-Gap) ≤ 5 phút trong usability test với ≥ 5 người |
 | **NFR-USE-02** | Phản hồi trạng thái | Tác vụ > 3 giây có progress (% hoặc x/y)                                                                                 |
-| **NFR-USE-03** | Ngôn ngữ            | Giao diện Tiếng Việt (mặc định) và Tiếng Anh; xử lý CV/JD tiếng Việt và tiếng Anh                                        |
+| **NFR-USE-03** | Ngôn ngữ            | Giao diện Tiếng Việt (mặc định) và Tiếng Anh (P2); xử lý CV/JD tiếng Việt và tiếng Anh                                   |
 | **NFR-USE-04** | Trình duyệt         | 2 phiên bản mới nhất của Chrome, Edge, Firefox, Safari; trang Public Apply dùng được trên di động                        |
 
 ---
