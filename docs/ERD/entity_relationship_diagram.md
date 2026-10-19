@@ -70,17 +70,17 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 
 ### `refresh_tokens` — RLS
 
-| Cột            | Kiểu                     | Ghi chú                                           |
-| -------------- | ------------------------ | ------------------------------------------------- |
-| id             | uuid PK                  |                                                   |
-| tenant_id      | uuid NN                  |                                                   |
-| user_id        | uuid FK → users NN       |                                                   |
-| family_id      | uuid NN                  | dùng lại một token đã rotate sẽ thu hồi cả family |
-| token_hash     | text UQ NN               | SHA-256 của token                                 |
-| expires_at     | timestamptz NN           |                                                   |
-| revoked_at     | timestamptz              |                                                   |
-| replaced_by_id | uuid FK → refresh_tokens |                                                   |
-| created_at     | timestamptz NN           |                                                   |
+| Cột            | Kiểu                     | Ghi chú                                            |
+| -------------- | ------------------------ | -------------------------------------------------- |
+| id             | uuid PK                  |                                                    |
+| tenant_id      | uuid NN                  |                                                    |
+| user_id        | uuid FK → users NN       |                                                    |
+| family_id      | uuid NN                  | dùng lại một token đã rotate sẽ thu hồi cả family  |
+| token_hash     | text UQ NN               | SHA-256 của token                                  |
+| expires_at     | timestamptz NN           | chung cả family: rotate chép từ token cũ (FR-C1.1) |
+| revoked_at     | timestamptz              |                                                    |
+| replaced_by_id | uuid FK → refresh_tokens |                                                    |
+| created_at     | timestamptz NN           |                                                    |
 
 > Refresh token của System Admin lưu trong `platform_refresh_tokens` (cùng cấu trúc, không có `tenant_id`, không RLS).
 

@@ -71,6 +71,33 @@ test("concurrent requests share one refresh: a second would replay a rotated tok
   expect(api.calls.filter((c) => c === "POST /api/auth/refresh")).toHaveLength(1);
 });
 
+test("login reports an unreachable API as status 0", async () => {
+  api.fetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+  expect(await auth.login("a@b.c", "pw")).toBe(0);
+});
+
+test("logout waits for a refresh in flight, so the cookie it revokes is the newest", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const route = api.fetch.getMockImplementation()!;
+  api.fetch.mockImplementation(async (url: string, init: RequestInit = {}) => {
+    const response = route(url, init);
+    if (`${init.method} ${url}` === "POST /api/auth/refresh") await held;
+    return response;
+  });
+  const request = auth.apiFetch("/api/auth/me");
+  await vi.waitFor(() => expect(api.calls).toContain("POST /api/auth/refresh"));
+
+  const loggedOut = auth.logout();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(api.calls).not.toContain("DELETE /api/auth/refresh");
+  release();
+  await Promise.all([request, loggedOut]);
+
+  expect(api.calls).toContain("DELETE /api/auth/refresh");
+});
+
 test("when refresh fails, the caller gets the 401", async () => {
   api.fetch.mockImplementation(async () => new Response(null, { status: 401 }));
 

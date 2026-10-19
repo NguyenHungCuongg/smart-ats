@@ -9,14 +9,19 @@ type Me = { email: string; full_name: string; role: string };
 /** The signed-in user with a logout button; sends anyone signed out to /login. */
 export function Session() {
   const [me, setMe] = useState<Me | null>(null);
+  const [offline, setOffline] = useState(false);
 
   useEffect(() => {
-    apiFetch("/api/auth/me").then(async (response) => {
-      if (response.ok) setMe(await response.json());
-      else window.location.replace("/login");
-    });
+    apiFetch("/api/auth/me").then(
+      async (response) => {
+        if (response.ok) setMe(await response.json());
+        else window.location.replace("/login");
+      },
+      () => setOffline(true),
+    );
   }, []);
 
+  if (offline) return <p role="alert">Không kết nối được máy chủ. Tải lại trang để thử lại.</p>;
   if (!me) return null;
   return (
     <div className="flex items-center gap-3">

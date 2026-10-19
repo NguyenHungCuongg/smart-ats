@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
 import { login } from "../auth";
+import { loginError } from "./messages";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,8 +18,7 @@ export default function LoginPage() {
     const status = await login(String(form.get("email")), String(form.get("password")));
     setPending(false);
     if (status === 200) router.replace("/");
-    else if (status === 429) setError("Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau.");
-    else setError("Email hoặc mật khẩu không đúng.");
+    else setError(loginError(status));
   }
 
   return (
