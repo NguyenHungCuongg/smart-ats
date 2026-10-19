@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
+import { Badge } from "../../badge";
 import { useProgressEvents } from "../../events";
 import type { Job } from "../criteria";
 import {
@@ -89,8 +90,8 @@ export function Scoring({ job, applications }: { job: Job; applications: number 
 
   const blocker = scoreBlocker(job, applications, run);
   return (
-    <section className="flex flex-col gap-4 border-t border-[#e5e7eb] pt-6">
-      <h2 className="text-2xl font-medium">Chấm điểm</h2>
+    <section className="flex flex-col gap-4 border-t border-hairline-cloud pt-6">
+      <h2 className="heading-display text-2xl font-semibold">Chấm điểm</h2>
       {run && (
         <p className="text-sm">
           Lần chấm gần nhất: {new Date(run.created_at).toLocaleString("vi-VN")} ·{" "}
@@ -109,7 +110,7 @@ export function Scoring({ job, applications }: { job: Job; applications: number 
         type="button"
         onClick={onStart}
         disabled={pending || blocker !== null}
-        className="self-start rounded-lg border border-[#1f1633] px-4 py-3 text-sm font-medium tracking-[0.2px] uppercase disabled:border-[#e5e7eb] disabled:bg-[#e5e7eb] disabled:text-[rgba(255,255,255,0.72)]"
+        className="self-start button-outline"
       >
         {run ? "Chấm lại" : "Chấm điểm"}
       </button>
@@ -131,7 +132,7 @@ function Result({ result }: { result: ScoreResult }) {
   const report = result.fit_gap_report;
   const detail = result.must_have_detail;
   return (
-    <article className="flex flex-col gap-4 rounded-xl border border-[#e5e7eb] bg-white p-6">
+    <article className="flex flex-col gap-4 rounded-xl border border-hairline-cloud bg-surface-canvas-light p-6">
       <header className="flex flex-wrap items-center gap-3">
         <h3 className="text-xl font-semibold">{result.full_name ?? "Ứng viên"}</h3>
         {result.cv_document_id !== result.current_cv_document_id && (
@@ -230,18 +231,10 @@ function Item({ claim, children }: { claim: Claim; children: ReactNode }) {
         {!claim.grounded && <Badge>Không có bằng chứng</Badge>}
       </span>
       {claim.evidence.map((quote, i) => (
-        <q key={i} className="border-l-2 border-[#e5e7eb] pl-3 italic">
+        <q key={i} className="border-l-2 border-hairline-cloud pl-3 italic">
           {quote}
         </q>
       ))}
     </li>
-  );
-}
-
-function Badge({ children }: { children: string }) {
-  return (
-    <span className="self-start rounded bg-[#150f23] px-2 text-[10px] font-semibold tracking-[0.25px] whitespace-nowrap text-white uppercase">
-      {children}
-    </span>
   );
 }

@@ -20,7 +20,7 @@ All UI implementation in `apps/web` must strictly adhere to [`DESIGN.md`](../../
   - Secondary: Hot Pink (`#fa7faa` / `{colors.accent-pink}`), Deep Violet (`#422082`), Hairline Violet (`#362d59`), Hairline Cloud (`#e5e7eb`).
 - **Typography Architecture**:
   - Display / Headlines: **Archivo** (Semi-Condensed, bold/black weights 600–900).
-  - UI / Body / Buttons / Form labels: **Rubik** (Google Fonts).
+  - UI / Body / Buttons / Form labels: **Be Vietnam Pro** (Google Fonts).
   - Code blocks / Monospace / Token chips: **JetBrains Mono**.
   - All button labels and eyebrows run in uppercase with `tracking-[0.2px]`.
 - **Dark Mode & Contrast Invariance (CRITICAL)**:

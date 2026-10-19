@@ -22,7 +22,11 @@ export function Session() {
   }, []);
 
   if (offline) return <p role="alert">Không kết nối được máy chủ. Tải lại trang để thử lại.</p>;
-  if (!me) return null;
+  if (!me) {
+    return (
+      <div aria-busy="true" className="h-11 w-72 animate-pulse rounded-md bg-hairline-cloud" />
+    );
+  }
   return (
     <div className="flex items-center gap-3">
       <span>
@@ -34,7 +38,7 @@ export function Session() {
           await logout();
           window.location.replace("/login");
         }}
-        className="border px-2 py-1"
+        className="button-outline"
       >
         Đăng xuất
       </button>

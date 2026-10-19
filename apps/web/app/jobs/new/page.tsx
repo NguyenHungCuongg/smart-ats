@@ -36,32 +36,19 @@ export default function NewJobPage() {
   }
 
   return (
-    <main className="min-h-screen bg-white text-[#1f1633]">
+    <main className="min-h-screen">
       <form onSubmit={onSubmit} className="mx-auto flex max-w-2xl flex-col gap-4 p-6">
-        <h1 className="text-3xl font-semibold">Tạo Job từ JD</h1>
+        <h1 className="heading-display text-3xl font-semibold">Tạo Job từ JD</h1>
         <label className="flex flex-col gap-1">
           <span className="font-medium">File JD (PDF, DOCX, TXT, tối đa 10 MB)</span>
-          <input
-            name="file"
-            type="file"
-            accept=".pdf,.docx,.txt"
-            className="rounded-md border border-[#cfcfdb] px-3 py-2"
-          />
+          <input name="file" type="file" accept=".pdf,.docx,.txt" className="text-input" />
         </label>
         <label className="flex flex-col gap-1">
           <span className="font-medium">Hoặc dán nội dung JD</span>
-          <textarea
-            name="text"
-            rows={12}
-            className="rounded-md border border-[#cfcfdb] px-3 py-2 focus:ring-2 focus:ring-[rgba(59,130,246,0.5)] focus:outline-none"
-          />
+          <textarea name="text" rows={12} className="text-input" />
         </label>
         {error && <p role="alert">{error}</p>}
-        <button
-          type="submit"
-          disabled={pending}
-          className="self-start rounded-lg bg-[#150f23] px-4 py-3 text-sm font-bold tracking-[0.2px] text-white uppercase disabled:bg-[#e5e7eb] disabled:text-[rgba(255,255,255,0.72)]"
-        >
+        <button type="submit" disabled={pending} className="self-start button-primary">
           Tạo Job
         </button>
       </form>

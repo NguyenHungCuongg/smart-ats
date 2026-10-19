@@ -16,7 +16,7 @@ When creating, editing, or reviewing any frontend, web, UI, or styling code in `
    - Accents & Hairlines: Deep Violet (`#422082`), Mid Violet (`#79628c`), Hairline Violet (`#362d59`), Hairline Cloud (`#e5e7eb`)
 3. **Typography Architecture:**
    - Display / Headlines: **Archivo** (Semi-Condensed, bold/black weights 600–900).
-   - UI / Body / Buttons / Form labels: **Rubik** (Google Fonts).
+   - UI / Body / Buttons / Form labels: **Be Vietnam Pro** (Google Fonts).
    - Code blocks / Monospace / Token chips: **JetBrains Mono**.
    - Buttons and eyebrows must run uppercase with `tracking-[0.2px]`.
 4. **Dark Mode & Contrast Invariance (CRITICAL):**
