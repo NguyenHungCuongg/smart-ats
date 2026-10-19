@@ -178,7 +178,7 @@ async def test_starting_a_run_freezes_the_job_and_enqueues_each_application(
         "running": True,
         "weights": {"technical": 55, "soft_skills": 15, "experience": 30},
         "model": MODEL,
-        "prompt_version": "v0",
+        "prompt_version": "v1",
         "rubric_version": "v0",
         "created_at": None,
         "completed_at": None,
@@ -603,3 +603,29 @@ async def test_latest_shows_the_newest_run_and_whether_the_cv_changed_since(
     [result] = run["results"]
     assert result["cv_document_id"] == application["cv_document_id"]
     assert result["current_cv_document_id"] == other["cv_document_id"]
+
+
+@pytest.mark.usefixtures("redis", "application")
+@pytest.mark.parametrize("part", ["strengths", "gaps", "recommendations"])
+async def test_report_missing_a_fit_gap_part_fails_the_result_and_is_billed(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    enqueued: list[tuple[str, ...]],
+    monkeypatch: pytest.MonkeyPatch,
+    part: str,
+) -> None:
+    # FR-A1.3: every Score Result has all three parts of the Fit-Gap Report.
+    fake = FakeLlm(SCORED | {part: []}, MODEL)
+    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model: fake)
+    await start(client, recruiter, job)
+
+    run_scoring(enqueued)
+
+    [result] = (await latest(client, recruiter, job)).json()["results"]
+    assert (result["status"], result["error_code"], result["fit_gap_report"]) == (
+        "FAILED",
+        "SCORING_FAILED",
+        None,
+    )
+    assert len(query(recruiter, "SELECT id FROM ai_usage_entries")) == 1

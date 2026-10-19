@@ -7,15 +7,13 @@ is running holds its row locked however long it runs, so the sweep skips the row
 """
 
 import uuid
-from collections.abc import Callable
 from datetime import timedelta
-from functools import partial
 from typing import Any
 
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import jobs, scoring_runs, uploads
+from app import jobs, outbox, scoring_runs, uploads
 from app.db import sync_engine
 from app.worker import celery_app, tenant_task
 
@@ -40,8 +38,8 @@ def stuck_rows() -> None:
 def tenant(tenant_id: uuid.UUID, session: Session) -> None:
     """Enqueue again or fail the Tenant's stuck Job parses, upload items and score results."""
     tid = str(tenant_id)
-    sends: list[Callable[[], Any]] = []
 
+    parses = []
     for job in _stuck(
         session,
         "jobs",
@@ -54,8 +52,10 @@ def tenant(tenant_id: uuid.UUID, session: Session) -> None:
         if job.attempts >= MAX_ATTEMPTS:
             jobs.fail_parse(session, job.id, job.created_by, "STUCK")
         else:
-            sends.append(partial(jobs.parse.delay, tid, str(job.id), str(job.created_by)))
+            parses.append((tid, str(job.id), str(job.created_by)))
+    outbox.enqueue_after_commit(session, jobs.parse, *parses)
 
+    items = []
     for item in _stuck(
         session,
         "upload_batch_items",
@@ -71,8 +71,10 @@ def tenant(tenant_id: uuid.UUID, session: Session) -> None:
                 session, item, "FAILED", error=("STUCK", "the CV was never processed")
             )
         else:
-            sends.append(partial(uploads.parse_cv.delay, tid, str(item.id)))
+            items.append((tid, str(item.id)))
+    outbox.enqueue_after_commit(session, uploads.parse_cv, *items)
 
+    results = []
     for result in _stuck(
         session,
         "score_results",
@@ -90,10 +92,8 @@ def tenant(tenant_id: uuid.UUID, session: Session) -> None:
                 session, result.id, result.created_by, result.job_id, *args, "STUCK"
             )
         else:
-            sends.append(partial(scoring_runs.score_application.delay, tid, *args))
-
-    # After commit (SAD §5.1), as the API enqueues.
-    event.listen(session, "after_commit", lambda _: [send() for send in sends], once=True)
+            results.append((tid, *args))
+    outbox.enqueue_after_commit(session, scoring_runs.score_application, *results)
 
 
 def _stuck(session: Session, table: str, attempts: str, enqueued_at: str, select: str) -> Any:

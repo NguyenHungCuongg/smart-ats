@@ -36,13 +36,15 @@ PROFILE: dict[str, Any] = {
 }
 # Each axis quotes the CV once ("Python"), then a stopword the CV also contains and an invention.
 AXIS = {"evidence": ["Python", "and", "không có trong tài liệu"], "reason": "r", "grade": 3}
+# Report items quote nothing, so only the axes count toward Grounding.
+CLAIM = {"text": "t", "evidence": []}
 ANSWER: dict[str, Any] = {
     "technical": AXIS,
     "soft_skills": AXIS,
     "experience": AXIS,
-    "strengths": [],
-    "gaps": [],
-    "recommendations": [],
+    "strengths": [CLAIM],
+    "gaps": [CLAIM],
+    "recommendations": [CLAIM],
 }
 
 
@@ -90,7 +92,7 @@ def test_scoring_v0_row_reports_versions_grounding_by_the_library_rule_and_cost(
 
     row = next(line for line in table.splitlines() if line.startswith("| Scoring v0 "))
     cells = [cell.strip() for cell in row.strip("|").split("|")]
-    assert cells[1:4] == ["fake-model", "v0", "v0"]
+    assert cells[1:4] == ["fake-model", "v1", "v0"]
     # Every quote the LLM made counts, dropped ones included: only "Python" of the 3 per axis
     # is evidence; "and" is a stopword and the third is invented.
     assert cells[8] == "0.333"

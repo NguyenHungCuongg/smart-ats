@@ -3,7 +3,6 @@
 import subprocess
 import sys
 import uuid
-from collections.abc import Iterator
 
 import psycopg
 import pytest
@@ -14,23 +13,6 @@ from sqlalchemy.orm import Session
 from app.db import tenant_session
 from tests.conftest import API_DIR
 from tests.test_tenancy import COUNT_USERS, insert_user, make_tenant
-
-
-@pytest.fixture
-def worker(monkeypatch: pytest.MonkeyPatch) -> Iterator[Celery]:
-    """app.worker with a throwaway broker URL (importing it needs REDIS_URL, never connects).
-
-    Tasks a test registers on the shared app are dropped afterwards, so the registry check
-    below only ever sees the real ones. The real ones are loaded first so they are never dropped.
-    """
-    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
-    from app import worker
-
-    worker.celery_app.loader.import_default_modules()
-    before = set(worker.celery_app.tasks)
-    yield worker.celery_app
-    for name in set(worker.celery_app.tasks) - before:
-        worker.celery_app.tasks.pop(name)
 
 
 def test_every_registered_task_uses_tenant_task_or_is_a_declared_exception(

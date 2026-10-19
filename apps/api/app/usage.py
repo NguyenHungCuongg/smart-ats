@@ -1,12 +1,24 @@
 """AI Usage Ledger: one AI Usage Entry per model call (FR-C1.4, ERD §7)."""
 
+import logging
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from smart_ats_scoring.llm import Usage
-from smart_ats_scoring.pricing import cost
+from smart_ats_scoring.pricing import cost, price
+
+log = logging.getLogger(__name__)
+
+
+def priced(model: str) -> bool:
+    """Whether the ledger can price model. Checked before every call: tokens it cannot price
+    must not be spent."""
+    if price(model) is None:
+        log.error("no price for model %s in smart_ats_scoring.pricing.PRICES", model)
+        return False
+    return True
 
 
 def record(

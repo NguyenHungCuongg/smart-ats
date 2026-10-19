@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from celery import Celery
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
@@ -45,6 +46,22 @@ def database() -> Iterator[None]:
         env.setenv("DATABASE_URL", f"postgresql+psycopg://ats_app:app{base}")
         command.upgrade(Config(API_DIR / "alembic.ini"), "head")
         yield
+
+
+@pytest.fixture
+def worker() -> Iterator[Celery]:
+    """The shared Celery app (it never connects: tests run tasks in-process).
+
+    Tasks a test registers on it are dropped afterwards, so the registry check only ever sees
+    the real ones. The real ones are loaded first so they are never dropped.
+    """
+    from app import worker
+
+    worker.celery_app.loader.import_default_modules()
+    before = set(worker.celery_app.tasks)
+    yield worker.celery_app
+    for name in set(worker.celery_app.tasks) - before:
+        worker.celery_app.tasks.pop(name)
 
 
 @pytest.fixture(scope="session")
