@@ -38,7 +38,7 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 - Hành vi thay đổi có test đi kèm. Bảng, endpoint hoặc task mới có test xuyên tenant.
 - Đúng tiêu chí nghiệm thu của issue và các FR/NFR liên quan; không làm thêm ngoài phạm vi.
 - Tài liệu sở hữu được cập nhật trong cùng PR: hành vi → SRS, schema → ERD, kiến trúc → SAD, lệnh hoặc cấu hình → README và `.env.example`.
-- Thành viên còn lại đã review. Không merge code mà người merge không giải thích được.
+- Đã chạy `/code-review` và xử lý các phát hiện; người merge đã tự đi hết [checklist review bảo mật](#checklist-review-bảo-mật). Không merge code mà người merge không giải thích được.
 
 ## Checklist review bảo mật
 

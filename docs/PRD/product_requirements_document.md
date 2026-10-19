@@ -2,8 +2,8 @@
 
 ## Smart ATS — Nền tảng ATS Đa Người Thuê Hỗ trợ AI
 
-**Phiên bản:** 3.2
-**Ngày:** 2026-10-08
+**Phiên bản:** 3.3
+**Ngày:** 2026-10-19
 **Đối tượng đọc:** Nhóm phát triển, GVHD
 
 > PRD là nguồn sự thật cho **bối cảnh, định vị, nguyên tắc thiết kế, người dùng, hành trình chính và các quyết định phạm vi**. Yêu cầu chi tiết, tiêu chí nghiệm thu và mọi con số nằm trong [SRS](../SRS/software_requirements_specification.md) và được dẫn bằng mã (FR-…, NFR-…), không chép lại. Thuật ngữ theo `CONTEXT.md`. Bản đồ tài liệu: [CONTRIBUTING.md](../../CONTRIBUTING.md#bản-đồ-tài-liệu).
@@ -99,7 +99,8 @@ Chỉ Company Admin và Recruiter được khởi tạo Campaign.
 |              | Kanban trên Application (5 Stage hoạt động + 2 Stage kết thúc), bulk action                                    | FR-A3.2      | P1      |
 |              | Activity timeline & audit log                                                                                  | FR-A3.3      | P1      |
 |              | Public Apply Link                                                                                              | FR-A3.4      | P1      |
-| C1 Nền tảng  | Xác thực (mật khẩu + Google), phiên đăng nhập                                                                  | FR-C1.1      | P1      |
+| C1 Nền tảng  | Xác thực bằng mật khẩu, phiên đăng nhập                                                                        | FR-C1.1      | P1      |
+|              | Đăng nhập Google                                                                                               | FR-C1.1      | P2      |
 |              | Quản lý Workspace & Member, lời mời                                                                            | FR-C1.2      | P1      |
 |              | Cô lập tenant bằng Forced RLS                                                                                  | FR-C1.3      | P1      |
 |              | AI Usage Ledger & AI Budget                                                                                    | FR-C1.4      | P1      |
