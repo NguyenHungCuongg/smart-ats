@@ -77,9 +77,13 @@ export function Uploads({
       onApplications(list.length);
     });
   }, [jobId, version, onApplications]);
-  useProgressEvents("upload.item", (data) => {
-    if ((data as { job_id: string }).job_id === jobId) setVersion((v) => v + 1);
-  });
+  useProgressEvents(
+    "upload.item",
+    (data) => {
+      if ((data as { job_id: string }).job_id === jobId) setVersion((v) => v + 1);
+    },
+    () => setVersion((v) => v + 1),
+  );
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

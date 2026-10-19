@@ -139,6 +139,8 @@ Các tra cứu trước khi biết tenant (đăng nhập, đăng nhập Google, 
 - RBAC và Reviewer Assignment được kiểm tra trong FastAPI dependency. Id thuộc tenant khác trả về **404**, không bao giờ 403, để response không tiết lộ resource có tồn tại.
 - File chỉ được phục vụ qua presigned URL (thời hạn theo NFR-SEC-09), cấp sau khi kiểm tra quyền. Object key có tiền tố `t/{tenant_id}/…`.
 - Kênh SSE là `sse:{tenant_id}:{user_id}`. Người dùng chỉ subscribe kênh của chính mình, sau khi đổi một SSE ticket dùng một lần.
+- Mỗi tab mở một stream dùng chung cho mọi loại event. Server subscribe xong mới trả response, nên client tải lại dữ liệu mỗi lần stream mở (lần đầu và mỗi lần kết nối lại) mà không lỡ event nào.
+- Giới hạn: mỗi user mở tối đa **5** stream đồng thời, đếm bằng số subscriber của kênh; vượt giới hạn thì cấp ticket (và mở stream) trả 429. Mỗi tiến trình API giữ tối đa **500** kết nối Redis cho stream, trong một pool riêng (hết pool thì trả 503), và **50** kết nối cho các lệnh Redis khác, để stream không đẩy Redis, broker của mọi tenant, tới `maxclients`.
 
 ---
 

@@ -5,7 +5,13 @@ import { type ReactNode, useEffect, useState } from "react";
 import { apiFetch } from "../../auth";
 import { useProgressEvents } from "../../events";
 import type { Job } from "../criteria";
-import { type Claim, type ScoreResult, type ScoringRun, scoreBlocker } from "../scoring";
+import {
+  type Claim,
+  type ScoreResult,
+  type ScoringRun,
+  newestOnly,
+  scoreBlocker,
+} from "../scoring";
 
 const START_ERRORS: Record<number, string> = {
   409: "Job chưa đủ điều kiện chấm điểm hoặc đang được chấm.",
@@ -41,19 +47,27 @@ export function Scoring({ job, applications }: { job: Job; applications: number 
   const [version, setVersion] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiFetch(`/api/jobs/${job.id}/scoring-runs/latest`).then(async (response) => {
-      if (!response.ok) return; // 404: never scored
-      const latest: ScoringRun = await response.json();
+  // A load answered after a newer one would bring back an older run, whose id then filters
+  // out the events of the newer one.
+  const [load] = useState(() =>
+    newestOnly<ScoringRun | null>((latest) => {
+      if (!latest) return; // 404: never scored
       setRun(latest);
       setRunId(latest.id);
-    });
-  }, [job.id, version]);
-  useProgressEvents("scoring.result", (data) => {
-    // Only this run's results: a stale task of an older run must not reload over it.
-    if ((data as { run_id: string }).run_id === runId) setVersion((v) => v + 1);
-  });
+    }),
+  );
+
+  useEffect(() => {
+    load(apiFetch(`/api/jobs/${job.id}/scoring-runs/latest`).then((r) => (r.ok ? r.json() : null)));
+  }, [job.id, version, load]);
+  useProgressEvents(
+    "scoring.result",
+    (data) => {
+      // Only this run's results: a stale task of an older run must not reload over it.
+      if ((data as { run_id: string }).run_id === runId) setVersion((v) => v + 1);
+    },
+    () => setVersion((v) => v + 1),
+  );
   // A new CV may replace a scored one.
   useProgressEvents("upload.item", (data) => {
     if ((data as { job_id: string }).job_id === job.id) setVersion((v) => v + 1);

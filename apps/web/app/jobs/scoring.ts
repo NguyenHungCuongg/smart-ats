@@ -48,3 +48,16 @@ export function scoreBlocker(
   if (run?.running) return "Đang chấm điểm…";
   return null;
 }
+
+/**
+ * Wraps deliver so that, of loads started one after another, only the newest is delivered:
+ * one that finishes after a newer one started is dropped.
+ */
+export function newestOnly<T>(deliver: (value: T) => void): (load: Promise<T>) => Promise<void> {
+  let started = 0;
+  return async (load) => {
+    const mine = ++started;
+    const value = await load;
+    if (mine === started) deliver(value);
+  };
+}

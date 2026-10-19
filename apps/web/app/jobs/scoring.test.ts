@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { scoreBlocker } from "./scoring";
+import { newestOnly, scoreBlocker } from "./scoring";
 
 const confirmed = { criteria_confirmed_at: "2026-10-16T08:00:00Z" };
 
@@ -15,4 +15,17 @@ test("scoring waits for confirmed criteria, an Application and the running run",
   );
   expect(scoreBlocker(confirmed, 0, null)).toBe("Job chưa có Application nào.");
   expect(scoreBlocker(confirmed, 2, { running: true })).toBe("Đang chấm điểm…");
+});
+
+test("a load that finishes after a newer one is dropped", async () => {
+  const shown: string[] = [];
+  const load = newestOnly<string>((value) => shown.push(value));
+  let finishOld!: (value: string) => void;
+
+  const old = load(new Promise((resolve) => (finishOld = resolve)));
+  await load(Promise.resolve("new run"));
+  finishOld("old run");
+  await old;
+
+  expect(shown).toEqual(["new run"]);
 });
