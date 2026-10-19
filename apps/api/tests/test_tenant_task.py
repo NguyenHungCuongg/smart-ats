@@ -52,12 +52,23 @@ def test_check_loads_every_task_module_itself() -> None:
         [sys.executable, "-c", script], cwd=API_DIR, capture_output=True, text=True, check=True
     )
     assert out.stdout.strip() == str(
-        ["jobs.parse", "scoring_runs.score_application", "uploads.parse_cv"]
+        [
+            "jobs.parse",
+            "scoring_runs.score_application",
+            "sweep.stuck_rows",
+            "sweep.tenant",
+            "uploads.parse_cv",
+        ]
     )
 
 
 def test_every_tenant_task_is_redelivered_if_its_worker_dies(worker: Celery) -> None:
-    for name in ("jobs.parse", "uploads.parse_cv", "scoring_runs.score_application"):
+    for name in (
+        "jobs.parse",
+        "uploads.parse_cv",
+        "scoring_runs.score_application",
+        "sweep.tenant",
+    ):
         task = worker.tasks[name]
         assert task.acks_late is True
         assert task.reject_on_worker_lost is True

@@ -30,10 +30,10 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/jobs")
 
-# ponytail: a run stuck RUNNING (enqueue lost, task rolled back) stops counting after 30
-# minutes, so it cannot lock its Job forever; replace with beat's sweep of stuck PENDING rows
-# (SAD §6). The one definition of a running run: POST and GET latest both use it.
-_RUNNING = "(r.status = 'RUNNING' AND r.created_at > now() - interval '30 minutes')"
+# A run runs until none of its rows is PENDING, however long that takes: beat's sweep fails a
+# row whose task is lost for good (SAD §6), so no run blocks its Job forever. The one definition
+# of a running run: POST and GET latest both use it.
+_RUNNING = "r.status = 'RUNNING'"
 
 
 class RunCreated(BaseModel):
@@ -77,7 +77,6 @@ class ScoringRun(BaseModel):
 async def create(job_id: uuid.UUID, auth: Recruiter) -> RunCreated:
     """Score every Application the Job has now; the scoring runs on queue llm."""
     # The row lock makes concurrent requests take turns, so only one passes the running check.
-    # Not a partial unique index: whether a run counts as running depends on the time.
     confirmed = await auth.db.scalar(
         text("SELECT criteria_confirmed_at IS NOT NULL FROM jobs WHERE id = :id FOR UPDATE"),
         {"id": job_id},
@@ -135,8 +134,8 @@ async def create(job_id: uuid.UUID, auth: Recruiter) -> RunCreated:
         await auth.db.scalars(
             text(
                 "INSERT INTO score_results (tenant_id, scoring_run_id, application_id,"
-                "  cv_document_id, status)"
-                " SELECT tenant_id, :run_id, id, cv_document_id, 'PENDING'"
+                "  cv_document_id, status, attempts, enqueued_at)"
+                " SELECT tenant_id, :run_id, id, cv_document_id, 'PENDING', 1, now()"
                 " FROM applications WHERE job_id = :job_id RETURNING application_id"
             ),
             {"run_id": run_id, "job_id": job_id},
@@ -265,11 +264,36 @@ def score_application(
                 "grounding": result.grounding_rate,
             },
         )
+        _finished(session, row.created_by, row.job_id, run_id, application_id, "SCORED")
     else:
-        session.execute(
-            text("UPDATE score_results SET status = 'FAILED', error_code = :code WHERE id = :id"),
-            {"id": row.id, "code": error},
-        )
+        fail_result(session, row.id, row.created_by, row.job_id, run_id, application_id, error)
+
+
+def fail_result(
+    session: Session,
+    result_id: uuid.UUID,
+    user_id: uuid.UUID,
+    job_id: uuid.UUID,
+    run_id: str,
+    application_id: str,
+    error: str,
+) -> None:
+    """End a score result as FAILED with error, finishing its run if it was the last."""
+    session.execute(
+        text("UPDATE score_results SET status = 'FAILED', error_code = :code WHERE id = :id"),
+        {"id": result_id, "code": error},
+    )
+    _finished(session, user_id, job_id, run_id, application_id, "FAILED")
+
+
+def _finished(
+    session: Session,
+    user_id: uuid.UUID,
+    job_id: uuid.UUID,
+    run_id: str,
+    application_id: str,
+    status: Literal["SCORED", "FAILED"],
+) -> None:
     # Tasks finishing together each lock the run first, so the last one to commit sees every
     # other row done and finishes it (counts come from the rows, SAD §5.1).
     session.execute(text("SELECT 1 FROM scoring_runs WHERE id = :id FOR UPDATE"), {"id": run_id})
@@ -285,12 +309,12 @@ def score_application(
     )
     events.publish(
         session,
-        row.created_by,
+        user_id,
         "scoring.result",
         {
-            "job_id": str(row.job_id),
+            "job_id": str(job_id),
             "run_id": run_id,
             "application_id": application_id,
-            "status": "FAILED" if error else "SCORED",
+            "status": status,
         },
     )

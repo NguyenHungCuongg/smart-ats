@@ -89,6 +89,8 @@ def test_moving_a_row_to_other_tenant_is_rejected(tenant: uuid.UUID) -> None:
 
 
 def test_context_does_not_outlive_the_transaction(tenant: uuid.UUID) -> None:
+    # Start from an empty pool so the next checkout returns the same connection, as below.
+    sync_engine().dispose()
     with tenant_session(tenant) as session:
         pid, _ = session.execute(PID_AND_TENANT).one()
 

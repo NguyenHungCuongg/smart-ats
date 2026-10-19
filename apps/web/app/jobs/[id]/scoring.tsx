@@ -20,6 +20,7 @@ const RESULT_ERRORS: Record<string, string> = {
   UNSUPPORTED_FORMAT: "Định dạng file CV hoặc JD không được hỗ trợ.",
   READ_FAILED: "Không đọc được file CV hoặc JD.",
   SCORING_FAILED: "Lời gọi AI bị lỗi.",
+  STUCK: "Hệ thống chưa chấm được Application này sau nhiều lần thử.",
 };
 
 const RUN_STATUSES: Record<ScoringRun["status"], string> = {

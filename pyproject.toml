@@ -44,5 +44,5 @@ ignore_missing_imports = true
 
 # Celery task decorators are untyped.
 [[tool.mypy.overrides]]
-module = ["app.worker", "tests.test_tenant_task"]
+module = ["app.sweep", "app.worker", "tests.test_tenant_task"]
 disallow_untyped_decorators = false
