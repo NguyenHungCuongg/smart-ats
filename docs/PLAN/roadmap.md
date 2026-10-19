@@ -185,9 +185,16 @@ Không lên kế hoạch việc mới. Dùng để bù phần trễ của GĐ 4 
 
 ## 4. Phân công
 
-Từ 19/10/2026 đồ án còn một thành viên, phụ trách cả ba workstream. Review chéo được thay bằng điều kiện merge ở [CONTRIBUTING.md](../../CONTRIBUTING.md#điều-kiện-merge).
+Từ 19/10/2026:
 
-Trong mỗi giai đoạn, ưu tiên theo thứ tự:
+| Thành viên | Trách nhiệm                                                         |
+| ---------- | ------------------------------------------------------------------- |
+| **SV A**   | Làm cả ba workstream: Nền tảng, AI & Thực nghiệm, Dữ liệu & Báo cáo |
+| **SV B**   | Review mọi PR trước khi merge                                       |
+
+Khi bảo vệ, cả hai thành viên phải giải thích được mọi phần của hệ thống. Quy tắc review và merge: [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+Vì chỉ một người làm, trong mỗi giai đoạn, ưu tiên theo thứ tự:
 
 1. Việc phụ thuộc bên ngoài, vì phải chờ phản hồi: dataset, người chấm, văn bản đồng ý.
 2. Tiêu chí của mốc gần nhất mà coding agent không làm thay được: nhãn, báo cáo.
@@ -205,7 +212,7 @@ Tại mỗi mốc, nếu tiêu chí chưa đạt, cắt theo thứ tự dưới 
 4. Notification và email cho @mention; giữ comment và Interview Score (FR-A2.2).
 5. Email từ chối hàng loạt; giữ đổi Stage hàng loạt (FR-A3.2).
 
-**Đã cắt (19/10/2026, khi đồ án còn một thành viên):** mục 1–3. Khối lượng mỗi giai đoạn tăng gấp đôi, và cắt trước GĐ 3 thì không phải dựng i18n cho mọi trang của GĐ 2. Đăng nhập Google và giao diện tiếng Anh đã hạ xuống P2 trong SRS v3.3. Mục 4–5 xét lại tại M2.
+**Đã cắt (19/10/2026, khi chỉ còn một thành viên làm):** mục 1–3. Khối lượng mỗi giai đoạn tăng gấp đôi, và cắt trước GĐ 3 thì không phải dựng i18n cho mọi trang của GĐ 2. Đăng nhập Google và giao diện tiếng Anh đã hạ xuống P2 trong SRS v3.3. Mục 4–5 xét lại tại M2.
 
 **Không cắt:** chấm điểm lai cùng Experiment 1, 2, 6; Forced RLS cùng Experiment 4; Agent cùng Experiment 3; Public Apply Link; Kanban cơ bản; consent và xóa dữ liệu.
 
@@ -221,7 +228,7 @@ Tại mỗi mốc, nếu tiêu chí chưa đạt, cắt theo thứ tự dưới 
 
 ## 7. Khả thi & Rủi ro
 
-**Khả thi:** khối lượng code khả thi với 1 thành viên cùng coding agent, sau khi cắt mục 1–3 ở §5; CRUD, UI và hạ tầng không phải bottleneck. Bottleneck thực sự là dataset và người chấm HR, vòng lặp chất lượng prompt, tính đúng đắn bảo mật, và băng thông review code.
+**Khả thi:** khối lượng code khả thi với 1 thành viên làm, 1 thành viên review, cùng coding agent, sau khi cắt mục 1–3 ở §5; CRUD, UI và hạ tầng không phải bottleneck. Bottleneck thực sự là dataset và người chấm HR, vòng lặp chất lượng prompt, tính đúng đắn bảo mật, và băng thông review code.
 
 | Rủi ro                                                                                    | Mức        | Giảm thiểu                                                                                                                                                                  |
 | ----------------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -229,8 +236,8 @@ Tại mỗi mốc, nếu tiêu chí chưa đạt, cắt theo thứ tự dưới 
 | Sai sót bảo mật tinh vi trong code do coding agent sinh ra (quên tenant context, lộ file) | Cao        | Test RLS viết **trước** tính năng; CI chặn merge; checklist review bảo mật; Experiment 4                                                                                    |
 | Chất lượng scoring không đạt kỳ vọng                                                      | Trung bình | Eval harness từ GĐ 1, tinh chỉnh hằng tuần từ GĐ 2; ablation cho thấy đóng góp từng thành phần dù số tuyệt đối thấp                                                         |
 | Rate limit / chi phí OpenAI                                                               | Trung bình | Giới hạn đồng thời; LLM giả lập cho load test; AI Budget; theo dõi chi phí qua ledger                                                                                       |
-| Chỉ còn một thành viên: khối lượng mỗi giai đoạn tăng gấp đôi                             | Cao        | Cắt sớm mục 1–3 ở §5; ưu tiên theo §4; làm sớm phần GĐ 2 không cần nhãn                                                                                                     |
-| Băng thông review code không theo kịp tốc độ sinh code; không còn review chéo             | Cao        | PR nhỏ theo vertical slice; test là điều kiện merge; `/code-review` và checklist bảo mật cho mỗi PR; không merge code không hiểu                                            |
+| Chỉ một thành viên làm: khối lượng mỗi giai đoạn của người đó tăng gấp đôi                | Cao        | Cắt sớm mục 1–3 ở §5; ưu tiên theo §4; làm sớm phần GĐ 2 không cần nhãn                                                                                                     |
+| Băng thông review code không theo kịp tốc độ sinh code; một người review mọi PR           | Cao        | PR nhỏ theo vertical slice; test là điều kiện merge; không merge code không hiểu                                                                                            |
 | Nghĩa vụ pháp lý về dữ liệu cá nhân chưa rõ                                               | Trung bình | Xác nhận với GVHD trong GĐ 2; FR-C1.5; nêu rõ giới hạn trong báo cáo                                                                                                        |
 | Tập test bị "nhiễm" do tinh chỉnh prompt                                                  | Trung bình | Chỉ tinh chỉnh trên tập dev; đóng băng bằng git tag trước lượt chạy chính thức                                                                                              |
 | Tết và lịch học làm giảm thời gian làm việc ở T19–T20                                     | Trung bình | T20 là tuần đệm; Agent bắt đầu từ T16 để có đủ 4 tuần trước Tết                                                                                                             |

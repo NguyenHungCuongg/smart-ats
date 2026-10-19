@@ -20,7 +20,7 @@
 > - v3.0 (2026-09-25): Chuyển sang ATS thuần, loại bỏ Side B, loại bỏ Offer/Contract Generator, refine Agent, Multi-Tenant bằng PostgreSQL RLS
 > - v3.1 (2026-09-28): Đồng bộ PRD/SAD/ERD; sửa RBAC mâu thuẫn; bổ sung thực thể `Application`; sửa thiết kế RLS (FORCE RLS, worker tenant context, pre-auth lookup); Checkpoint bền vững bằng LangGraph interrupt; phương pháp chấm điểm lai (deterministic + rubric); thêm Public Apply Link, gửi email thật, Talent Rediscovery, AI Usage Ledger, bảo vệ dữ liệu cá nhân; sửa thực nghiệm; roadmap 26 tuần; cập nhật tech stack (tra cứu 2026-09-28)
 > - **v3.2 (2026-10-08)**: Tái cấu trúc, không đổi yêu cầu. Bối cảnh, định vị và quyết định phạm vi chuyển sang PRD; phân loại, đóng góp và thực nghiệm chuyển sang Kế hoạch Thực nghiệm; lộ trình, phân công và rủi ro chuyển sang Roadmap; tech stack và hạ tầng chuyển sang SAD; thêm mục Ràng buộc Thiết kế; mỗi con số chỉ định nghĩa ở một chỗ; NFR-REL-05 không còn quy định đường dẫn endpoint; đổi tên file thành `software_requirements_specification.md`
-> - **v3.3 (2026-10-19)**: Đồ án còn một thành viên nên cắt sớm theo Roadmap §5: đăng nhập Google (FR-C1.1) và giao diện Tiếng Anh (NFR-USE-03) hạ xuống P2; xử lý CV/JD song ngữ giữ P1
+> - **v3.3 (2026-10-19)**: Chỉ còn một thành viên làm nên cắt sớm theo Roadmap §5: đăng nhập Google (FR-C1.1) và giao diện Tiếng Anh (NFR-USE-03) hạ xuống P2; xử lý CV/JD song ngữ giữ P1
 
 ---
 
