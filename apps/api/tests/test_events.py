@@ -4,6 +4,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack
 from datetime import timedelta
 
 import pytest
@@ -144,3 +145,86 @@ async def test_tenant_task_publishes_once_its_transaction_commits(
         await asyncio.to_thread(progress.apply, args=[str(tenant), str(user), False])
 
         assert await next_event(response) == ("progress", {"fail": False})
+
+
+async def test_stream_listens_before_the_client_hears_it_is_open(client: AsyncClient) -> None:
+    # A client reloads its data on open (SAD §6): an event published right after must arrive.
+    tenant, user = uuid.uuid4(), uuid.uuid4()
+    ticket = await ticket_for(client, tenant, user)
+
+    async with client.stream("GET", "/api/events", params={"ticket": ticket}) as response:
+        await _redis().publish(
+            events.channel(tenant, user), json.dumps({"event": "x", "data": "early"})
+        )
+
+        assert await next_event(response) == ("x", "early")
+
+
+@pytest.fixture
+def two_streams_per_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(events, "MAX_STREAMS_PER_USER", 2)
+
+
+async def open_streams(channel: str) -> int:
+    count: int = (await _redis().pubsub_numsub(channel))[0][1]
+    return count
+
+
+@pytest.mark.usefixtures("two_streams_per_user")
+async def test_ticket_is_refused_while_the_user_has_every_stream_open(client: AsyncClient) -> None:
+    tenant, user = uuid.uuid4(), uuid.uuid4()
+    async with AsyncExitStack() as streams:
+        for _ in range(2):
+            ticket = await ticket_for(client, tenant, user)
+            response = await streams.enter_async_context(
+                client.stream("GET", "/api/events", params={"ticket": ticket})
+            )
+            assert response.status_code == 200
+
+        refused = await client.post("/api/events/ticket", headers=bearer(tenant, user))
+        assert refused.status_code == 429
+        # Another user of the same Tenant is not affected.
+        await ticket_for(client, tenant, uuid.uuid4())
+
+    # Closed streams no longer count.
+    async with asyncio.timeout(5):
+        while await open_streams(events.channel(tenant, user)):
+            await asyncio.sleep(0.01)
+    await ticket_for(client, tenant, user)
+
+
+@pytest.mark.usefixtures("two_streams_per_user")
+async def test_tickets_taken_ahead_cannot_open_more_streams_than_the_limit(
+    client: AsyncClient,
+) -> None:
+    tenant, user = uuid.uuid4(), uuid.uuid4()
+    tickets = [await ticket_for(client, tenant, user) for _ in range(3)]
+
+    async with AsyncExitStack() as streams:
+        statuses = [
+            (
+                await streams.enter_async_context(
+                    client.stream("GET", "/api/events", params={"ticket": ticket})
+                )
+            ).status_code
+            for ticket in tickets
+        ]
+
+        assert statuses == [200, 200, 429]
+        assert await open_streams(events.channel(tenant, user)) == 2
+
+
+async def test_streams_hold_redis_connections_from_a_bounded_pool(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(events, "MAX_STREAM_CONNECTIONS", 1)
+    events._stream_redis.cache_clear()
+    tenant = uuid.uuid4()
+    first, second = [await ticket_for(client, tenant, uuid.uuid4()) for _ in range(2)]
+    try:
+        async with client.stream("GET", "/api/events", params={"ticket": first}) as response:
+            assert response.status_code == 200
+
+            assert (await get_stream(client, second)).status_code == 503
+    finally:
+        events._stream_redis.cache_clear()

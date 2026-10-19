@@ -15,7 +15,7 @@ from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, 
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from pydantic import BaseModel, Field
-from redis.asyncio import Redis
+from redis.asyncio import BlockingConnectionPool, Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -31,6 +31,8 @@ REFRESH_PATH = "/api/auth/refresh"
 MAX_FAILURES = 5
 LOCK_FOR = timedelta(minutes=15)
 _LOCKED_DETAIL = "Too many failed logins, try again later"
+# SAD §4.3.
+MAX_REDIS_CONNECTIONS = 50
 
 # Counts a login attempt unless the account is locked; returns no row if it is. Reaching
 # max_failures locks it, and the count starts again for after the lock; a success resets both.
@@ -75,8 +77,11 @@ router = APIRouter(prefix="/api/auth")
 
 @cache
 def _redis() -> Redis:
-    client: Redis = Redis.from_url(os.environ["REDIS_URL"])
-    return client
+    # Capped (SAD §4.3): a burst of requests waits for a free connection rather than opening more.
+    pool = BlockingConnectionPool.from_url(
+        os.environ["REDIS_URL"], max_connections=MAX_REDIS_CONNECTIONS
+    )
+    return Redis(connection_pool=pool)
 
 
 async def _count_attempt(key: str) -> bool:

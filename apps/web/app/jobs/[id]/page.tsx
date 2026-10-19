@@ -47,11 +47,14 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
       else setMissing(true);
     });
   }, [id, version]);
-  // ponytail: a parse that finishes before the stream opens shows only after a reload;
-  // refetch once the stream is open if parses get that fast.
-  useProgressEvents("job.parsed", (data) => {
-    if ((data as { job_id: string }).job_id === id) setVersion((v) => v + 1);
-  });
+  // Reloaded whenever the stream opens: a parse may finish before it does, or while it is down.
+  useProgressEvents(
+    "job.parsed",
+    (data) => {
+      if ((data as { job_id: string }).job_id === id) setVersion((v) => v + 1);
+    },
+    () => setVersion((v) => v + 1),
+  );
 
   return (
     <main className="min-h-screen bg-white text-[#1f1633]">

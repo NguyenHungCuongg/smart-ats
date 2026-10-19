@@ -7,11 +7,13 @@ class FakeEventSource {
   static opened: FakeEventSource[] = [];
   listeners = new Map<string, (e: MessageEvent) => void>();
   onerror: (() => void) | null = null;
+  onopen: (() => void) | null = null;
   closed = false;
   constructor(public url: string) {
     FakeEventSource.opened.push(this);
   }
   addEventListener(type: string, listener: (e: MessageEvent) => void) {
+    if (this.listeners.has(type)) throw new Error(`a second listener for ${type}`);
     this.listeners.set(type, listener);
   }
   close() {
@@ -98,6 +100,54 @@ test("unsubscribing before the ticket arrives opens nothing", async () => {
   await opened();
 
   expect(FakeEventSource.opened).toHaveLength(0);
+});
+
+test("every subscriber in the tab shares one stream, whatever its event type", async () => {
+  const received: string[] = [];
+  const unsubscribe = events.subscribe("upload.item", () => received.push("upload"));
+  events.subscribe("job.parsed", () => received.push("job"));
+  events.subscribe("job.parsed", () => received.push("job again"));
+  await opened();
+
+  const [source] = FakeEventSource.opened;
+  source.emit("job.parsed", {});
+  source.emit("upload.item", {});
+  unsubscribe();
+  source.emit("upload.item", {});
+
+  expect(FakeEventSource.opened).toHaveLength(1);
+  expect(source.closed).toBe(false);
+  expect(received).toEqual(["job", "job again", "upload"]);
+});
+
+test("a type subscribed while the stream is open is delivered too", async () => {
+  events.subscribe("job.parsed", () => {});
+  await opened();
+  const received: unknown[] = [];
+  events.subscribe("upload.item", (data) => received.push(data));
+
+  FakeEventSource.opened[0].emit("upload.item", { n: 1 });
+
+  expect(received).toEqual([{ n: 1 }]);
+  expect(FakeEventSource.opened).toHaveLength(1);
+});
+
+test("tells subscribers each time the stream opens, so they reload what they missed", async () => {
+  let opens = 0;
+  events.subscribe(
+    "progress",
+    () => {},
+    () => opens++,
+  );
+  await opened();
+  FakeEventSource.opened[0].onopen?.();
+  expect(opens).toBe(1);
+
+  FakeEventSource.opened[0].onerror?.();
+  await vi.advanceTimersByTimeAsync(5000);
+  FakeEventSource.opened[1].onopen?.();
+
+  expect(opens).toBe(2);
 });
 
 test("unsubscribing closes the stream and stops reconnecting", async () => {
