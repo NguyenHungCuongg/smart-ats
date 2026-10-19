@@ -3,6 +3,7 @@
 import { type FormEvent, type ReactNode, use, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
+import { Badge } from "../../badge";
 import { useProgressEvents } from "../../events";
 import {
   type Form,
@@ -26,10 +27,8 @@ const PARSE_ERRORS: Record<string, string> = {
   STUCK: "Hệ thống chưa phân tích được JD sau nhiều lần thử.",
 };
 
-const INPUT =
-  "rounded-md border border-[#cfcfdb] bg-white px-3 py-2 text-[#1f1633] focus:ring-2 focus:ring-[rgba(59,130,246,0.5)] focus:outline-none";
 // Secondary actions read as link-on-light: one filled button per page (DESIGN.md).
-const LINK_BUTTON = "font-medium text-[#1f1633] underline";
+const LINK_BUTTON = "font-medium underline";
 
 /** Follows the parse of a Job's JD, then lets the Recruiter edit and confirm the criteria. */
 export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
@@ -57,15 +56,18 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
   );
 
   return (
-    <main className="min-h-screen bg-white text-[#1f1633]">
+    <main className="min-h-screen">
       <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
         {missing ? (
           <p>Không tìm thấy Job.</p>
         ) : !job ? (
-          <p>Đang tải…</p>
+          <div aria-busy="true" aria-label="Đang tải Job" className="flex flex-col gap-4">
+            <div className="h-9 w-2/3 animate-pulse rounded-md bg-hairline-cloud" />
+            <div className="h-40 animate-pulse rounded-md bg-hairline-cloud" />
+          </div>
         ) : job.parse_status === "PENDING" ? (
           <>
-            <h1 className="text-3xl font-semibold">{job.title}</h1>
+            <h1 className="heading-display text-3xl font-semibold">{job.title}</h1>
             <p role="status">Đang phân tích JD…</p>
           </>
         ) : (
@@ -111,7 +113,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <h1 className="text-3xl font-semibold">Xác nhận criteria</h1>
+      <h1 className="heading-display text-3xl font-semibold">Xác nhận criteria</h1>
       {job.parse_status === "FAILED" && (
         <p role="alert">
           {PARSE_ERRORS[job.parse_error ?? ""] ?? "Không phân tích được JD."} Hãy nhập criteria thủ
@@ -133,7 +135,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
           maxLength={200}
           value={form.title}
           onChange={(e) => set({ title: e.target.value })}
-          className={INPUT}
+          className="text-input"
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -141,7 +143,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
           <select
             value={form.level}
             onChange={(e) => set({ level: e.target.value as Form["level"] })}
-            className={INPUT}
+            className="text-input"
           >
             {LEVELS.map((level) => (
               <option key={level}>{level}</option>
@@ -152,7 +154,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
           <select
             value={form.work_mode}
             onChange={(e) => set({ work_mode: e.target.value as Form["work_mode"] })}
-            className={INPUT}
+            className="text-input"
           >
             <option value="">Không nêu</option>
             {WORK_MODES.map((mode) => (
@@ -165,7 +167,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
             maxLength={200}
             value={form.department}
             onChange={(e) => set({ department: e.target.value })}
-            className={INPUT}
+            className="text-input"
           />
         </Field>
         <Field label="Địa điểm" review={review("location")}>
@@ -173,7 +175,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
             maxLength={200}
             value={form.location}
             onChange={(e) => set({ location: e.target.value })}
-            className={INPUT}
+            className="text-input"
           />
         </Field>
       </div>
@@ -188,7 +190,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
               onChange={(e) =>
                 set({ skills: form.skills.with(i, { ...skill, name: e.target.value }) })
               }
-              className={`${INPUT} flex-1`}
+              className="flex-1 text-input"
             />
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -227,7 +229,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
             step="any"
             value={form.min_years_experience}
             onChange={(e) => set({ min_years_experience: e.target.value })}
-            className={INPUT}
+            className="text-input"
           />
         </Field>
         <Field label="Dải lương" review={review("salary_range")}>
@@ -235,7 +237,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
             maxLength={200}
             value={form.salary_range}
             onChange={(e) => set({ salary_range: e.target.value })}
-            className={INPUT}
+            className="text-input"
           />
         </Field>
       </div>
@@ -244,7 +246,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
           maxLength={2000}
           value={form.education}
           onChange={(e) => set({ education: e.target.value })}
-          className={INPUT}
+          className="text-input"
         />
       </Field>
       <Field label="Trách nhiệm chính (mỗi dòng một ý)" review={review("responsibilities")}>
@@ -252,7 +254,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
           rows={5}
           value={form.responsibilities}
           onChange={(e) => set({ responsibilities: e.target.value })}
-          className={INPUT}
+          className="text-input"
         />
       </Field>
 
@@ -275,7 +277,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
                 onChange={(e) =>
                   set({ weights: { ...form.weights, [axis]: Math.round(Number(e.target.value)) } })
                 }
-                className={INPUT}
+                className="text-input"
               />
             </Field>
           ))}
@@ -289,7 +291,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
       <button
         type="submit"
         disabled={pending || total !== 100}
-        className="self-start rounded-lg bg-[#150f23] px-4 py-3 text-sm font-bold tracking-[0.2px] text-white uppercase disabled:bg-[#e5e7eb] disabled:text-[rgba(255,255,255,0.72)]"
+        className="self-start button-primary"
       >
         Xác nhận criteria
       </button>
@@ -297,15 +299,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
   );
 }
 
-function ReviewBadge() {
-  return (
-    <span className="rounded bg-[#150f23] px-2 text-[10px] font-semibold tracking-[0.25px] text-white uppercase">
-      Cần kiểm tra
-    </span>
-  );
-}
-
-const reviewed = (review?: boolean) => (review ? "border-l-4 border-[#fa7faa] pl-3" : "");
+const reviewed = (review?: boolean) => (review ? "border-l-4 border-accent-pink pl-3" : "");
 
 /** One labelled input; a Needs review field is highlighted (FR-A1.1). */
 function Field({
@@ -321,7 +315,7 @@ function Field({
     <label className={`flex flex-col gap-1 ${reviewed(review)}`}>
       <span className="flex items-center gap-2 font-medium">
         {label}
-        {review && <ReviewBadge />}
+        {review && <Badge>Cần kiểm tra</Badge>}
       </span>
       {children}
     </label>
@@ -342,7 +336,7 @@ function Group({
     <fieldset className={`flex flex-col gap-2 ${reviewed(review)}`}>
       <legend className="flex items-center gap-2 font-medium">
         {label}
-        {review && <ReviewBadge />}
+        {review && <Badge>Cần kiểm tra</Badge>}
       </legend>
       {children}
     </fieldset>

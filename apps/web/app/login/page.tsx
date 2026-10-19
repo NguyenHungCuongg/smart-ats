@@ -22,19 +22,29 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <form onSubmit={onSubmit} className="flex w-80 flex-col gap-3">
-        <h1 className="text-2xl font-semibold">Đăng nhập</h1>
-        <input name="email" type="email" placeholder="Email" required className="border p-2" />
-        <input
-          name="password"
-          type="password"
-          placeholder="Mật khẩu"
-          required
-          className="border p-2"
-        />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <button type="submit" disabled={pending} className="bg-black p-2 text-white">
+    <main className="flex min-h-screen items-center justify-center px-4">
+      <form onSubmit={onSubmit} className="flex w-full max-w-80 flex-col gap-4">
+        <h1 className="heading-display text-3xl font-semibold">Đăng nhập</h1>
+        <label className="flex flex-col gap-1">
+          <span className="font-medium">Email</span>
+          <input name="email" type="email" autoComplete="email" required className="text-input" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="font-medium">Mật khẩu</span>
+          <input
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            className="text-input"
+          />
+        </label>
+        {error && (
+          <p role="alert" className="border-l-4 border-accent-pink pl-3 text-sm">
+            {error}
+          </p>
+        )}
+        <button type="submit" disabled={pending} className="button-primary">
           Đăng nhập
         </button>
       </form>

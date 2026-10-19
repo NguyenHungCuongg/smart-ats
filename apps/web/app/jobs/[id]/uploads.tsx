@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
+import { Badge } from "../../badge";
 import { useProgressEvents } from "../../events";
 
 type Item = {
@@ -104,18 +105,12 @@ export function Uploads({
   }
 
   return (
-    <section className="flex flex-col gap-4 border-t border-[#e5e7eb] pt-6">
-      <h2 className="text-2xl font-medium">Ứng viên</h2>
+    <section className="flex flex-col gap-4 border-t border-hairline-cloud pt-6">
+      <h2 className="heading-display text-2xl font-semibold">Ứng viên</h2>
       <form onSubmit={onSubmit} className="flex flex-col gap-3">
         <label className="flex flex-col gap-1">
           <span className="font-medium">File CV (PDF, DOCX, tối đa 10 MB)</span>
-          <input
-            name="file"
-            type="file"
-            required
-            accept=".pdf,.docx"
-            className="rounded-md border border-[#cfcfdb] bg-white px-3 py-2 text-[#1f1633] focus:ring-2 focus:ring-[rgba(59,130,246,0.5)] focus:outline-none"
-          />
+          <input name="file" type="file" required accept=".pdf,.docx" className="text-input" />
         </label>
         <label className="flex items-start gap-2 text-sm">
           <input
@@ -128,17 +123,13 @@ export function Uploads({
           nhân trong CV này.
         </label>
         {error && <p role="alert">{error}</p>}
-        <button
-          type="submit"
-          disabled={pending || !consent}
-          className="self-start rounded-lg border border-[#1f1633] px-4 py-3 text-sm font-medium tracking-[0.2px] uppercase disabled:border-[#e5e7eb] disabled:bg-[#e5e7eb] disabled:text-[rgba(255,255,255,0.72)]"
-        >
+        <button type="submit" disabled={pending || !consent} className="self-start button-outline">
           Tải CV lên
         </button>
       </form>
 
       {items.length > 0 && (
-        <ul aria-label="File đã tải lên" className="flex flex-col divide-y divide-[#e5e7eb]">
+        <ul aria-label="File đã tải lên" className="flex flex-col divide-y divide-hairline-cloud">
           {items.map((item) => (
             <li key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
               <span className="font-mono text-sm">{item.file_name}</span>
@@ -161,7 +152,7 @@ export function Uploads({
       {applications.length > 0 && (
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-[#e5e7eb]">
+            <tr className="border-b border-hairline-cloud">
               <th className="py-2 font-medium">Họ tên</th>
               <th className="py-2 font-medium">Email</th>
               <th className="py-2 font-medium">Stage</th>
@@ -170,7 +161,7 @@ export function Uploads({
           </thead>
           <tbody>
             {applications.map((a) => (
-              <tr key={a.id} className="border-b border-[#e5e7eb]">
+              <tr key={a.id} className="border-b border-hairline-cloud">
                 <td className="py-2">{a.full_name ?? "—"}</td>
                 <td className="py-2">{a.email ?? "—"}</td>
                 <td className="py-2">
@@ -183,13 +174,5 @@ export function Uploads({
         </table>
       )}
     </section>
-  );
-}
-
-function Badge({ children }: { children: string }) {
-  return (
-    <span className="rounded bg-[#150f23] px-2 text-[10px] font-semibold tracking-[0.25px] whitespace-nowrap text-white uppercase">
-      {children}
-    </span>
   );
 }
