@@ -4,25 +4,37 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 // The cookie endpoints reject requests without it, which cross-site forms cannot send.
 const CSRF_HEADER = { "X-Requested-With": "fetch" };
+const REFRESH_LOCK = "smart-ats-refresh";
 
 let accessToken: string | null = null;
 let refreshing: Promise<boolean> | null = null;
 
-/** Returns the HTTP status: 200 on success, 401 bad credentials, 429 temporarily locked. */
+/**
+ * Returns the HTTP status: 200 on success, 401 bad credentials, 429 temporarily locked,
+ * 0 when the API cannot be reached.
+ */
 export async function login(email: string, password: string): Promise<number> {
   const response = await fetch(`${API_URL}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
-  });
+  }).catch(() => null);
+  if (!response) return 0;
   if (response.ok) accessToken = (await response.json()).access_token;
   return response.status;
 }
 
 /** Revokes the refresh token family on the server and forgets the access token. */
 export async function logout(): Promise<void> {
-  await fetch(`${API_URL}/api/auth/refresh`, { method: "DELETE", headers: CSRF_HEADER });
-  accessToken = null;
+  // Under the refresh lock: a refresh in flight in any tab finishes first, so the cookie sent
+  // here is the newest one (the server revokes the whole family either way).
+  try {
+    await navigator.locks.request(REFRESH_LOCK, () =>
+      fetch(`${API_URL}/api/auth/refresh`, { method: "DELETE", headers: CSRF_HEADER }),
+    );
+  } finally {
+    accessToken = null;
+  }
 }
 
 /** fetch() against the API as the signed-in user; on 401, refreshes once and retries. */
@@ -41,7 +53,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 // other tabs wait until the browser holds the new cookie.
 function refresh(): Promise<boolean> {
   refreshing ??= navigator.locks
-    .request("smart-ats-refresh", async () => {
+    .request(REFRESH_LOCK, async () => {
       const response = await fetch(`${API_URL}/api/auth/refresh`, {
         method: "POST",
         headers: CSRF_HEADER,

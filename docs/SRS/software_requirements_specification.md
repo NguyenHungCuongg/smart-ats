@@ -415,8 +415,8 @@ Ghi nhận (append-only): tạo/nhận Application, chạy parsing/scoring, đ�
 #### `FR-C1.1` [P1] Xác thực
 
 - Email + mật khẩu (Argon2id); OAuth2 Google — P2.
-- Access Token 15 phút (giữ trong bộ nhớ trình duyệt); Refresh Token 7 ngày, rotate mỗi lần dùng, phát hiện dùng lại theo token family → thu hồi cả family; lưu dạng hash trong DB; cookie `HttpOnly; Secure; SameSite=Strict`.
-- Khóa tạm 15 phút sau 5 lần đăng nhập sai liên tiếp (theo tài khoản và theo IP).
+- Access Token 15 phút (giữ trong bộ nhớ trình duyệt); Refresh Token rotate mỗi lần dùng, phát hiện dùng lại theo token family → thu hồi cả family; family hết hạn 7 ngày sau lần đăng nhập tạo ra nó, rotate không gia hạn; lưu dạng hash trong DB; cookie `HttpOnly; Secure; SameSite=Strict`.
+- Khóa tạm 15 phút sau 5 lần đăng nhập sai liên tiếp (theo tài khoản và theo IP); thử lại trong lúc khóa không kéo dài khóa. Email không có tài khoản bị khóa giống hệt, để phản hồi không lộ email nào tồn tại.
 - Đăng xuất = thu hồi refresh token family.
 
 #### `FR-C1.2` [P1] Quản lý Workspace

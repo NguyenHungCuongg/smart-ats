@@ -318,3 +318,105 @@ async def test_reusing_an_expired_rotated_token_still_revokes_the_family(
 
     assert (await refresh(client, first)).status_code == 401
     assert (await refresh(client, second)).status_code == 401
+
+
+async def still_valid(client: AsyncClient, responses: list[Response]) -> list[str]:
+    """The refresh tokens among responses that the API still accepts."""
+    tokens = [r.cookies["refresh_token"] for r in responses if r.status_code == 200]
+    return [t for t in tokens if (await refresh(client, t)).status_code == 200]
+
+
+async def test_a_refresh_racing_a_reuse_cannot_keep_a_token(client: AsyncClient) -> None:
+    # Repeated: the race only shows when the reuse revokes while the refresh is mid-rotation.
+    for _ in range(10):
+        first = (await login(client, make_user())).cookies["refresh_token"]
+        second = (await refresh(client, first)).cookies["refresh_token"]
+        async with other_ip_client() as thief, other_ip_client() as victim:
+            responses = await asyncio.gather(refresh(thief, second), refresh(victim, first))
+
+        assert await still_valid(client, list(responses)) == []
+
+
+async def test_a_refresh_racing_a_logout_cannot_keep_a_token(client: AsyncClient) -> None:
+    for _ in range(10):
+        token = (await login(client, make_user())).cookies["refresh_token"]
+        async with other_ip_client() as tab, other_ip_client() as other_tab:
+            tab.cookies.clear()
+            responses = await asyncio.gather(
+                refresh(other_tab, token),
+                tab.delete(
+                    "/api/auth/refresh",
+                    headers={"Cookie": f"refresh_token={token}", "X-Requested-With": "fetch"},
+                ),
+            )
+
+        assert await still_valid(client, [responses[0]]) == []
+
+
+async def test_rotation_does_not_extend_the_family(client: AsyncClient) -> None:
+    first = (await login(client, make_user())).cookies["refresh_token"]
+    with tenant_session(uuid.UUID(first.partition(".")[0])) as session:
+        session.execute(
+            text(
+                "UPDATE refresh_tokens SET expires_at = now() + interval '2 seconds'"
+                " WHERE token_hash = :token_hash"
+            ),
+            {"token_hash": hashlib.sha256(first.encode()).hexdigest()},
+        )
+
+    response = await refresh(client, first)
+    assert response.status_code == 200
+    max_age = int(response.headers["set-cookie"].lower().split("max-age=")[1].split(";")[0])
+    assert max_age <= 2
+    await asyncio.sleep(2.1)
+    assert (await refresh(client, response.cookies["refresh_token"])).status_code == 401
+
+
+@pytest.mark.parametrize("has_account", [True, False], ids=["existing email", "unknown email"])
+async def test_five_failures_lock_an_email_whether_or_not_it_has_an_account(
+    has_account: bool,
+) -> None:
+    email = make_user() if has_account else f"{uuid.uuid4().hex}@example.com"
+    responses = []
+    for _ in range(6):  # each from its own IP, so only the per-email lock can trip
+        async with other_ip_client() as c:
+            response = await login(c, email, "wrong password")
+            responses.append((response.status_code, response.json()))
+
+    assert responses == [(401, {"detail": "Invalid email or password"})] * 5 + [
+        (429, {"detail": "Too many failed logins, try again later"})
+    ]
+
+
+LOCK = timedelta(seconds=2)
+
+
+@pytest.fixture
+def short_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.auth.LOCK_FOR", LOCK)
+
+
+@pytest.mark.usefixtures("short_lock")
+async def test_ip_lock_lasts_its_time_and_is_not_extended_by_attempts(client: AsyncClient) -> None:
+    email = make_user()
+    for _ in range(5):
+        await login(client, f"{uuid.uuid4().hex}@example.com", "guess")
+
+    await asyncio.sleep(LOCK.total_seconds() / 2)
+    assert (await login(client, email)).status_code == 429  # must not restart the lock
+    await asyncio.sleep(LOCK.total_seconds() / 2 + 0.3)
+    assert (await login(client, email)).status_code == 200
+
+
+@pytest.mark.usefixtures("short_lock")
+async def test_account_lock_ends_after_its_time() -> None:
+    email = make_user()
+    for _ in range(5):
+        async with other_ip_client() as c:
+            await login(c, email, "wrong password")
+
+    async with other_ip_client() as c:
+        await asyncio.sleep(LOCK.total_seconds() / 2)
+        assert (await login(c, email)).status_code == 429
+        await asyncio.sleep(LOCK.total_seconds() / 2 + 0.3)
+        assert (await login(c, email)).status_code == 200

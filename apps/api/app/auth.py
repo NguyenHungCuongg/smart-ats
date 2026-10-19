@@ -43,6 +43,28 @@ _COUNT_ATTEMPT = text("""
     WHERE id = :id AND (locked_until IS NULL OR locked_until <= now())
     RETURNING id
 """)
+# The same rule in Redis, for IPs and for emails without an account, so an unknown email locks
+# exactly like a real one. The lock lasts lock_for from the failure that set it: attempts while
+# locked are not counted and do not extend it.
+# ponytail: the counter forgets after a day without attempts, unlike users.failed_login_count;
+# five guesses spread over days could tell an unknown email apart. Fine below NFR-SEC-06.
+_COUNT_ATTEMPT_LUA = """
+if redis.call('EXISTS', KEYS[2]) == 1 then return 0 end
+local n = redis.call('INCR', KEYS[1])
+redis.call('EXPIRE', KEYS[1], 86400)
+if n >= tonumber(ARGV[1]) then
+  redis.call('DEL', KEYS[1])
+  redis.call('SET', KEYS[2], 1, 'PX', ARGV[2])
+end
+return 1
+"""
+# Refresh, reuse detection and logout of one family run one at a time: a revoke running
+# alongside a rotation would miss the token the rotation was minting. The lock is taken in its
+# own statement, so every later statement sees what the previous holder committed.
+_LOCK_FAMILY = text(
+    "SELECT family_id, pg_advisory_xact_lock(hashtextextended(family_id::text, 0))"
+    " FROM refresh_tokens WHERE token_hash = :token_hash"
+)
 _REVOKE_FAMILY = text(
     "UPDATE refresh_tokens SET revoked_at = now()"
     " WHERE family_id = :family_id AND revoked_at IS NULL"
@@ -55,6 +77,14 @@ router = APIRouter(prefix="/api/auth")
 def _redis() -> Redis:
     client: Redis = Redis.from_url(os.environ["REDIS_URL"])
     return client
+
+
+async def _count_attempt(key: str) -> bool:
+    """Counts a login attempt against key, as _COUNT_ATTEMPT_LUA; False if key is locked."""
+    count = _redis().register_script(_COUNT_ATTEMPT_LUA)
+    lock_ms = int(LOCK_FOR.total_seconds() * 1000)
+    keys = [f"login_attempts:{key}", f"login_locked:{key}"]
+    return bool(await count(keys=keys, args=[MAX_FAILURES, lock_ms]))
 
 
 password_hash = PasswordHash.recommended()
@@ -82,13 +112,8 @@ def _access_token(user_id: uuid.UUID, tenant_id: uuid.UUID, role: str) -> str:
 async def login(body: LoginRequest, request: Request, response: Response) -> TokenResponse:
     # Attempts are counted before the slow password check and the count is cleared on success,
     # so concurrent guesses cannot all slip in under the limit.
-    ip_attempts = f"login_attempts:{request.client.host if request.client else 'unknown'}"
-    async with _redis().pipeline() as pipe:
-        pipe.incr(ip_attempts)
-        # Restarted by every attempt: the lock ends lock_for after the last one.
-        pipe.expire(ip_attempts, LOCK_FOR)
-        attempts, _ = await pipe.execute()
-    if attempts > MAX_FAILURES:
+    ip = f"ip:{request.client.host if request.client else 'unknown'}"
+    if not await _count_attempt(ip):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, _LOCKED_DETAIL)
 
     async with async_engine().begin() as conn:
@@ -98,6 +123,9 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Tok
     # tenant_id is NULL for a System Admin, whose login is not built yet.
     if user is None or user.tenant_id is None or user.password_hash is None:
         user = None
+        email = hashlib.sha256(body.email.lower().encode()).hexdigest()
+        if not await _count_attempt(f"email:{email}"):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, _LOCKED_DETAIL)
     else:
         async with async_tenant_session(user.tenant_id) as db:
             counted = await db.scalar(
@@ -114,7 +142,7 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Tok
     if user is None or not valid or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
 
-    await _redis().delete(ip_attempts)
+    await _redis().delete(f"login_attempts:{ip}", f"login_locked:{ip}")
     async with async_tenant_session(user.tenant_id) as db:
         await db.execute(
             text(
@@ -124,7 +152,13 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Tok
             {"id": user.id},
         )
         tokens, _ = await _issue_tokens(
-            db, response, user.id, user.tenant_id, user.role, family_id=uuid.uuid4()
+            db,
+            response,
+            user.id,
+            user.tenant_id,
+            user.role,
+            family_id=uuid.uuid4(),
+            expires_at=datetime.now(UTC) + REFRESH_TTL,
         )
     return tokens
 
@@ -143,7 +177,9 @@ async def refresh(
     if tenant_id is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid refresh token")
     tokens = None
+    token_hash = _hash_refresh_token(refresh_token)
     async with async_tenant_session(tenant_id) as db:
+        await db.execute(_LOCK_FAMILY, {"token_hash": token_hash})
         token = (
             await db.execute(
                 text(
@@ -151,9 +187,9 @@ async def refresh(
                     "  u.role, u.is_active"
                     " FROM refresh_tokens t"
                     " JOIN users u ON u.tenant_id = t.tenant_id AND u.id = t.user_id"
-                    " WHERE t.token_hash = :token_hash FOR UPDATE OF t"
+                    " WHERE t.token_hash = :token_hash"
                 ),
-                {"token_hash": _hash_refresh_token(refresh_token)},
+                {"token_hash": token_hash},
             )
         ).one_or_none()
         if token is not None and (token.revoked_at is not None or not token.is_active):
@@ -161,8 +197,15 @@ async def refresh(
             # (FR-C1.1). Committed by leaving the block normally; raising would roll it back.
             await db.execute(_REVOKE_FAMILY, {"family_id": token.family_id})
         elif token is not None and token.expires_at > datetime.now(UTC):
+            # Rotation keeps the family's expiry, set once at login (FR-C1.1).
             tokens, new_id = await _issue_tokens(
-                db, response, token.user_id, tenant_id, token.role, family_id=token.family_id
+                db,
+                response,
+                token.user_id,
+                tenant_id,
+                token.role,
+                family_id=token.family_id,
+                expires_at=token.expires_at,
             )
             await db.execute(
                 text(
@@ -185,8 +228,7 @@ async def logout(response: Response, refresh_token: Annotated[str, Cookie()] = "
     if tenant_id is not None:
         async with async_tenant_session(tenant_id) as db:
             family_id = await db.scalar(
-                text("SELECT family_id FROM refresh_tokens WHERE token_hash = :token_hash"),
-                {"token_hash": _hash_refresh_token(refresh_token)},
+                _LOCK_FAMILY, {"token_hash": _hash_refresh_token(refresh_token)}
             )
             await db.execute(_REVOKE_FAMILY, {"family_id": family_id})
     response.delete_cookie(
@@ -214,6 +256,7 @@ async def _issue_tokens(
     role: str,
     *,
     family_id: uuid.UUID,
+    expires_at: datetime,
 ) -> tuple[TokenResponse, uuid.UUID]:
     """Issue an access token and set a new refresh token of family_id as the cookie.
 
@@ -232,14 +275,14 @@ async def _issue_tokens(
                 "user_id": user_id,
                 "family_id": family_id,
                 "token_hash": _hash_refresh_token(refresh_token),
-                "expires_at": datetime.now(UTC) + REFRESH_TTL,
+                "expires_at": expires_at,
             },
         )
     ).scalar_one()
     response.set_cookie(
         REFRESH_COOKIE,
         refresh_token,
-        max_age=int(REFRESH_TTL.total_seconds()),
+        max_age=round((expires_at - datetime.now(UTC)).total_seconds()),
         path=REFRESH_PATH,
         secure=True,
         httponly=True,
