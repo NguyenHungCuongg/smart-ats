@@ -23,6 +23,7 @@ const PARSE_ERRORS: Record<string, string> = {
   UNREADABLE: "File JD bị hỏng, không đọc được.",
   UNSUPPORTED_FORMAT: "Định dạng file JD không được hỗ trợ.",
   UNPRICED_MODEL: "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
+  STUCK: "Hệ thống chưa phân tích được JD sau nhiều lần thử.",
 };
 
 const INPUT =

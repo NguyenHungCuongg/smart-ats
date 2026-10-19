@@ -36,6 +36,7 @@ const ITEM_ERRORS: Record<string, string> = {
   UNSUPPORTED_FORMAT: "Định dạng file không được hỗ trợ.",
   UNPRICED_MODEL: "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
   PARSE_FAILED: "Không phân tích được CV.",
+  STUCK: "Hệ thống chưa xử lý được CV sau nhiều lần thử.",
 };
 
 const STATUSES: Record<Item["status"], string> = {

@@ -172,8 +172,9 @@ async def create(
             # Placeholders for the NOT NULL columns, and the default weights of FR-A1.3.
             text(
                 "INSERT INTO jobs (tenant_id, title, level, status, jd_document_key, parse_status,"
+                "  parse_attempts, parse_enqueued_at,"
                 "  weight_technical, weight_soft_skills, weight_experience, created_by)"
-                " VALUES (:tenant_id, :title, 'MID', 'DRAFT', :key, 'PENDING',"
+                " VALUES (:tenant_id, :title, 'MID', 'DRAFT', :key, 'PENDING', 1, now(),"
                 "  0.55, 0.15, 0.30, :user_id) RETURNING id"
             ),
             {"tenant_id": auth.tenant_id, "title": title, "key": key, "user_id": auth.user_id},
@@ -286,39 +287,44 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
                     session, uuid.UUID(user_id), "JOB_PARSE", e.usage, "job", uuid.UUID(job_id)
                 )
 
-    if error is None:
-        data = parsed.data
-        # A field the JD does not state keeps its placeholder, which nobody has verified.
-        verification = parsed.verification | {
-            field: "NEEDS_REVIEW" for field in ("title", "level") if data[field] is None
-        }
-        session.execute(
-            text(
-                "UPDATE jobs SET title = coalesce(:title, title), level = coalesce(:level, level),"
-                "  department = :department, location = :location, work_mode = :work_mode,"
-                "  criteria = CAST(:criteria AS jsonb),"
-                "  criteria_verification = CAST(:verification AS jsonb),"
-                "  parse_status = 'SUCCEEDED', updated_at = now()"
-                " WHERE id = :id"
-            ),
-            {
-                "id": job_id,
-                **{f: data[f] for f in ("title", "level", "department", "location", "work_mode")},
-                "criteria": json.dumps({f: data[f] for f in Criteria.model_fields}),
-                "verification": json.dumps(verification),
-            },
-        )
-    else:
-        session.execute(
-            text(
-                "UPDATE jobs SET parse_status = 'FAILED', parse_error = :error, updated_at = now()"
-                " WHERE id = :id"
-            ),
-            {"id": job_id, "error": error},
-        )
+    if error is not None:
+        fail_parse(session, uuid.UUID(job_id), uuid.UUID(user_id), error)
+        return
+    data = parsed.data
+    # A field the JD does not state keeps its placeholder, which nobody has verified.
+    verification = parsed.verification | {
+        field: "NEEDS_REVIEW" for field in ("title", "level") if data[field] is None
+    }
+    session.execute(
+        text(
+            "UPDATE jobs SET title = coalesce(:title, title), level = coalesce(:level, level),"
+            "  department = :department, location = :location, work_mode = :work_mode,"
+            "  criteria = CAST(:criteria AS jsonb),"
+            "  criteria_verification = CAST(:verification AS jsonb),"
+            "  parse_status = 'SUCCEEDED', updated_at = now()"
+            " WHERE id = :id"
+        ),
+        {
+            "id": job_id,
+            **{f: data[f] for f in ("title", "level", "department", "location", "work_mode")},
+            "criteria": json.dumps({f: data[f] for f in Criteria.model_fields}),
+            "verification": json.dumps(verification),
+        },
+    )
     events.publish(
-        session,
-        uuid.UUID(user_id),
-        "job.parsed",
-        {"job_id": job_id, "parse_status": "FAILED" if error else "SUCCEEDED"},
+        session, uuid.UUID(user_id), "job.parsed", {"job_id": job_id, "parse_status": "SUCCEEDED"}
+    )
+
+
+def fail_parse(session: Session, job_id: uuid.UUID, user_id: uuid.UUID, error: str) -> None:
+    """End the Job's parse as FAILED with error, and tell the Recruiter."""
+    session.execute(
+        text(
+            "UPDATE jobs SET parse_status = 'FAILED', parse_error = :error, updated_at = now()"
+            " WHERE id = :id"
+        ),
+        {"id": job_id, "error": error},
+    )
+    events.publish(
+        session, user_id, "job.parsed", {"job_id": str(job_id), "parse_status": "FAILED"}
     )

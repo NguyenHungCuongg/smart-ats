@@ -20,6 +20,7 @@ const RESULT_ERRORS: Record<string, string> = {
   UNSUPPORTED_FORMAT: "Định dạng file CV hoặc JD không được hỗ trợ.",
   READ_FAILED: "Không đọc được file CV hoặc JD.",
   SCORING_FAILED: "Lời gọi AI bị lỗi.",
+  STUCK: "Hệ thống chưa chấm được Application này sau nhiều lần thử.",
 };
 
 const RUN_STATUSES: Record<ScoringRun["status"], string> = {
@@ -50,7 +51,7 @@ export function Scoring({ job, applications }: { job: Job; applications: number 
     });
   }, [job.id, version]);
   useProgressEvents("scoring.result", (data) => {
-    // A task of an older, expired run may still finish: it must not reload over this one.
+    // Only this run's results: a stale task of an older run must not reload over it.
     if ((data as { run_id: string }).run_id === runId) setVersion((v) => v + 1);
   });
   // A new CV may replace a scored one.
@@ -79,9 +80,8 @@ export function Scoring({ job, applications }: { job: Job; applications: number 
       {run && (
         <p className="text-sm">
           Lần chấm gần nhất: {new Date(run.created_at).toLocaleString("vi-VN")} ·{" "}
-          {isExpired(run) ? "Quá hạn, có thể chấm lại" : RUN_STATUSES[run.status]} · model{" "}
-          <code className="font-mono">{run.model}</code> · trọng số Technical{" "}
-          {run.weights.technical}%, Soft Skills {run.weights.soft_skills}%, Experience{" "}
+          {RUN_STATUSES[run.status]} · model <code className="font-mono">{run.model}</code> · trọng
+          số Technical {run.weights.technical}%, Soft Skills {run.weights.soft_skills}%, Experience{" "}
           {run.weights.experience}%
         </p>
       )}
@@ -100,14 +100,11 @@ export function Scoring({ job, applications }: { job: Job; applications: number 
         {run ? "Chấm lại" : "Chấm điểm"}
       </button>
       {run?.results.map((result) => (
-        <Result key={result.application_id} result={result} expired={isExpired(run)} />
+        <Result key={result.application_id} result={result} />
       ))}
     </section>
   );
 }
-
-/** A run left RUNNING past its time: its PENDING rows will not be scored. */
-const isExpired = (run: ScoringRun) => run.status === "RUNNING" && !run.running;
 
 const REPORT_PARTS = [
   ["strengths", "Strengths"],
@@ -115,7 +112,7 @@ const REPORT_PARTS = [
   ["recommendations", "Recommendations"],
 ] as const;
 
-function Result({ result, expired }: { result: ScoreResult; expired: boolean }) {
+function Result({ result }: { result: ScoreResult }) {
   const rubric = result.rubric_grades;
   const report = result.fit_gap_report;
   const detail = result.must_have_detail;
@@ -127,8 +124,7 @@ function Result({ result, expired }: { result: ScoreResult; expired: boolean }) 
           <Badge>CV đã thay đổi sau lần chấm</Badge>
         )}
       </header>
-      {result.status === "PENDING" &&
-        (expired ? <p>Chưa chấm xong.</p> : <p role="status">Đang chấm…</p>)}
+      {result.status === "PENDING" && <p role="status">Đang chấm…</p>}
       {result.status === "FAILED" && (
         <p role="alert">
           {RESULT_ERRORS[result.error_code ?? ""] ?? "Không chấm được Application này."}

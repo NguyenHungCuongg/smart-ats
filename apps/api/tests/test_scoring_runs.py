@@ -321,24 +321,20 @@ async def test_job_being_scored_cannot_be_scored_again(
 
 
 @pytest.mark.usefixtures("application")
-async def test_run_stuck_running_for_30_minutes_no_longer_blocks_a_new_one(
+async def test_long_run_still_scoring_keeps_blocking_a_new_one(
     client: AsyncClient, recruiter: User, job: str
 ) -> None:
-    stuck = (await start(client, recruiter, job)).json()["run_id"]
+    long = (await start(client, recruiter, job)).json()["run_id"]
     query(
         recruiter,
-        "UPDATE scoring_runs SET created_at = now() - interval '31 minutes' WHERE id = :id"
+        "UPDATE scoring_runs SET created_at = now() - interval '2 hours' WHERE id = :id"
         " RETURNING id",
-        id=stuck,
+        id=long,
     )
-    run = (await latest(client, recruiter, job)).json()
-    assert (run["status"], run["running"]) == ("RUNNING", False)
 
-    response = await start(client, recruiter, job)
-
-    assert response.status_code == 202
+    assert (await start(client, recruiter, job)).status_code == 409
     run = (await latest(client, recruiter, job)).json()
-    assert (run["id"], run["running"]) == (response.json()["run_id"], True)
+    assert (run["id"], run["status"], run["running"]) == (long, "RUNNING", True)
 
 
 @pytest.mark.usefixtures("application")

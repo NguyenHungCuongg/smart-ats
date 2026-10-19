@@ -104,28 +104,30 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 
 ### `jobs`
 
-| Cột                                                     | Kiểu                     | Ghi chú                                                                                                            |
-| ------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| id                                                      | uuid PK                  |                                                                                                                    |
-| tenant_id                                               | uuid NN                  |                                                                                                                    |
-| title                                                   | text NN                  |                                                                                                                    |
-| level                                                   | text NN                  | `INTERN` … `MANAGER`                                                                                               |
-| department, location                                    | text                     |                                                                                                                    |
-| work_mode                                               | text                     | `REMOTE`, `HYBRID`, `ONSITE`                                                                                       |
-| status                                                  | text NN                  | `DRAFT`, `PUBLISHED`, `PAUSED`, `CLOSED`, `ARCHIVED`                                                               |
-| jd_document_key                                         | text                     | object storage key của JD Document                                                                                 |
-| parse_status                                            | text NN                  | `PENDING`, `SUCCEEDED`, `FAILED`: task parse JD Document (FR-A1.1)                                                 |
-| parse_error                                             | text                     | mã lỗi khi `FAILED`: mã của Document Extraction, `UNPRICED_MODEL` (model chưa có giá, FR-C1.4) hoặc `PARSE_FAILED` |
-| criteria                                                | jsonb                    | criteria đã parse và được Recruiter xác nhận (kỹ năng kèm cờ `must_have`, số năm, học vấn, trách nhiệm, dải lương) |
-| criteria_verification                                   | jsonb                    | `VERIFIED` hoặc `NEEDS_REVIEW` cho từng trường đã parse (FR-A1.1)                                                  |
-| criteria_confirmed_at                                   | timestamptz              | chỉ được chấm điểm khi đã có giá trị; `CHECK (criteria_confirmed_at IS NULL OR criteria IS NOT NULL)`              |
-| criteria_embedding                                      | vector(1536)             | dùng cho Rediscovery                                                                                               |
-| weight_technical, weight_soft_skills, weight_experience | numeric(3,2) NN          | `CHECK (sum = 1.00)`, mỗi trọng số `>= 0`                                                                          |
-| public_apply_enabled                                    | boolean NN default false |                                                                                                                    |
-| public_slug                                             | text UQ                  | Public Apply Link                                                                                                  |
-| apply_deadline                                          | date                     |                                                                                                                    |
-| created_by                                              | uuid FK → users NN       |                                                                                                                    |
-| created_at, updated_at                                  | timestamptz NN           |                                                                                                                    |
+| Cột                                                     | Kiểu                     | Ghi chú                                                                                                                                                             |
+| ------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id                                                      | uuid PK                  |                                                                                                                                                                     |
+| tenant_id                                               | uuid NN                  |                                                                                                                                                                     |
+| title                                                   | text NN                  |                                                                                                                                                                     |
+| level                                                   | text NN                  | `INTERN` … `MANAGER`                                                                                                                                                |
+| department, location                                    | text                     |                                                                                                                                                                     |
+| work_mode                                               | text                     | `REMOTE`, `HYBRID`, `ONSITE`                                                                                                                                        |
+| status                                                  | text NN                  | `DRAFT`, `PUBLISHED`, `PAUSED`, `CLOSED`, `ARCHIVED`                                                                                                                |
+| jd_document_key                                         | text                     | object storage key của JD Document                                                                                                                                  |
+| parse_status                                            | text NN                  | `PENDING`, `SUCCEEDED`, `FAILED`: task parse JD Document (FR-A1.1)                                                                                                  |
+| parse_error                                             | text                     | mã lỗi khi `FAILED`: mã của Document Extraction, `UNPRICED_MODEL` (model chưa có giá, FR-C1.4), `PARSE_FAILED` hoặc `STUCK` (lượt quét hết số lần giao lại, SAD §6) |
+| parse_attempts                                          | int NN default 0         | số lần enqueue task parse, kể cả lần đầu; lượt quét dừng ở ngưỡng của SAD §6                                                                                        |
+| parse_enqueued_at                                       | timestamptz              | lần enqueue task parse gần nhất; lượt quét dựa vào đây để biết dòng `PENDING` bị treo (SAD §6)                                                                      |
+| criteria                                                | jsonb                    | criteria đã parse và được Recruiter xác nhận (kỹ năng kèm cờ `must_have`, số năm, học vấn, trách nhiệm, dải lương)                                                  |
+| criteria_verification                                   | jsonb                    | `VERIFIED` hoặc `NEEDS_REVIEW` cho từng trường đã parse (FR-A1.1)                                                                                                   |
+| criteria_confirmed_at                                   | timestamptz              | chỉ được chấm điểm khi đã có giá trị; `CHECK (criteria_confirmed_at IS NULL OR criteria IS NOT NULL)`                                                               |
+| criteria_embedding                                      | vector(1536)             | dùng cho Rediscovery                                                                                                                                                |
+| weight_technical, weight_soft_skills, weight_experience | numeric(3,2) NN          | `CHECK (sum = 1.00)`, mỗi trọng số `>= 0`                                                                                                                           |
+| public_apply_enabled                                    | boolean NN default false |                                                                                                                                                                     |
+| public_slug                                             | text UQ                  | Public Apply Link                                                                                                                                                   |
+| apply_deadline                                          | date                     |                                                                                                                                                                     |
+| created_by                                              | uuid FK → users NN       |                                                                                                                                                                     |
+| created_at, updated_at                                  | timestamptz NN           |                                                                                                                                                                     |
 
 ### `job_reviewers` — Reviewer Assignment
 
@@ -228,8 +230,9 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 | status                    | text NN                     | `PENDING`, `SUCCEEDED`, `FAILED`                                                                                  |
 | cv_document_id            | uuid FK → cv_documents      | có giá trị khi thành công                                                                                         |
 | dedupe                    | text                        | kết quả chống trùng (FR-A1.2): `EXISTING_CANDIDATE`, `CV_REPLACED`, `ALREADY_APPLIED`; `NULL` khi mọi thứ đều mới |
-| error_code, error_message | text                        | ví dụ `ENCRYPTED_PDF`, `UNREADABLE`                                                                               |
-| attempts                  | int NN default 0            |                                                                                                                   |
+| error_code, error_message | text                        | ví dụ `ENCRYPTED_PDF`, `UNREADABLE`, `STUCK` (lượt quét hết số lần giao lại, SAD §6)                              |
+| attempts                  | int NN default 0            | số lần enqueue task parse, kể cả lần đầu (SAD §6)                                                                 |
+| enqueued_at               | timestamptz                 | lần enqueue gần nhất; lượt quét dựa vào đây để biết dòng `PENDING` bị treo (SAD §6)                               |
 
 ---
 
@@ -237,39 +240,41 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 
 ### `scoring_runs`
 
-| Cột                                   | Kiểu                | Ghi chú                                                                                                                                                                                                         |
-| ------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id                                    | uuid PK             |                                                                                                                                                                                                                 |
-| tenant_id                             | uuid NN             |                                                                                                                                                                                                                 |
-| job_id                                | uuid FK → jobs NN   | index `(tenant_id, job_id, created_at)` để lấy run mới nhất                                                                                                                                                     |
-| campaign_id                           | uuid FK → campaigns | `NULL` với lượt chạy thủ công; thêm cùng bảng `campaigns` (M4), nullable nên không cần backfill                                                                                                                 |
-| trigger_mode                          | text NN             | `MANUAL`, `AGENT`                                                                                                                                                                                               |
-| weights                               | jsonb NN            | snapshot đóng băng `{technical, soft_skills, experience}` từ `jobs.weight_*`, dạng phân số                                                                                                                      |
-| criteria_snapshot                     | jsonb NN            | snapshot đóng băng: `jobs.criteria` cộng `title`, `level`                                                                                                                                                       |
-| model, prompt_version, rubric_version | text NN             | tái lập (ADR-0006)                                                                                                                                                                                              |
-| status                                | text NN             | `RUNNING`, `COMPLETED` (mọi dòng `SCORED`), `PARTIAL` (có dòng `FAILED`, kể cả khi mọi dòng `FAILED`; run không có trạng thái `FAILED`)                                                                         |
-| created_by                            | uuid FK → users     |                                                                                                                                                                                                                 |
-| created_at, completed_at              | timestamptz         | `completed_at` đặt khi không còn dòng `PENDING`. Run **đang chạy** chặn run mới của Job; định nghĩa và hạn của nó nằm ở `_RUNNING` (`apps/api/app/scoring_runs.py`), tạm thay cho lượt quét của `beat` (SAD §6) |
+| Cột                                   | Kiểu                | Ghi chú                                                                                                                                                                                |
+| ------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id                                    | uuid PK             |                                                                                                                                                                                        |
+| tenant_id                             | uuid NN             |                                                                                                                                                                                        |
+| job_id                                | uuid FK → jobs NN   | index `(tenant_id, job_id, created_at)` để lấy run mới nhất                                                                                                                            |
+| campaign_id                           | uuid FK → campaigns | `NULL` với lượt chạy thủ công; thêm cùng bảng `campaigns` (M4), nullable nên không cần backfill                                                                                        |
+| trigger_mode                          | text NN             | `MANUAL`, `AGENT`                                                                                                                                                                      |
+| weights                               | jsonb NN            | snapshot đóng băng `{technical, soft_skills, experience}` từ `jobs.weight_*`, dạng phân số                                                                                             |
+| criteria_snapshot                     | jsonb NN            | snapshot đóng băng: `jobs.criteria` cộng `title`, `level`                                                                                                                              |
+| model, prompt_version, rubric_version | text NN             | tái lập (ADR-0006)                                                                                                                                                                     |
+| status                                | text NN             | `RUNNING`, `COMPLETED` (mọi dòng `SCORED`), `PARTIAL` (có dòng `FAILED`, kể cả khi mọi dòng `FAILED`; run không có trạng thái `FAILED`)                                                |
+| created_by                            | uuid FK → users     |                                                                                                                                                                                        |
+| created_at, completed_at              | timestamptz         | `completed_at` đặt khi không còn dòng `PENDING`. Run **đang chạy** (`status = RUNNING`) chặn run mới của Job; lượt quét của `beat` đảm bảo mọi dòng `PENDING` rồi sẽ kết thúc (SAD §6) |
 
 ### `score_results`
 
-| Cột                                                  | Kiểu                      | Ghi chú                                                                                                                   |
-| ---------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| id                                                   | uuid PK                   |                                                                                                                           |
-| tenant_id                                            | uuid NN                   |                                                                                                                           |
-| scoring_run_id                                       | uuid FK → scoring_runs NN | **UQ (scoring_run_id, application_id)**, là idempotency key                                                               |
-| application_id                                       | uuid FK → applications NN |                                                                                                                           |
-| cv_document_id                                       | uuid FK → cv_documents NN | CV được chấm, chốt từ `applications.cv_document_id` lúc tạo run; khác CV hiện tại của Application khi đã có CV mới thay   |
-| status                                               | text NN                   | `PENDING`, `SCORED`, `FAILED`; dòng kiểu outbox (SAD §6), tạo `PENDING` cùng run                                          |
-| technical_score, soft_skills_score, experience_score | numeric(5,2)              | 0–100; số lẻ để Total khớp công thức trên đúng các số đã lưu                                                              |
-| must_have_coverage                                   | numeric(4,3)              | 0–1, tất định; dùng để lọc theo tỉ lệ (FR-A1.4)                                                                           |
-| must_have_detail                                     | jsonb                     | `{matched, missing}`: tên must-have đã khớp và còn thiếu, phần tất định giải thích được của Must-have Coverage (ADR-0006) |
-| total_score                                          | numeric(5,2)              |                                                                                                                           |
-| rubric_grades                                        | jsonb                     | điểm thô 1–5 của từng trục, kèm lý do và Evidence                                                                         |
-| fit_gap_report                                       | jsonb                     | strengths / gaps / recommendations kèm Evidence                                                                           |
-| grounding_rate                                       | numeric(4,3)              | tỷ lệ Evidence tìm thấy trong văn bản gốc                                                                                 |
-| error_code                                           | text                      | khi `FAILED`: mã của Document Extraction, `READ_FAILED` (không đọc được file) hoặc `SCORING_FAILED` (lời gọi LLM lỗi)     |
-| created_at                                           | timestamptz NN            |                                                                                                                           |
+| Cột                                                  | Kiểu                      | Ghi chú                                                                                                                                                                |
+| ---------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id                                                   | uuid PK                   |                                                                                                                                                                        |
+| tenant_id                                            | uuid NN                   |                                                                                                                                                                        |
+| scoring_run_id                                       | uuid FK → scoring_runs NN | **UQ (scoring_run_id, application_id)**, là idempotency key                                                                                                            |
+| application_id                                       | uuid FK → applications NN |                                                                                                                                                                        |
+| cv_document_id                                       | uuid FK → cv_documents NN | CV được chấm, chốt từ `applications.cv_document_id` lúc tạo run; khác CV hiện tại của Application khi đã có CV mới thay                                                |
+| status                                               | text NN                   | `PENDING`, `SCORED`, `FAILED`; dòng kiểu outbox (SAD §6), tạo `PENDING` cùng run                                                                                       |
+| technical_score, soft_skills_score, experience_score | numeric(5,2)              | 0–100; số lẻ để Total khớp công thức trên đúng các số đã lưu                                                                                                           |
+| must_have_coverage                                   | numeric(4,3)              | 0–1, tất định; dùng để lọc theo tỉ lệ (FR-A1.4)                                                                                                                        |
+| must_have_detail                                     | jsonb                     | `{matched, missing}`: tên must-have đã khớp và còn thiếu, phần tất định giải thích được của Must-have Coverage (ADR-0006)                                              |
+| total_score                                          | numeric(5,2)              |                                                                                                                                                                        |
+| rubric_grades                                        | jsonb                     | điểm thô 1–5 của từng trục, kèm lý do và Evidence                                                                                                                      |
+| fit_gap_report                                       | jsonb                     | strengths / gaps / recommendations kèm Evidence                                                                                                                        |
+| grounding_rate                                       | numeric(4,3)              | tỷ lệ Evidence tìm thấy trong văn bản gốc                                                                                                                              |
+| error_code                                           | text                      | khi `FAILED`: mã của Document Extraction, `READ_FAILED` (không đọc được file), `SCORING_FAILED` (lời gọi LLM lỗi) hoặc `STUCK` (lượt quét hết số lần giao lại, SAD §6) |
+| attempts                                             | int NN default 0          | số lần enqueue task chấm, kể cả lần đầu (SAD §6)                                                                                                                       |
+| enqueued_at                                          | timestamptz               | lần enqueue gần nhất; lượt quét dựa vào đây để biết dòng `PENDING` bị treo (SAD §6)                                                                                    |
+| created_at                                           | timestamptz NN            |                                                                                                                                                                        |
 
 ### `interview_question_sets`
 
@@ -429,12 +434,15 @@ Thuộc sở hữu của `ats_owner`. `ats_app` chỉ có quyền `EXECUTE`. M�
 
 Vì RLS bị force, policy ràng buộc cả `ats_owner`: một hàm `SECURITY DEFINER` không thấy dòng nào của bảng tenant khi chưa có tenant context, nên mỗi hàm ở đây phải tự đặt context. `auth_find_user` lần lượt đặt context của từng Tenant để tìm, rồi trả lại context của caller (migration `0002`).
 
-| Hàm                                 | Trả về                                                                                   | Dùng cho          |
-| ----------------------------------- | ---------------------------------------------------------------------------------------- | ----------------- |
-| `auth_find_user(email)`             | id, tenant_id, role, password_hash, is_active, locked_until                              | Đăng nhập         |
-| `auth_find_user_by_google_sub(sub)` | như trên                                                                                 | Đăng nhập Google  |
-| `public_job_by_slug(slug)`          | tenant_id, job_id, title, status, apply_deadline, tên/logo/URL quyền riêng tư của tenant | Public Apply Link |
-| `accept_invitation(token_hash)`     | tenant_id, email, role (và đánh dấu đã chấp nhận)                                        | Chấp nhận lời mời |
+| Hàm                                 | Trả về                                                                                   | Dùng cho                      |
+| ----------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------- |
+| `auth_find_user(email)`             | id, tenant_id, role, password_hash, is_active, locked_until                              | Đăng nhập                     |
+| `auth_find_user_by_google_sub(sub)` | như trên                                                                                 | Đăng nhập Google              |
+| `public_job_by_slug(slug)`          | tenant_id, job_id, title, status, apply_deadline, tên/logo/URL quyền riêng tư của tenant | Public Apply Link             |
+| `accept_invitation(token_hash)`     | tenant_id, email, role (và đánh dấu đã chấp nhận)                                        | Chấp nhận lời mời             |
+| `active_tenant_ids()`               | id của các tenant `ACTIVE`                                                               | Lượt quét của `beat` (SAD §6) |
+
+`active_tenant_ids` không cần đặt context: `tenants` chỉ bật RLS, không force, nên chủ sở hữu thấy mọi dòng (migration `0007`).
 
 ---
 

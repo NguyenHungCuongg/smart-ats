@@ -13,18 +13,24 @@ from app.db import tenant_session
 celery_app = Celery(
     "smart_ats",
     broker=os.environ["REDIS_URL"],
-    include=["app.jobs", "app.scoring_runs", "app.uploads"],
+    include=["app.jobs", "app.scoring_runs", "app.sweep", "app.uploads"],
 )
 celery_app.conf.update(
     task_queues=[Queue(name) for name in ("llm", "default", "agent", "email")],
     task_default_queue="default",
     # Celery Beat: retention jobs land here in later tickets.
-    beat_schedule={},
+    beat_schedule={
+        # Every minute, so a stuck row waits little past STUCK_AFTER (SAD §6).
+        "sweep-stuck-rows": {"task": "sweep.stuck_rows", "schedule": 60.0},
+    },
 )
 
 # Tasks that touch no tenant data and so skip @tenant_task (ADR-0002). Adding a name here is the
 # explicit declaration the CI check (untenanted_tasks) asks for.
-NON_TENANT_TASKS = frozenset({"demo.llm", "demo.default", "demo.agent", "demo.email"})
+# sweep.stuck_rows reads only the ids of ACTIVE Tenants and sweeps each in a @tenant_task.
+NON_TENANT_TASKS = frozenset(
+    {"demo.llm", "demo.default", "demo.agent", "demo.email", "sweep.stuck_rows"}
+)
 
 # The wrappers @tenant_task built. The check matches a task's body against these rather than a
 # flag on the task, which any task could set without the decorator.

@@ -113,7 +113,8 @@ async def create(
         await auth.db.execute(
             text(
                 "INSERT INTO upload_batch_items (tenant_id, batch_id, file_name, storage_key,"
-                "  status) VALUES (:tenant_id, :batch_id, :file_name, :key, 'PENDING')"
+                "  status, attempts, enqueued_at)"
+                " VALUES (:tenant_id, :batch_id, :file_name, :key, 'PENDING', 1, now())"
                 " RETURNING id"
             ),
             {
@@ -184,7 +185,7 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
         data = storage.get(item.storage_key)
     except Exception:
         log.exception("reading CV upload item %s from object storage failed", item_id)
-        _finish(session, item, "FAILED", error=("PARSE_FAILED", "the CV could not be read"))
+        finish_item(session, item, "FAILED", error=("PARSE_FAILED", "the CV could not be read"))
         return
     sha256 = hashlib.sha256(data).hexdigest()
     # Parses of the same file wait for each other, so the later one finds the CV Document the
@@ -201,7 +202,7 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
     if cv is None:
         parsed = _parse(session, item, data)
         if isinstance(parsed, tuple):
-            _finish(session, item, "FAILED", error=parsed)
+            finish_item(session, item, "FAILED", error=parsed)
             return
         contact = parsed.data["contact"]
         email = (contact["email"] or "").strip()
@@ -283,7 +284,7 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
         dedupe = "CV_REPLACED"
     else:
         dedupe = "EXISTING_CANDIDATE" if existing_candidate else None
-    _finish(session, item, "SUCCEEDED", cv_id=cv_id, dedupe=dedupe)
+    finish_item(session, item, "SUCCEEDED", cv_id=cv_id, dedupe=dedupe)
 
 
 def _parse(session: Session, item: Any, data: bytes) -> parsing.Parsed | tuple[str, str]:
@@ -310,7 +311,7 @@ def _parse(session: Session, item: Any, data: bytes) -> parsing.Parsed | tuple[s
         return "PARSE_FAILED", "the CV could not be parsed"
 
 
-def _finish(
+def finish_item(
     session: Session,
     item: Any,
     status: Literal["SUCCEEDED", "FAILED"],
