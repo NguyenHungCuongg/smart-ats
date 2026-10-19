@@ -4,7 +4,7 @@ Smart ATS's design language reads like an intelligent hiring console with sharp 
 
 The palette is deliberately narrow: deep midnight as the dominant canvas, electric lime as the primary attention-grabber, hot pink (`{colors.accent-pink}`) as a secondary punctuation, and a violet-mid (`{colors.accent-violet-mid}`) for tag chips and hairline strokes. White appears in two roles — as text on dark, and as the canvas for pricing, contact, and content-heavy pages where developers need to scan dense tables. The "single primary CTA" is visually inverted depending on context: filled black-violet (`{colors.primary}`) with white type on light surfaces, or filled white (`{colors.on-primary}`) with dark type (`{colors.ink-deep}`) on dark surfaces. The button always reads as the strongest UI affordance regardless of polarity, and any white-filled button must strictly preserve dark text across all modes to prevent invisible white-on-white text.
 
-Typography splits cleanly between three open-source families (100% free with SIL Open Font License on Google Fonts): **Archivo** (Semi-Condensed, bold/black weights) for hero and section openers (chunky, near-condensed, developer-console presence), **Rubik** for every UI text role (body, captions, eyebrow caps, button labels), and **JetBrains Mono** for code and technical metadata. Buttons and eyebrows almost always run in uppercase with a 0.2px tracking lift to give them the snap of console output.
+Typography splits cleanly between three open-source families (100% free with SIL Open Font License on Google Fonts): **Archivo** (Semi-Condensed, bold/black weights) for hero and section openers (chunky, near-condensed, developer-console presence), **Be Vietnam Pro** for every UI text role (body, captions, eyebrow caps, button labels), and **JetBrains Mono** for code and technical metadata. Buttons and eyebrows almost always run in uppercase with a 0.2px tracking lift to give them the snap of console output.
 
 **Key Characteristics:**
 
@@ -59,7 +59,7 @@ Typography splits cleanly between three open-source families (100% free with SIL
 All three primary families are **100% free and open-source (OFL)**, readily available on Google Fonts (and via Next.js `next/font/google`), and fully support Vietnamese typography:
 
 - **Display Tier:** **Archivo** (specifically Semi-Condensed weights, 600–900). Archivo delivers the chunky, near-condensed geometric proportions and bold developer-console presence needed for hero headlines and section openers. Fallbacks: `Space Grotesk, system-ui, sans-serif`.
-- **UI Tier:** **Rubik** — an open-source sans on Google Fonts — with system fallbacks (`-apple-system, system-ui, Segoe UI, Helvetica, Arial, sans-serif`). Rubik handles every body, caption, button, and eyebrow role with friendly, rounded geometry and complete Vietnamese character support.
+- **UI Tier:** **Be Vietnam Pro** — an open-source sans on Google Fonts, drawn for Vietnamese — with system fallbacks (`-apple-system, system-ui, Segoe UI, Helvetica, Arial, sans-serif`). Be Vietnam Pro handles every body, caption, button, and eyebrow role with friendly, geometric shapes, and its stacked diacritics (ế, ặ, ữ) are designed in rather than borrowed from a fallback. (It replaced Rubik, which Google Fonts serves without a Vietnamese subset.)
 - **Code Tier:** **JetBrains Mono** — an open-source monospace font designed specifically for developers, with system fallbacks (`Menlo, Monaco, Consolas, monospace`). Used in code blocks, install snippets, token chips, and technical metadata.
 
 ### Hierarchy
@@ -91,7 +91,7 @@ All three primary families are **100% free and open-source (OFL)**, readily avai
 
 ### Font Licensing & Vietnamese Support
 
-All selected primary fonts (**Archivo**, **Rubik**, **JetBrains Mono**) are released under the SIL Open Font License (OFL), free for both personal and commercial SaaS usage, and support full Vietnamese diacritics out of the box.
+All selected primary fonts (**Archivo**, **Be Vietnam Pro**, **JetBrains Mono**) are released under the SIL Open Font License (OFL), free for both personal and commercial SaaS usage, and support full Vietnamese diacritics out of the box.
 
 If an alternative display face is ever needed, **Space Grotesk** (heavier weights) or **Hubot Sans** serve as approved substitutes carrying the same tech/console silhouette. For code blocks, **Geist Mono** or **Fira Code** are approved alternative monospaced options.
 
@@ -175,7 +175,12 @@ The site doesn't use traditional photography — it uses **illustrated stickers 
 
 **`button-disabled`**
 
-- Background `{colors.hairline-cloud}`, text `{colors.on-dark-muted}`, otherwise identical to `button-primary`.
+- Background `{colors.hairline-cloud}`, text `{colors.accent-violet-mid}` (about 4.3:1, so the label stays readable while the grey fill says "unavailable"), otherwise identical to `button-primary`. Never `{colors.on-dark-muted}` here: translucent white on the light grey fill is about 1.3:1 and the label disappears.
+
+**`button-outline`** — the downgraded action on light surfaces, beside the page's one `button-primary` (e.g., "Upload CV", "Score").
+
+- Transparent fill, 1px `{colors.ink-deep}` border, text `{colors.ink-deep}`, type `{typography.button-cap-light}` (uppercase, 14px / 500, 0.2px tracking), padding `{spacing.md} {spacing.lg}`, rounded `{rounded.md}`.
+- Pressed: fill `{colors.surface-press-light}`. Disabled: border and fill `{colors.hairline-cloud}`, text `{colors.accent-violet-mid}`, as `button-disabled`.
 
 ### Cards & Containers
 
@@ -227,7 +232,7 @@ The site doesn't use traditional photography — it uses **illustrated stickers 
 
 **`pill-neutral-dark`** — small status / category pill on dark surfaces.
 
-- Background `{colors.surface-night}`, text `{colors.on-primary}`, type `{typography.caption}` 12px, padding `{spacing.xs} {spacing.sm}` (4px 8px), rounded `{rounded.xs}` 4px.
+- Background `{colors.surface-night}`, text `{colors.on-primary}`, type `{typography.micro-cap}` (10px / 600, uppercase, 0.25px tracking: the badge-text role of the type table), padding `{spacing.xs} {spacing.sm}` (4px 8px), rounded `{rounded.xs}` 4px.
 
 **`chip-lime-keyword`** — the signature inline highlight wrapping single words inside the hero display headline.
 

@@ -40,7 +40,7 @@
 @theme inline {
   --font-display: var(--font-archivo), "Space Grotesk", system-ui, sans-serif;
   --font-sans:
-    var(--font-rubik), -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+    var(--font-be-vietnam-pro), -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: var(--font-jetbrains-mono), Menlo, Monaco, Consolas, monospace;
 }
 
@@ -53,12 +53,12 @@
 }
 
 @utility button-primary {
-  @apply rounded-md bg-primary px-4 py-3 text-sm/[1.14] font-bold tracking-[0.2px] text-on-primary uppercase active:bg-surface-press-stronger active:text-ink-press disabled:bg-hairline-cloud disabled:text-on-dark-muted;
+  @apply rounded-md bg-primary px-4 py-3 text-sm/[1.14] font-bold tracking-[0.2px] text-on-primary uppercase active:bg-surface-press-stronger active:text-ink-press disabled:bg-hairline-cloud disabled:text-accent-violet-mid;
 }
 
 /* Outline: below button-primary, of which a page has one (DESIGN.md). */
 @utility button-outline {
-  @apply rounded-md border border-ink-deep px-4 py-3 text-sm/[1.29] font-medium tracking-[0.2px] text-ink-deep uppercase active:bg-surface-press-light disabled:border-hairline-cloud disabled:bg-hairline-cloud disabled:text-on-dark-muted;
+  @apply rounded-md border border-ink-deep px-4 py-3 text-sm/[1.29] font-medium tracking-[0.2px] text-ink-deep uppercase active:bg-surface-press-light disabled:border-hairline-cloud disabled:bg-hairline-cloud disabled:text-accent-violet-mid;
 }
 
 @utility text-input {
