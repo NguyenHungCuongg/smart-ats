@@ -21,7 +21,11 @@ export function login(email: string, password: string): Promise<number> {
  * Creates the invited Member's account and signs them in. Returns the HTTP status: 200 on
  * success, 400 for an invalid or expired invitation, 0 when the API cannot be reached.
  */
-export function acceptInvitation(token: string, fullName: string, password: string) {
+export function acceptInvitation(
+  token: string,
+  fullName: string,
+  password: string,
+): Promise<number> {
   return signIn("/api/invitations/accept", { token, full_name: fullName, password });
 }
 

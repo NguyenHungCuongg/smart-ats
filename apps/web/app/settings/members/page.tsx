@@ -17,7 +17,7 @@ import {
 // Secondary actions read as link-on-light: one filled button per page (DESIGN.md).
 const LINK_BUTTON = "font-medium underline";
 
-const at = (iso: string) => new Date(iso).toLocaleString("vi-VN");
+const dateTime = (iso: string) => new Date(iso).toLocaleString("vi-VN");
 
 /** Company Admins invite, re-role and revoke the Members of their Workspace (FR-C1.2). */
 export default function MembersPage() {
@@ -92,7 +92,7 @@ export default function MembersPage() {
                           <td className="py-2 pr-3">
                             <Badge>{EMAIL_STATUS_NAMES[i.email_status]}</Badge>
                           </td>
-                          <td className="py-2 pr-3">{at(i.expires_at)}</td>
+                          <td className="py-2 pr-3">{dateTime(i.expires_at)}</td>
                           <td className="py-2 text-right">
                             <button
                               type="button"
@@ -156,7 +156,7 @@ export default function MembersPage() {
                           <Badge>{m.is_active ? "Đang hoạt động" : "Đã thu hồi"}</Badge>
                         </td>
                         <td className="py-2 pr-3">
-                          {m.last_login_at ? at(m.last_login_at) : "Chưa đăng nhập"}
+                          {m.last_login_at ? dateTime(m.last_login_at) : "Chưa đăng nhập"}
                         </td>
                         <td className="py-2 text-right">
                           {m.is_active && (

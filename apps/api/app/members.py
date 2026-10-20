@@ -22,7 +22,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app import emails, outbox
 from app.auth import REFRESH_TTL, Auth, Authenticated, TokenResponse, issue_tokens, password_hash
-from app.db import async_engine
+from app.db import async_engine, set_tenant
 
 # FR-C1.2.
 INVITATION_TTL = timedelta(hours=48)
@@ -121,6 +121,11 @@ async def list_members(auth: CompanyAdmin) -> Members:
 async def invite(body: InvitationRequest, auth: CompanyAdmin) -> InvitationCreated:
     """Invite email as role; its email is QUEUED with it and sent once both commit (SAD §5.4)."""
     db = auth.db
+    # Invitations of one email run one at a time, so the revoke below sees every pending one.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(lower(:email), 0))"),
+        {"email": body.email},
+    )
     # Only this Tenant's Users are visible; one elsewhere surfaces when the invitee accepts.
     if await db.scalar(text("SELECT 1 FROM users WHERE email = :email"), {"email": body.email}):
         raise HTTPException(status.HTTP_409_CONFLICT, "This email is already a Member")
@@ -134,6 +139,7 @@ async def invite(body: InvitationRequest, auth: CompanyAdmin) -> InvitationCreat
     )
     workspace = await db.scalar(text("SELECT name FROM tenants"))
     token = secrets.token_urlsafe(32)
+    # emails.finish masks the token once sent by its "token=" parameter: keep that name.
     link = f"{os.environ['WEB_BASE_URL']}/invitations/accept?token={token}"
     hours = INVITATION_TTL // timedelta(hours=1)
     email_id = await db.scalar(
@@ -192,7 +198,8 @@ async def revoke_invitation(invitation_id: uuid.UUID, auth: CompanyAdmin) -> Non
 @router.post("/invitations/accept")
 async def accept(body: Acceptance, response: Response) -> TokenResponse:
     """Create the invited User and sign them in, as /api/auth/login does."""
-    hashed = await run_in_threadpool(password_hash.hash, body.password)
+    # Not tenant_session: the Tenant is known only once accept_invitation has found it, and
+    # the User must be created in the transaction that accepted (ERD §8).
     async with AsyncSession(async_engine()) as db, db.begin():
         invitation = (
             await db.execute(
@@ -202,10 +209,9 @@ async def accept(body: Acceptance, response: Response) -> TokenResponse:
         ).one_or_none()
         if invitation is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, _INVALID_INVITATION)
-        await db.execute(
-            text("SELECT set_config('app.current_tenant_id', :tenant_id, true)"),
-            {"tenant_id": str(invitation.tenant_id)},
-        )
+        await set_tenant(db, invitation.tenant_id)
+        # Hashed only for a valid token: anyone may call this, and Argon2 is slow on purpose.
+        hashed = await run_in_threadpool(password_hash.hash, body.password)
         try:
             user_id = await db.scalar(
                 text(
