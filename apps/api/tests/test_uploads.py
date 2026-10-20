@@ -99,21 +99,28 @@ async def upload(
     data: bytes = CV,
     filename: str = "an.docx",
     consent: str | None = "true",
+    files: list[tuple[str, bytes]] | None = None,
 ) -> Response:
+    """An Upload Batch of files, or of the one file data."""
     form = {} if consent is None else {"consent_confirmed": consent}
     return await client.post(
         f"/api/jobs/{job_id}/uploads",
         headers=user.headers,
-        files={"file": (filename, data)},
+        files=[("files", file) for file in files or [(filename, data)]],
         data=form,
     )
 
 
-async def items(client: AsyncClient, user: User, job_id: str) -> list[dict[str, Any]]:
+async def batches(client: AsyncClient, user: User, job_id: str) -> list[dict[str, Any]]:
     response = await client.get(f"/api/jobs/{job_id}/uploads", headers=user.headers)
     assert response.status_code == 200
     result: list[dict[str, Any]] = response.json()
     return result
+
+
+async def items(client: AsyncClient, user: User, job_id: str) -> list[dict[str, Any]]:
+    """Every batch's items, newest batch first."""
+    return [item for batch in await batches(client, user, job_id) for item in batch["items"]]
 
 
 async def applications(client: AsyncClient, user: User, job_id: str) -> list[dict[str, Any]]:
@@ -133,22 +140,89 @@ async def test_upload_stores_the_file_and_enqueues_its_parse(
     response = await upload(client, recruiter, job)
 
     assert response.status_code == 202
-    item_id = response.json()["item_id"]
+    [item_id] = response.json()["item_ids"]
     assert enqueued == [(str(recruiter.tenant_id), item_id)]
     # Object keys carry the Tenant (SAD §4.3).
     [(key, data)] = objects.items()
     assert key.startswith(f"t/{recruiter.tenant_id}/") and data == CV
-    [item] = await items(client, recruiter, job)
-    assert item | {"created_at": None} == {
-        "id": item_id,
-        "batch_id": response.json()["batch_id"],
-        "file_name": "an.docx",
-        "status": "PENDING",
-        "dedupe": None,
-        "error_code": None,
-        "error_message": None,
+    [batch] = await batches(client, recruiter, job)
+    assert batch | {"created_at": None} == {
+        "id": response.json()["batch_id"],
+        "status": "PROCESSING",
+        "total": 1,
+        "processed": 0,
+        "failed": 0,
         "created_at": None,
+        "items": [
+            {
+                "id": item_id,
+                "file_name": "an.docx",
+                "status": "PENDING",
+                "dedupe": None,
+                "error_code": None,
+                "error_message": None,
+            }
+        ],
     }
+
+
+async def test_batch_stores_every_file_and_enqueues_a_parse_for_each(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    objects: dict[str, bytes],
+    enqueued: list[tuple[str, ...]],
+) -> None:
+    files = [(f"cv-{n}.docx", docx(f"CV {n}")) for n in range(3)]
+
+    response = await upload(client, recruiter, job, files=files)
+
+    assert response.status_code == 202
+    item_ids = response.json()["item_ids"]
+    assert enqueued == [(str(recruiter.tenant_id), item_id) for item_id in item_ids]
+    assert sorted(objects.values()) == sorted(data for _, data in files)
+    [batch] = await batches(client, recruiter, job)
+    assert (batch["total"], batch["processed"]) == (3, 0)
+    # In the order the files were sent.
+    assert [(i["id"], i["file_name"]) for i in batch["items"]] == [
+        (item_id, name) for item_id, (name, _) in zip(item_ids, files, strict=True)
+    ]
+    [row] = query(recruiter, "SELECT total_count FROM upload_batches")
+    assert row == {"total_count": 3}
+
+
+@pytest.mark.parametrize(
+    ("files", "code", "rejected"),
+    [
+        ([(f"cv-{n}.docx", CV) for n in range(51)], 413, []),
+        ([("an.docx", CV), ("notes.txt", b"Nguyen Van An")], 415, ["notes.txt"]),
+        ([("an.docx", CV), ("big.pdf", b"%PDF" + b"0" * (10 * 1024 * 1024))], 413, ["big.pdf"]),
+        # Every file at fault is named; one too large makes the whole batch a 413.
+        (
+            [("x.pdf", b"PK"), ("an.docx", CV), ("big.pdf", b"%PDF" + b"0" * (10 * 1024 * 1024))],
+            413,
+            ["x.pdf", "big.pdf"],
+        ),
+    ],
+    ids=["over 50 files", "one wrong type", "one over 10 MB", "both"],
+)
+async def test_batch_breaking_a_limit_is_rejected_whole_before_anything_is_stored(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    objects: dict[str, bytes],
+    enqueued: list[tuple[str, ...]],
+    files: list[tuple[str, bytes]],
+    code: int,
+    rejected: list[str],
+) -> None:
+    response = await upload(client, recruiter, job, files=files)
+
+    assert response.status_code == code
+    assert [f["file_name"] for f in response.json()["detail"]["files"]] == rejected
+    assert objects == {} and enqueued == []
+    assert query(recruiter, "SELECT id FROM upload_batches") == []
+    assert query(recruiter, "SELECT id FROM upload_batch_items") == []
 
 
 @pytest.mark.parametrize("consent", [None, "false"], ids=["missing", "false"])
@@ -210,7 +284,8 @@ async def test_other_tenants_job_is_not_found_on_every_endpoint(
 ) -> None:
     other = make_user()
 
-    assert (await upload(client, other, job)).status_code == 404
+    response = await upload(client, other, job, files=[("an.docx", CV), ("an.pdf", b"%PDF-1.7")])
+    assert response.status_code == 404
     for path in ("uploads", "applications"):
         response = await client.get(f"/api/jobs/{job}/{path}", headers=other.headers)
         assert response.status_code == 404
@@ -290,7 +365,7 @@ async def uploaded(
     data: bytes = CV,
 ) -> dict[str, Any]:
     """Upload, run the parse, and return the item as listed."""
-    item_id = (await upload(client, user, job_id, data)).json()["item_id"]
+    [item_id] = (await upload(client, user, job_id, data)).json()["item_ids"]
     run_parse(enqueued)
     return next(item for item in await items(client, user, job_id) if item["id"] == item_id)
 
@@ -370,7 +445,7 @@ async def test_parse_announces_the_item_to_the_recruiter(
     llm: FakeLlm,
     enqueued: list[tuple[str, ...]],
 ) -> None:
-    item_id = (await upload(client, recruiter, job)).json()["item_id"]
+    [item_id] = (await upload(client, recruiter, job)).json()["item_ids"]
     async with _redis().pubsub() as sub:
         await sub.subscribe(events.channel(recruiter.tenant_id, recruiter.id))
         assert (await sub.get_message(timeout=5) or {})["type"] == "subscribe"
@@ -567,7 +642,7 @@ class BarrierLlm(FakeLlm):
 
 
 @pytest.mark.usefixtures("redis", "llm")
-async def test_concurrent_cvs_with_the_same_email_make_one_candidate_and_application(
+async def test_cvs_with_the_same_email_in_one_batch_make_one_candidate_and_application(
     client: AsyncClient,
     recruiter: User,
     job: str,
@@ -576,21 +651,22 @@ async def test_concurrent_cvs_with_the_same_email_make_one_candidate_and_applica
 ) -> None:
     llm = BarrierLlm(PROFILE, 2)
     monkeypatch.setattr(uploads, "llm_from_env", lambda model: llm)
-    for body in ("CV một", "CV hai"):
-        await upload(client, recruiter, job, docx(body))
+    files = [("mot.docx", docx("CV một")), ("hai.docx", docx("CV hai"))]
+    await upload(client, recruiter, job, files=files)
 
     run_concurrently(enqueued)
 
-    assert sorted(str(i["dedupe"]) for i in await items(client, recruiter, job)) == [
-        "CV_REPLACED",
-        "None",
+    # As if parsed one after the other, and no item failed on a unique violation.
+    assert sorted((i["status"], str(i["dedupe"])) for i in await items(client, recruiter, job)) == [
+        ("SUCCEEDED", "CV_REPLACED"),
+        ("SUCCEEDED", "None"),
     ]
     assert len(query(recruiter, "SELECT id FROM candidates")) == 1
     assert len(await applications(client, recruiter, job)) == 1
 
 
 @pytest.mark.usefixtures("redis")
-async def test_concurrent_uploads_of_the_same_file_parse_it_once(
+async def test_the_same_file_twice_in_one_batch_is_parsed_once(
     client: AsyncClient,
     recruiter: User,
     job: str,
@@ -598,21 +674,72 @@ async def test_concurrent_uploads_of_the_same_file_parse_it_once(
     enqueued: list[tuple[str, ...]],
 ) -> None:
     llm.data = profile(email=None)  # nothing but the file to dedupe on
-    for _ in range(2):
-        await upload(client, recruiter, job)
+    await upload(client, recruiter, job, files=[("an.docx", CV), ("an (1).docx", CV)])
 
     run_concurrently(enqueued)
 
     assert llm.calls == 1
     assert len(query(recruiter, "SELECT id FROM cv_documents")) == 1
     assert len(query(recruiter, "SELECT id FROM candidates")) == 1
-    assert sorted(str(i["dedupe"]) for i in await items(client, recruiter, job)) == [
-        "ALREADY_APPLIED",
-        "None",
+    assert sorted((i["status"], str(i["dedupe"])) for i in await items(client, recruiter, job)) == [
+        ("SUCCEEDED", "ALREADY_APPLIED"),
+        ("SUCCEEDED", "None"),
     ]
 
 
 # Failures and redelivery.
+
+
+@pytest.mark.usefixtures("redis")
+async def test_broken_files_fail_alone_and_the_batch_counts_them(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    llm: FakeLlm,
+    enqueued: list[tuple[str, ...]],
+) -> None:
+    files = [(f"cv-{n}.docx", docx(f"CV {n}")) for n in range(3)]
+    files[1:1] = [("damaged.pdf", b"%PDF-1.7\n damaged"), ("bomb.docx", docx_bomb())]
+    await upload(client, recruiter, job, files=files)
+
+    run_parse(enqueued)
+
+    [batch] = await batches(client, recruiter, job)
+    assert {k: batch[k] for k in ("status", "total", "processed", "failed")} == {
+        "status": "COMPLETED",
+        "total": 5,
+        "processed": 5,
+        "failed": 2,
+    }
+    assert [(i["file_name"], i["status"], i["error_code"]) for i in batch["items"]] == [
+        ("cv-0.docx", "SUCCEEDED", None),
+        ("damaged.pdf", "FAILED", "UNREADABLE"),
+        ("bomb.docx", "FAILED", "DOCX_TOO_LARGE"),
+        ("cv-1.docx", "SUCCEEDED", None),
+        ("cv-2.docx", "SUCCEEDED", None),
+    ]
+    assert all(i["error_message"] for i in batch["items"] if i["status"] == "FAILED")
+
+
+@pytest.mark.usefixtures("redis")
+async def test_batch_progress_counts_the_items_done_so_far(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    llm: FakeLlm,
+    enqueued: list[tuple[str, ...]],
+) -> None:
+    await upload(client, recruiter, job, files=[("an.docx", CV), ("damaged.pdf", b"%PDF-1.7")])
+
+    uploads.parse_cv.apply(args=enqueued[1]).get()
+
+    [batch] = await batches(client, recruiter, job)
+    assert {k: batch[k] for k in ("status", "total", "processed", "failed")} == {
+        "status": "PROCESSING",
+        "total": 2,
+        "processed": 1,
+        "failed": 1,
+    }
 
 
 @pytest.mark.usefixtures("redis")

@@ -83,8 +83,10 @@ def test_sse_events_pass_through_unbuffered() -> None:
         assert response.readline() == b"event: smoke\n"
 
 
-# The per-file limit of FR-A1.2, as MAX_DOCUMENT_BYTES in apps/api/app/jobs.py.
+# The limits of FR-A1.2, as MAX_DOCUMENT_BYTES in apps/api/app/jobs.py and MAX_BATCH_FILES in
+# apps/api/app/uploads.py.
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+MAX_BATCH_FILES = 50
 
 
 def post_file(path: str, size: int) -> int:
@@ -103,8 +105,15 @@ def post_file(path: str, size: int) -> int:
         return error.code
 
 
-@pytest.mark.parametrize("path", ["/api/jobs", f"/api/jobs/{uuid.uuid4()}/uploads"])
-def test_upload_routes_refuse_an_oversized_body_before_the_api(path: str) -> None:
+@pytest.mark.parametrize(
+    ("path", "limit"),
+    [
+        ("/api/jobs", MAX_DOCUMENT_BYTES),
+        (f"/api/jobs/{uuid.uuid4()}/uploads", MAX_BATCH_FILES * MAX_DOCUMENT_BYTES),
+    ],
+    ids=["JD Document", "Upload Batch"],
+)
+def test_upload_routes_refuse_an_oversized_body_before_the_api(path: str, limit: int) -> None:
     # The API answers an unauthenticated upload with 401, so a 413 can only come from Caddy.
-    assert post_file(path, MAX_DOCUMENT_BYTES) == 401
-    assert post_file(path, MAX_DOCUMENT_BYTES + 1024 * 1024) == 413
+    assert post_file(path, limit) == 401
+    assert post_file(path, limit + 1024 * 1024) == 413

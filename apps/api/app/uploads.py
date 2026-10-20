@@ -1,8 +1,8 @@
-"""Upload a CV into a Job; its parse creates the Candidate, CV Document and Application (FR-A1.2).
+"""Upload CVs into a Job; each parse creates a Candidate, CV Document and Application (FR-A1.2).
 
-Each upload is an Upload Batch of one item (SAD §5.1). The API stores the file and enqueues
-`uploads.parse_cv` once that commits; the task dedupes, parses, writes the result on the item
-and tells the Recruiter over SSE.
+Each upload is an Upload Batch of up to MAX_BATCH_FILES items (SAD §5.1). The API checks every
+file before it stores any, then enqueues `uploads.parse_cv` per item once that commits; the task
+dedupes, parses, writes the result on the item and tells the Recruiter over SSE.
 """
 
 import asyncio
@@ -13,7 +13,7 @@ import os
 import re
 import uuid
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NoReturn
 
 from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
@@ -37,25 +37,38 @@ MIME_TYPES = {
 # ponytail: shape only; a CV whose email fails it simply gets a Candidate of its own.
 _EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
+# FR-A1.2; with MAX_DOCUMENT_BYTES it sizes Caddy's body limit on this route (Caddyfile).
+MAX_BATCH_FILES = 50
+
 Dedupe = Literal["EXISTING_CANDIDATE", "CV_REPLACED", "ALREADY_APPLIED"]
+RejectReason = Literal["TOO_LARGE", "UNSUPPORTED_TYPE"]
 
 router = APIRouter(prefix="/api/jobs")
 
 
 class UploadCreated(BaseModel):
     batch_id: uuid.UUID
-    item_id: uuid.UUID
+    item_ids: list[uuid.UUID]
 
 
 class UploadItem(BaseModel):
     id: uuid.UUID
-    batch_id: uuid.UUID
     file_name: str
     status: Literal["PENDING", "SUCCEEDED", "FAILED"]
     dedupe: Dedupe | None
     error_code: str | None
     error_message: str | None
+
+
+class UploadBatch(BaseModel):
+    id: uuid.UUID
+    status: Literal["PROCESSING", "COMPLETED"]
+    total: int
+    # Counted from the items (SAD §5.1); processed includes failed.
+    processed: int
+    failed: int
     created_at: datetime
+    items: list[UploadItem]
 
 
 class Application(BaseModel):
@@ -78,10 +91,10 @@ async def _require_job(db: AsyncSession, job_id: uuid.UUID) -> None:
 async def create(
     job_id: uuid.UUID,
     auth: Recruiter,
-    file: UploadFile,
+    files: list[UploadFile],
     consent_confirmed: Annotated[bool, Form()],
 ) -> UploadCreated:
-    """One CV into a Job, as an Upload Batch of one item; the parse runs on queue llm."""
+    """CVs into a Job as one Upload Batch; each file's parse runs on queue llm."""
     if not consent_confirmed:
         # FR-A1.2: the Recruiter attests the Candidate's consent or another lawful basis.
         raise HTTPException(
@@ -89,60 +102,106 @@ async def create(
             "Confirm the lawful basis for processing the Candidate's personal data",
         )
     await _require_job(auth.db, job_id)
-    # Caddy cuts a body off a little past the limit, as in jobs.create.
-    data = await file.read(MAX_DOCUMENT_BYTES + 1)
-    if len(data) > MAX_DOCUMENT_BYTES:
-        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "The CV exceeds 10 MB")
-    kind = document_type(data)
-    if kind not in MIME_TYPES:
-        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "The CV must be PDF or DOCX")
+    if len(files) > MAX_BATCH_FILES:
+        _reject(status.HTTP_413_CONTENT_TOO_LARGE, f"At most {MAX_BATCH_FILES} CVs per upload", [])
 
-    # ponytail: an object stays behind if the inserts below fail; a sweep can collect those.
-    key = f"t/{auth.tenant_id}/cv/{uuid.uuid4()}.{kind}"
-    await asyncio.to_thread(storage.put, key, data)
+    # Every file is checked before any is stored, so a rejected batch leaves nothing to clean
+    # up. Starlette has spooled them to disk; each is read once here and once to store it.
+    kinds: list[str | None] = []
+    rejected: list[tuple[UploadFile, RejectReason]] = []
+    for file in files:
+        # Reading one byte past the limit is enough to tell the file is over it.
+        data = await file.read(MAX_DOCUMENT_BYTES + 1)
+        kind = document_type(data)
+        kinds.append(kind)
+        if len(data) > MAX_DOCUMENT_BYTES:
+            rejected.append((file, "TOO_LARGE"))
+        elif kind not in MIME_TYPES:
+            rejected.append((file, "UNSUPPORTED_TYPE"))
+    if rejected:
+        too_large = any(reason == "TOO_LARGE" for _, reason in rejected)
+        _reject(
+            status.HTTP_413_CONTENT_TOO_LARGE
+            if too_large
+            else status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            f"Each CV must be a PDF or DOCX of at most {MAX_DOCUMENT_BYTES // 2**20} MB",
+            rejected,
+        )
+
     batch_id: uuid.UUID = (
         await auth.db.execute(
             text(
                 "INSERT INTO upload_batches (tenant_id, job_id, created_by, total_count, status)"
-                " VALUES (:tenant_id, :job_id, :user_id, 1, 'PROCESSING') RETURNING id"
-            ),
-            {"tenant_id": auth.tenant_id, "job_id": job_id, "user_id": auth.user_id},
-        )
-    ).scalar_one()
-    item_id: uuid.UUID = (
-        await auth.db.execute(
-            text(
-                "INSERT INTO upload_batch_items (tenant_id, batch_id, file_name, storage_key,"
-                "  status, attempts, enqueued_at)"
-                " VALUES (:tenant_id, :batch_id, :file_name, :key, 'PENDING', 1, now())"
-                " RETURNING id"
+                " VALUES (:tenant_id, :job_id, :user_id, :total, 'PROCESSING') RETURNING id"
             ),
             {
                 "tenant_id": auth.tenant_id,
-                "batch_id": batch_id,
-                "file_name": file.filename or "CV",
-                "key": key,
+                "job_id": job_id,
+                "user_id": auth.user_id,
+                "total": len(files),
             },
         )
     ).scalar_one()
-    outbox.enqueue_after_commit(auth.db, parse_cv, (str(auth.tenant_id), str(item_id)))
-    return UploadCreated(batch_id=batch_id, item_id=item_id)
+    item_ids: list[uuid.UUID] = []
+    for file, extension in zip(files, kinds, strict=True):
+        await file.seek(0)
+        # ponytail: objects stay behind if a later put or insert fails; a sweep can collect them.
+        key = f"t/{auth.tenant_id}/cv/{uuid.uuid4()}.{extension}"
+        await asyncio.to_thread(storage.put, key, await file.read())
+        item_ids.append(
+            (
+                await auth.db.execute(
+                    text(
+                        "INSERT INTO upload_batch_items (tenant_id, batch_id, file_name,"
+                        "  storage_key, status, attempts, enqueued_at)"
+                        " VALUES (:tenant_id, :batch_id, :file_name, :key, 'PENDING', 1, now())"
+                        " RETURNING id"
+                    ),
+                    {
+                        "tenant_id": auth.tenant_id,
+                        "batch_id": batch_id,
+                        "file_name": file.filename or "CV",
+                        "key": key,
+                    },
+                )
+            ).scalar_one()
+        )
+    outbox.enqueue_after_commit(
+        auth.db, parse_cv, *[(str(auth.tenant_id), str(item_id)) for item_id in item_ids]
+    )
+    return UploadCreated(batch_id=batch_id, item_ids=item_ids)
+
+
+def _reject(code: int, message: str, files: list[tuple[UploadFile, RejectReason]]) -> NoReturn:
+    """Refuse the whole batch, naming each file at fault and why."""
+    raise HTTPException(
+        code,
+        {
+            "message": message,
+            "files": [{"file_name": f.filename, "reason": reason} for f, reason in files],
+        },
+    )
 
 
 @router.get("/{job_id}/uploads")
-async def list_items(job_id: uuid.UUID, auth: Recruiter) -> list[UploadItem]:
-    """The Job's upload items, newest first, with their failure or dedupe outcome."""
+async def list_batches(job_id: uuid.UUID, auth: Recruiter) -> list[UploadBatch]:
+    """The Job's Upload Batches, newest first, with their progress and their items in the order
+    sent, each with its failure or dedupe outcome."""
     await _require_job(auth.db, job_id)
     rows = await auth.db.execute(
         text(
-            "SELECT i.id, i.batch_id, i.file_name, i.status, i.dedupe, i.error_code,"
-            "  i.error_message, b.created_at"
-            " FROM upload_batch_items i JOIN upload_batches b ON b.id = i.batch_id"
-            " WHERE b.job_id = :job_id ORDER BY b.created_at DESC, i.id DESC"
+            "SELECT b.id, b.status, b.created_at, count(*) AS total,"
+            "  count(*) FILTER (WHERE i.status <> 'PENDING') AS processed,"
+            "  count(*) FILTER (WHERE i.status = 'FAILED') AS failed,"
+            "  json_agg(json_build_object('id', i.id, 'file_name', i.file_name,"
+            "    'status', i.status, 'dedupe', i.dedupe, 'error_code', i.error_code,"
+            "    'error_message', i.error_message) ORDER BY i.id) AS items"
+            " FROM upload_batches b JOIN upload_batch_items i ON i.batch_id = b.id"
+            " WHERE b.job_id = :job_id GROUP BY b.id ORDER BY b.created_at DESC, b.id DESC"
         ),
         {"job_id": job_id},
     )
-    return [UploadItem(**row._mapping) for row in rows]
+    return [UploadBatch(**row._mapping) for row in rows]
 
 
 @router.get("/{job_id}/applications")

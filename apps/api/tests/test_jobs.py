@@ -508,7 +508,7 @@ async def test_cv_upload_into_a_job_being_parsed_does_not_wait_for_the_parse(
             client.post(
                 f"/api/jobs/{job_id}/uploads",
                 headers=recruiter.headers,
-                files={"file": ("cv.pdf", PDF)},
+                files={"files": ("cv.pdf", PDF)},
                 data={"consent_confirmed": "true"},
             ),
             5,
