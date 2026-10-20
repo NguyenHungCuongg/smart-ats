@@ -1,4 +1,5 @@
-"""Create the demo Tenant and its Recruiter for dev and demo; rerunning changes nothing.
+"""Create the demo Tenant, its Company Admin and its Recruiter for dev and demo; rerunning
+changes nothing.
 
 Usage: SEED_PASSWORD=... python -m app.seed  (see README "Development")
 
@@ -11,11 +12,14 @@ from pwdlib import PasswordHash
 from sqlalchemy import create_engine, text
 
 DEMO_SLUG = "demo"
-DEMO_EMAIL = "recruiter@demo.local"
+DEMO_USERS = {
+    "admin@demo.local": ("Demo Admin", "COMPANY_ADMIN"),
+    "recruiter@demo.local": ("Demo Recruiter", "RECRUITER"),
+}
 
 
 def seed(password: str) -> None:
-    # Forced RLS binds the owner on users too, so the Recruiter goes in under the Tenant's context.
+    # Forced RLS binds the owner on users too, so the Users go in under the Tenant's context.
     with create_engine(os.environ["DATABASE_MIGRATION_URL"]).begin() as conn:
         conn.execute(
             text(
@@ -32,21 +36,25 @@ def seed(password: str) -> None:
             text("SELECT set_config('app.current_tenant_id', :tenant_id, true)"),
             {"tenant_id": str(tenant_id)},
         )
-        conn.execute(
-            text(
-                "INSERT INTO users (tenant_id, email, password_hash, full_name, role, is_active)"
-                " VALUES (:tenant_id, :email, :password_hash, 'Demo Recruiter', 'RECRUITER', true)"
-                " ON CONFLICT (email) DO NOTHING"
-            ),
-            {
-                "tenant_id": tenant_id,
-                "email": DEMO_EMAIL,
-                # Argon2id with pwdlib's recommended parameters (SRS FR-C1.1).
-                "password_hash": PasswordHash.recommended().hash(password),
-            },
-        )
+        for email, (full_name, role) in DEMO_USERS.items():
+            conn.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, full_name, role,"
+                    "  is_active)"
+                    " VALUES (:tenant_id, :email, :password_hash, :full_name, :role, true)"
+                    " ON CONFLICT (email) DO NOTHING"
+                ),
+                {
+                    "tenant_id": tenant_id,
+                    "email": email,
+                    # Argon2id with pwdlib's recommended parameters (SRS FR-C1.1).
+                    "password_hash": PasswordHash.recommended().hash(password),
+                    "full_name": full_name,
+                    "role": role,
+                },
+            )
 
 
 if __name__ == "__main__":
     seed(os.environ["SEED_PASSWORD"])
-    print(f"Seeded tenant '{DEMO_SLUG}' with Recruiter {DEMO_EMAIL}")
+    print(f"Seeded tenant '{DEMO_SLUG}' with {', '.join(DEMO_USERS)}")

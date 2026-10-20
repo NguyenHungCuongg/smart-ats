@@ -10,6 +10,9 @@ export default function Home() {
       <Link href="/jobs/new" className="underline">
         Tạo Job từ JD
       </Link>
+      <Link href="/settings/members" className="underline">
+        Thành viên Workspace
+      </Link>
     </main>
   );
 }

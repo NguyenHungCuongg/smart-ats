@@ -78,10 +78,10 @@ Run from the repo root. Hostnames in `.env` are Compose service names; use `loca
 | Celery worker (one queue)              | `uv run --env-file .env celery --workdir apps/api -A app.worker worker -Q default` |
 | Celery Beat                            | `uv run --env-file .env celery --workdir apps/api -A app.worker beat`              |
 | New migration                          | `uv run --directory apps/api alembic revision -m "<message>"`                      |
-| Seed demo tenant and Recruiter         | `docker compose run --rm -e SEED_PASSWORD=<password> migrate python -m app.seed`   |
+| Seed demo tenant, Admin and Recruiter  | `docker compose run --rm -e SEED_PASSWORD=<password> migrate python -m app.seed`   |
 | Eval comparison table (Experiment 1)   | `uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json`           |
 
-Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; readiness (DB, Redis, object storage): `GET /api/ready`. Progress events (SSE): `POST /api/events/ticket` with the access token returns a one-time ticket (lifetime: ADR-0003) for `GET /api/events?ticket=...`; workers send with `app.events.publish`. The seed creates tenant `demo` with Recruiter `recruiter@demo.local`; rerunning it changes nothing. It runs in the `migrate` service as `ats_owner`, because `ats_app` can read only its own tenant and write none. Sign in at https://localhost/login: the refresh cookie is `Secure` and `SameSite=Strict`, so the web app and the API must share the Caddy origin (`NEXT_PUBLIC_API_URL`), not run on separate ports.
+Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; readiness (DB, Redis, object storage): `GET /api/ready`. Progress events (SSE): `POST /api/events/ticket` with the access token returns a one-time ticket (lifetime: ADR-0003) for `GET /api/events?ticket=...`; workers send with `app.events.publish`. The seed creates tenant `demo` with Company Admin `admin@demo.local` and Recruiter `recruiter@demo.local`, both with `SEED_PASSWORD`; rerunning it changes nothing. It runs in the `migrate` service as `ats_owner`, because `ats_app` can read only its own tenant and write none. Sign in at https://localhost/login: the refresh cookie is `Secure` and `SameSite=Strict`, so the web app and the API must share the Caddy origin (`NEXT_PUBLIC_API_URL`), not run on separate ports.
 
 ## Demo: Job → CV → Score → Fit-Gap
 
@@ -94,6 +94,13 @@ The end-to-end flow of Roadmap M1, on Docker Compose:
 5. **Upload a CV:** in "Ứng viên" on the same page, pick a PDF or DOCX, confirm the lawful basis and press "Tải CV lên". The Application appears once the parse succeeds.
 6. **Score:** in "Chấm điểm", press "Chấm điểm". Each Application updates over SSE as its task finishes; reloading the page shows the latest run too.
 7. **Read the Fit-Gap Report:** each Application shows Total, the three Axis Scores, Must-have Coverage with the must-haves matched and missing, and Strengths, Gaps and Recommendations with their Evidence. A claim whose Evidence was not found in the CV is marked "Không có bằng chứng".
+
+## Demo: invite a Member
+
+1. Sign in at https://localhost/login as `admin@demo.local` and open "Thành viên Workspace" (`/settings/members`), which only Company Admins can use.
+2. Enter an email and a role, then press "Gửi lời mời". `worker-email` sends the invitation through Mailpit: open http://localhost:8025 to read it. The invitation shows "Đã gửi" once sent, or "Gửi lỗi, hãy mời lại" if SMTP refused it.
+3. Open the link from the email in another browser profile, enter a name and password: the new Member is signed in with the invited role. Each link works once, for the time FR-C1.2 sets; inviting the same email again cancels the previous link.
+4. Back on `/settings/members`, change a Member's role (effective at their next session refresh) or revoke them (their refresh tokens stop working at once). The Workspace always keeps at least one Company Admin.
 
 ## Tests
 

@@ -13,11 +13,23 @@ let refreshing: Promise<boolean> | null = null;
  * Returns the HTTP status: 200 on success, 401 bad credentials, 429 temporarily locked,
  * 0 when the API cannot be reached.
  */
-export async function login(email: string, password: string): Promise<number> {
-  const response = await fetch(`${API_URL}/api/auth/login`, {
+export function login(email: string, password: string): Promise<number> {
+  return signIn("/api/auth/login", { email, password });
+}
+
+/**
+ * Creates the invited Member's account and signs them in. Returns the HTTP status: 200 on
+ * success, 400 for an invalid or expired invitation, 0 when the API cannot be reached.
+ */
+export function acceptInvitation(token: string, fullName: string, password: string) {
+  return signIn("/api/invitations/accept", { token, full_name: fullName, password });
+}
+
+async function signIn(path: string, body: object): Promise<number> {
+  const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   }).catch(() => null);
   if (!response) return 0;
   if (response.ok) accessToken = (await response.json()).access_token;
