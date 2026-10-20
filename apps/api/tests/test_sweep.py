@@ -86,10 +86,10 @@ async def stuck(
         await client.post(
             f"/api/jobs/{scored}/uploads",
             headers=user.headers,
-            files={"file": ("an.docx", CV)},
+            files={"files": ("an.docx", CV)},
             data={"consent_confirmed": "true"},
         )
-    ).json()["item_id"]
+    ).json()["item_ids"][0]
     run_id = (await client.post(f"/api/jobs/{scored}/scoring-runs", headers=user.headers)).json()[
         "run_id"
     ]
