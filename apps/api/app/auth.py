@@ -156,7 +156,7 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Tok
             ),
             {"id": user.id},
         )
-        tokens, _ = await _issue_tokens(
+        tokens, _ = await issue_tokens(
             db,
             response,
             user.id,
@@ -203,7 +203,7 @@ async def refresh(
             await db.execute(_REVOKE_FAMILY, {"family_id": token.family_id})
         elif token is not None and token.expires_at > datetime.now(UTC):
             # Rotation keeps the family's expiry, set once at login (FR-C1.1).
-            tokens, new_id = await _issue_tokens(
+            tokens, new_id = await issue_tokens(
                 db,
                 response,
                 token.user_id,
@@ -253,7 +253,7 @@ def _tenant_of(refresh_token: str) -> uuid.UUID | None:
         return None
 
 
-async def _issue_tokens(
+async def issue_tokens(
     db: AsyncSession,
     response: Response,
     user_id: uuid.UUID,

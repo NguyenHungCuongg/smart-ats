@@ -226,8 +226,11 @@ class CampaignState(TypedDict):
 
 1. Gửi một bản nháp sẽ đặt `email_messages.status = QUEUED` trong cùng transaction với thay đổi nghiệp vụ (ví dụ từ chối hàng loạt).
 2. Hook `on_commit` enqueue `send_email(tenant_id, email_id)`.
-3. Worker gửi qua nhà cung cấp với `email_id` làm idempotency key, rồi đặt dòng thành `SENT` hoặc `FAILED`.
-4. Lượt quét của `beat` enqueue lại các dòng kẹt ở `QUEUED` quá ngưỡng của §6, xử lý trường hợp mất lệnh enqueue.
+3. Worker (`emails.send_email` trên queue `email`) khóa dòng, bỏ qua nếu dòng không còn `QUEUED`, gửi qua SMTP với `email_id` làm idempotency key (header `Message-ID`), rồi đặt dòng thành `SENT` hoặc `FAILED`. Gửi lỗi không thử lại: người gửi tạo email mới (với lời mời Member là mời lại, tạo token mới).
+4. Lượt quét của `beat` enqueue lại các dòng kẹt ở `QUEUED` quá ngưỡng của §6, xử lý trường hợp mất lệnh enqueue; hết số lần giao lại thì dòng chuyển `FAILED`.
+5. Khi dòng chuyển `SENT` hoặc `FAILED`, token trong link của body (`token=…`) bị che, để database không giữ token còn dùng được.
+
+Email đầu tiên đi qua outbox là lời mời Member (FR-C1.2): tạo lời mời và dòng `QUEUED` trong cùng transaction. Local gửi qua Mailpit.
 
 ### 5.5. Talent Rediscovery
 

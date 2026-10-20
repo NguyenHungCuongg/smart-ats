@@ -35,6 +35,7 @@ def test_check_loads_every_task_module_itself() -> None:
     )
     assert out.stdout.strip() == str(
         [
+            "emails.send_email",
             "jobs.parse",
             "scoring_runs.score_application",
             "sweep.stuck_rows",

@@ -1,8 +1,9 @@
 """beat's sweep of stuck outbox-style rows (SAD §6).
 
-A PENDING row last enqueued over STUCK_AFTER ago that no task holds locked has lost its task:
-the enqueue after commit never reached the broker, or the task rolled back. The sweep enqueues
-it again, up to MAX_ATTEMPTS enqueues in all, then fails it with error code STUCK. A task that
+A PENDING (for emails, QUEUED) row last enqueued over STUCK_AFTER ago that no task holds locked
+has lost its task: the enqueue after commit never reached the broker, or the task rolled back.
+The sweep enqueues it again, up to MAX_ATTEMPTS enqueues in all, then fails it with error code
+STUCK (an email, which has no error code, just FAILED). A task that
 is running holds its row locked however long it runs, so the sweep skips the row.
 """
 
@@ -13,7 +14,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import jobs, outbox, scoring_runs, uploads
+from app import emails, jobs, outbox, scoring_runs, uploads
 from app.db import sync_engine
 from app.worker import celery_app, tenant_task
 
@@ -36,7 +37,7 @@ def stuck_rows() -> None:
 
 @tenant_task(name="sweep.tenant")
 def tenant(tenant_id: uuid.UUID, session: Session) -> None:
-    """Enqueue again or fail the Tenant's stuck Job parses, upload items and score results."""
+    """Enqueue again or fail the Tenant's stuck Job parses, upload items, score results, emails."""
     tid = str(tenant_id)
 
     parses = []
@@ -94,6 +95,22 @@ def tenant(tenant_id: uuid.UUID, session: Session) -> None:
         else:
             results.append((tid, *args))
     outbox.enqueue_after_commit(session, scoring_runs.score_application, *results)
+
+    sends = []
+    for email in _stuck(
+        session,
+        "email_messages",
+        "attempts",
+        "enqueued_at",
+        "SELECT id, attempts FROM email_messages"
+        " WHERE status = 'QUEUED' AND enqueued_at < now() - :after"
+        " FOR NO KEY UPDATE SKIP LOCKED",
+    ):
+        if email.attempts >= MAX_ATTEMPTS:
+            emails.finish(session, email.id, "FAILED")
+        else:
+            sends.append((tid, str(email.id)))
+    outbox.enqueue_after_commit(session, emails.send_email, *sends)
 
 
 def _stuck(session: Session, table: str, attempts: str, enqueued_at: str, select: str) -> Any:

@@ -193,6 +193,16 @@ TENANT_TABLES = {
         "INSERT INTO ai_usage_entries (id, tenant_id, feature, model, input_tokens, output_tokens,"
         " cached_tokens, cost_usd) VALUES (:ai_usage_entries, :t, 'SCORING', 'm', 1, 1, 0, 0.01)"
     ),
+    "email_messages": (
+        "INSERT INTO email_messages (id, tenant_id, application_id, kind, to_address, subject,"
+        " body, status, sent_by) VALUES (:email_messages, :t, :applications, 'RESULT',"
+        " 'a@example.com', 's', 'b', 'QUEUED', :users)"
+    ),
+    "invitations": (
+        "INSERT INTO invitations (id, tenant_id, email, role, token_hash, invited_by, expires_at,"
+        " email_id) VALUES (:invitations, :t, 'a@example.com', 'RECRUITER', :invitations,"
+        " :users, now(), :email_messages)"
+    ),
 }
 
 

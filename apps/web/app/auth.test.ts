@@ -12,6 +12,7 @@ function fakeApi() {
     const token = () => Response.json({ access_token: `token-${++issued}` });
     switch (route) {
       case "POST /api/auth/login":
+      case "POST /api/invitations/accept":
         return token();
       case "POST /api/auth/refresh":
         return new Headers(init.headers).has("X-Requested-With")
@@ -43,6 +44,18 @@ test("requests carry the access token from login", async () => {
 
   expect((await auth.apiFetch("/api/auth/me")).status).toBe(200);
   expect(api.calls).toEqual(["POST /api/auth/login", "GET /api/auth/me"]);
+});
+
+test("accepting an invitation signs the new Member in", async () => {
+  expect(await auth.acceptInvitation("token", "Lê Thị Hoa", "pw")).toBe(200);
+
+  expect((await auth.apiFetch("/api/auth/me")).status).toBe(200);
+  expect(JSON.parse(api.fetch.mock.calls[0][1]?.body as string)).toEqual({
+    token: "token",
+    full_name: "Lê Thị Hoa",
+    password: "pw",
+  });
+  expect(api.calls).toEqual(["POST /api/invitations/accept", "GET /api/auth/me"]);
 });
 
 test("an expired access token is refreshed once, then the request retried", async () => {

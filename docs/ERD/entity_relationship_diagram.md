@@ -84,19 +84,23 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 
 > Refresh token của System Admin lưu trong `platform_refresh_tokens` (cùng cấu trúc, không có `tenant_id`, không RLS).
 
-### `invitations` — RLS; chấp nhận lời mời qua `SECURITY DEFINER accept_invitation(token)`
+### `invitations` — RLS; chấp nhận lời mời qua `SECURITY DEFINER accept_invitation(token_hash)`
 
-| Cột         | Kiểu               | Ghi chú             |
-| ----------- | ------------------ | ------------------- |
-| id          | uuid PK            |                     |
-| tenant_id   | uuid NN            |                     |
-| email       | citext NN          |                     |
-| role        | text NN            | chỉ các role tenant |
-| token_hash  | text UQ NN         |                     |
-| invited_by  | uuid FK → users NN |                     |
-| expires_at  | timestamptz NN     | TTL theo FR-C1.2    |
-| accepted_at | timestamptz        |                     |
-| revoked_at  | timestamptz        |                     |
+| Cột         | Kiểu                        | Ghi chú                                                                                   |
+| ----------- | --------------------------- | ----------------------------------------------------------------------------------------- |
+| id          | uuid PK                     |                                                                                           |
+| tenant_id   | uuid NN                     |                                                                                           |
+| email       | citext NN                   | mời lại cùng email thì lời mời cũ đang chờ bị thu hồi                                     |
+| role        | text NN                     | chỉ các role tenant: `COMPANY_ADMIN`, `RECRUITER`, `REVIEWER`                             |
+| token_hash  | text UQ NN                  | SHA-256 của token; token chỉ nằm trong email (`email_messages.body`) cho tới khi gửi xong |
+| invited_by  | uuid FK → users NN          |                                                                                           |
+| email_id    | uuid FK → email_messages NN | email mời (`kind = MEMBER_INVITATION`); trạng thái của nó hiện ở danh sách lời mời        |
+| expires_at  | timestamptz NN              | TTL theo FR-C1.2                                                                          |
+| accepted_at | timestamptz                 |                                                                                           |
+| revoked_at  | timestamptz                 |                                                                                           |
+| created_at  | timestamptz NN              |                                                                                           |
+
+Index `(tenant_id, email)`: tìm lời mời đang chờ của một email.
 
 ---
 
@@ -374,20 +378,21 @@ Ký hiệu dùng bên dưới: **PK** khóa chính · **FK** khóa ngoại · **
 
 ### `email_messages` — đồng thời là email outbox
 
-| Cột                 | Kiểu                   | Ghi chú                                                                         |
-| ------------------- | ---------------------- | ------------------------------------------------------------------------------- |
-| id                  | uuid PK                | idempotency key gửi cho nhà cung cấp                                            |
-| tenant_id           | uuid NN                |                                                                                 |
-| application_id      | uuid FK → applications | `NULL` với lời mời Member                                                       |
-| kind                | text NN                | `INVITE_INTERVIEW`, `RESULT`, `FOLLOW_UP`, `APPLY_RECEIPT`, `MEMBER_INVITATION` |
-| tone                | text                   | `FORMAL`, `FRIENDLY`, `CONCISE`                                                 |
-| to_address          | citext NN              |                                                                                 |
-| subject, body       | text NN                |                                                                                 |
-| status              | text NN                | `DRAFT`, `QUEUED`, `SENT`, `FAILED`                                             |
-| provider_message_id | text                   |                                                                                 |
-| attempts            | int NN default 0       |                                                                                 |
-| sent_by             | uuid FK → users        |                                                                                 |
-| created_at, sent_at | timestamptz            |                                                                                 |
+| Cột                 | Kiểu                   | Ghi chú                                                                            |
+| ------------------- | ---------------------- | ---------------------------------------------------------------------------------- |
+| id                  | uuid PK                | idempotency key gửi cho nhà cung cấp                                               |
+| tenant_id           | uuid NN                |                                                                                    |
+| application_id      | uuid FK → applications | `NULL` với lời mời Member                                                          |
+| kind                | text NN                | `INVITE_INTERVIEW`, `RESULT`, `FOLLOW_UP`, `APPLY_RECEIPT`, `MEMBER_INVITATION`    |
+| tone                | text                   | `FORMAL`, `FRIENDLY`, `CONCISE`                                                    |
+| to_address          | citext NN              |                                                                                    |
+| subject, body       | text NN                | khi dòng chuyển `SENT` hoặc `FAILED`, token trong link (`token=…`) của body bị che |
+| status              | text NN                | `DRAFT`, `QUEUED`, `SENT`, `FAILED`                                                |
+| provider_message_id | text                   |                                                                                    |
+| attempts            | int NN default 0       | số lần enqueue task gửi, kể cả lần đầu (SAD §6)                                    |
+| enqueued_at         | timestamptz            | lần enqueue gần nhất; lượt quét dựa vào đây để biết dòng `QUEUED` bị treo (SAD §6) |
+| sent_by             | uuid FK → users        |                                                                                    |
+| created_at, sent_at | timestamptz            |                                                                                    |
 
 ---
 
@@ -441,6 +446,8 @@ Vì RLS bị force, policy ràng buộc cả `ats_owner`: một hàm `SECURITY D
 | `public_job_by_slug(slug)`          | tenant_id, job_id, title, status, apply_deadline, tên/logo/URL quyền riêng tư của tenant | Public Apply Link             |
 | `accept_invitation(token_hash)`     | tenant_id, email, role (và đánh dấu đã chấp nhận)                                        | Chấp nhận lời mời             |
 | `active_tenant_ids()`               | id của các tenant `ACTIVE`                                                               | Lượt quét của `beat` (SAD §6) |
+
+`accept_invitation` làm giống `auth_find_user` (migration `0008`): chỉ nhận lời mời chưa hết hạn, chưa dùng, chưa thu hồi, đánh dấu `accepted_at` rồi trả lại context của caller. Caller tự đặt context của tenant trả về và tạo User trong cùng transaction, nên tạo User lỗi thì lời mời vẫn dùng được.
 
 `active_tenant_ids` không cần đặt context: `tenants` chỉ bật RLS, không force, nên chủ sở hữu thấy mọi dòng (migration `0007`).
 

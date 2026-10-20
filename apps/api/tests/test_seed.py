@@ -9,7 +9,7 @@ from tests.test_tenancy import owner_engine
 pytestmark = pytest.mark.usefixtures("database")
 
 
-def test_seed_creates_one_tenant_and_recruiter_however_often_it_runs() -> None:
+def test_seed_creates_one_tenant_admin_and_recruiter_however_often_it_runs() -> None:
     seed("demo-password")
     seed("demo-password")
 
@@ -20,8 +20,8 @@ def test_seed_creates_one_tenant_and_recruiter_however_often_it_runs() -> None:
     assert len(tenant_ids) == 1
 
     with tenant_session(tenant_ids[0]) as session:
-        users = session.execute(text("SELECT role, password_hash FROM users")).all()
-    assert [role for role, _ in users] == ["RECRUITER"]
-    password_hash = users[0][1]
-    assert password_hash.startswith("$argon2id$")
-    assert PasswordHash.recommended().verify("demo-password", password_hash)
+        users = session.execute(text("SELECT role, password_hash FROM users ORDER BY role")).all()
+    assert [role for role, _ in users] == ["COMPANY_ADMIN", "RECRUITER"]
+    for _, password_hash in users:
+        assert password_hash.startswith("$argon2id$")
+        assert PasswordHash.recommended().verify("demo-password", password_hash)

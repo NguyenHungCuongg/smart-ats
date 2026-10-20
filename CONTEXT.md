@@ -18,6 +18,10 @@ _Avoid_: Using it as a synonym for Tenant in code or schema
 A User who belongs to a Tenant and holds exactly one Tenant Role (Company Admin, Recruiter, Reviewer).
 _Avoid_: Employee, staff
 
+**Invitation**:
+A one-time emailed link through which a Company Admin brings a new Member into the Tenant with a given Tenant Role.
+_Avoid_: Invite code, sign-up link
+
 **System Admin**:
 A platform operator who manages Tenants and quotas but never reads a Tenant's recruitment data.
 _Avoid_: Superuser, root

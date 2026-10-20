@@ -12,7 +12,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from app import jobs, scoring_runs, storage, sweep, uploads
+from app import emails, jobs, scoring_runs, storage, sweep, uploads
 from app.db import sync_engine, tenant_session
 from app.main import app
 from smart_ats_scoring import pricing
@@ -29,6 +29,7 @@ pytestmark = pytest.mark.usefixtures("database", "redis")
 def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("JWT_SECRET", "test-secret-at-least-32-bytes-long!")
     monkeypatch.setenv("LLM_REASONING_MODEL", MODEL)
+    monkeypatch.setenv("WEB_BASE_URL", "https://ats.example")
     monkeypatch.setitem(
         pricing.PRICES, MODEL, pricing.Price(Decimal("2"), Decimal("0.2"), Decimal("10"))
     )
@@ -46,7 +47,13 @@ def objects(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
 def enqueued(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, tuple[str, ...]]]:
     """Every task sent to the broker, as (name, args): none of them ever reaches a worker."""
     sent: list[tuple[str, tuple[str, ...]]] = []
-    for task in (jobs.parse, uploads.parse_cv, scoring_runs.score_application, sweep.tenant):
+    for task in (
+        jobs.parse,
+        uploads.parse_cv,
+        scoring_runs.score_application,
+        emails.send_email,
+        sweep.tenant,
+    ):
         monkeypatch.setattr(
             task, "delay", lambda *args, name=task.name: sent.append((name, tuple(args)))
         )
@@ -215,6 +222,59 @@ async def test_row_still_stuck_after_three_redeliveries_fails_as_stuck(
         ).one()
     assert tuple(item) == ("FAILED", "STUCK", "COMPLETED")
     assert tuple(run) == ("PARTIAL", "FAILED", "STUCK")
+
+
+async def stuck_email(
+    client: AsyncClient, enqueued: list[tuple[str, tuple[str, ...]]], *, attempts: int = 1
+) -> tuple[User, tuple[str, ...]]:
+    """A Member invitation whose email was enqueued and then lost; returns its send_email args."""
+    admin = make_user("COMPANY_ADMIN")
+    response = await client.post(
+        "/api/invitations",
+        headers=admin.headers,
+        json={"email": f"{uuid.uuid4().hex}@example.com", "role": "RECRUITER"},
+    )
+    assert response.status_code == 201
+    [(_, args)] = enqueued
+    enqueued.clear()
+    with tenant_session(admin.tenant_id) as session:
+        session.execute(
+            text(
+                "UPDATE email_messages SET enqueued_at = enqueued_at - interval '11 minutes',"
+                "  attempts = :attempts"
+            ),
+            {"attempts": attempts},
+        )
+    return admin, args
+
+
+async def test_stuck_email_is_enqueued_again_once_in_its_own_tenant(
+    client: AsyncClient, enqueued: list[tuple[str, tuple[str, ...]]]
+) -> None:
+    a, a_args = await stuck_email(client, enqueued)
+    b, b_args = await stuck_email(client, enqueued)
+
+    for _ in range(2):
+        sweep_tenant(a)
+        sweep_tenant(b)
+
+    assert sorted(enqueued) == sorted(
+        [("emails.send_email", a_args), ("emails.send_email", b_args)]
+    )
+
+
+async def test_email_still_stuck_after_three_redeliveries_fails_with_its_token_masked(
+    client: AsyncClient, enqueued: list[tuple[str, tuple[str, ...]]]
+) -> None:
+    admin, _ = await stuck_email(client, enqueued, attempts=4)
+
+    sweep_tenant(admin)
+
+    assert enqueued == []
+    with tenant_session(admin.tenant_id) as session:
+        email = session.execute(text("SELECT status, body FROM email_messages")).one()
+    assert email.status == "FAILED"
+    assert "token=[redacted]" in email.body
 
 
 def test_active_tenant_ids_is_the_only_way_for_ats_app_to_list_tenants() -> None:

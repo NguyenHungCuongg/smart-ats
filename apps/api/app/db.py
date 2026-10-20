@@ -42,5 +42,11 @@ def tenant_session(tenant_id: UUID) -> Iterator[Session]:
 async def async_tenant_session(tenant_id: UUID) -> AsyncIterator[AsyncSession]:
     """The API's counterpart of tenant_session."""
     async with AsyncSession(async_engine()) as session, session.begin():
-        await session.execute(_SET_TENANT, {"tenant_id": str(tenant_id)})
+        await set_tenant(session, tenant_id)
         yield session
+
+
+async def set_tenant(session: AsyncSession, tenant_id: UUID) -> None:
+    """Scope session's open transaction to tenant_id, for a request that learns its Tenant
+    only from a SECURITY DEFINER lookup in that same transaction (ERD §8)."""
+    await session.execute(_SET_TENANT, {"tenant_id": str(tenant_id)})
