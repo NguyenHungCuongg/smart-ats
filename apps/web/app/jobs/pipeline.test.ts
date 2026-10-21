@@ -1,6 +1,12 @@
+import { createTranslator } from "next-intl";
 import { expect, test } from "vitest";
 
+import type { Locale } from "../../i18n/locale";
+import { CATALOGS } from "../../i18n/messages";
 import { type Card, ask, bulkTargets, moveError, targets, visible } from "./pipeline";
+
+const t = (locale: Locale) =>
+  createTranslator({ locale, messages: CATALOGS[locale], namespace: "pipeline" });
 
 const card = (changes: Partial<Card>): Card => ({
   id: "a",
@@ -81,9 +87,14 @@ test("the filter keeps the cards of a source within a Total range", () => {
 });
 
 test("a refused move says why, and a conflict says the board reloads", () => {
-  expect(moveError(409)).toBe(
+  expect(moveError(t("vi"), 409)).toBe(
     "Board vừa thay đổi hoặc thao tác không hợp lệ với stage hiện tại. Đã tải lại board.",
   );
-  expect(moveError(422)).toBe("Mở lại Application cần ghi lý do.");
-  expect(moveError(500)).toBe("Không đổi được stage. Vui lòng thử lại.");
+  expect(moveError(t("vi"), 422)).toBe("Mở lại Application cần ghi lý do.");
+  expect(moveError(t("vi"), 500)).toBe("Không đổi được stage. Vui lòng thử lại.");
+  expect(moveError(t("en"), 409)).toBe(
+    "The board just changed, or the move isn't valid from the current Stage. The board was reloaded.",
+  );
+  expect(moveError(t("en"), 422)).toBe("Reopening an Application needs a reason.");
+  expect(moveError(t("en"), 500)).toBe("Couldn't change the Stage. Please try again.");
 });

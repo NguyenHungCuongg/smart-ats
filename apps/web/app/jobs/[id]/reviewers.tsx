@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
@@ -8,11 +9,13 @@ type Reviewer = { id: string; full_name: string; email: string; assigned: boolea
 
 /** Choose which of the Workspace's Reviewers see the Job (Reviewer Assignment). */
 export function Reviewers({ jobId }: { jobId: string }) {
+  const t = useTranslations("reviewers");
   const [reviewers, setReviewers] = useState<Reviewer[] | null>(null);
   // The ids checked now; saved replaces the Job's whole list.
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  // Whether the last save went through, worded at render in the language shown.
+  const [saved, setSaved] = useState<boolean | null>(null);
 
   function show(list: Reviewer[]) {
     setReviewers(list);
@@ -34,26 +37,24 @@ export function Reviewers({ jobId }: { jobId: string }) {
     setPending(false);
     if (response.ok) {
       show(await response.json());
-      setMessage("Đã lưu danh sách Reviewer.");
+      setSaved(true);
     } else {
       // 422: a Reviewer was revoked or re-roled meanwhile.
-      setMessage("Không lưu được. Tải lại trang để xem danh sách Reviewer mới nhất.");
+      setSaved(false);
     }
   }
 
   return (
     <section className="flex flex-col gap-3 border-t border-hairline-cloud pt-6">
-      <h2 className="heading-display text-2xl font-semibold">Reviewer</h2>
+      <h2 className="heading-display text-2xl font-semibold">{t("title")}</h2>
       {!reviewers ? (
         <div aria-busy="true" className="h-16 animate-pulse rounded-md bg-hairline-cloud" />
       ) : reviewers.length === 0 ? (
-        <p className="text-sm">
-          Workspace chưa có Reviewer nào. Company Admin mời Reviewer ở trang Thành viên.
-        </p>
+        <p className="text-sm">{t("none")}</p>
       ) : (
         <form onSubmit={onSubmit} className="flex flex-col gap-3">
           <fieldset className="flex flex-col gap-2">
-            <legend className="text-sm">Reviewer được gán chỉ xem Job này, không sửa.</legend>
+            <legend className="text-sm">{t("note")}</legend>
             {reviewers.map((r) => (
               <label key={r.id} className="flex items-center gap-2">
                 <input
@@ -70,9 +71,9 @@ export function Reviewers({ jobId }: { jobId: string }) {
               </label>
             ))}
           </fieldset>
-          {message && <p role="status">{message}</p>}
+          {saved !== null && <p role="status">{saved ? t("saved") : t("failed")}</p>}
           <button type="submit" disabled={pending} className="self-start button-outline">
-            Lưu Reviewer
+            {t("save")}
           </button>
         </form>
       )}

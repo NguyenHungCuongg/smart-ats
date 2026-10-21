@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { Archivo, Be_Vietnam_Pro, JetBrains_Mono } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale } from "next-intl/server";
 import type { ReactNode } from "react";
 
 import "./globals.css";
+import { LocaleSwitch } from "./locale-switch";
 
 // DESIGN.md: Archivo for display (wdth gives Semi-Condensed), Be Vietnam Pro for every UI role,
 // JetBrains Mono for code. globals.css maps the variables to font-display, font-sans, font-mono.
@@ -26,13 +29,21 @@ export const metadata: Metadata = {
   title: "Smart ATS",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
-      lang="vi"
+      lang={await getLocale()}
       className={`${archivo.variable} ${beVietnamPro.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="bg-surface-canvas-light font-sans text-ink-deep">{children}</body>
+      <body className="flex min-h-screen flex-col bg-surface-canvas-light font-sans text-ink-deep">
+        {/* The catalog of the request's language, for client components (NFR-USE-03). */}
+        <NextIntlClientProvider>
+          <header className="flex justify-end px-6 pt-4">
+            <LocaleSwitch />
+          </header>
+          {children}
+        </NextIntlClientProvider>
+      </body>
     </html>
   );
 }

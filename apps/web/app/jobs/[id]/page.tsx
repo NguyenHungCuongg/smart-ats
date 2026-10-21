@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { type FormEvent, type ReactNode, use, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
@@ -15,22 +16,23 @@ import {
   toConfirmation,
   weightTotal,
 } from "../criteria";
-import { STATUS_NAMES, canEdit } from "../lifecycle";
+import { canEdit } from "../lifecycle";
 import { MetadataForm, StatusActions } from "./lifecycle";
 import { Pipeline } from "./pipeline";
 import { Reviewers } from "./reviewers";
 import { Scoring } from "./scoring";
 import { Uploads } from "./uploads";
 
-const PARSE_ERRORS: Record<string, string> = {
-  NO_TEXT: "JD không có lớp văn bản (bản scan hoặc file rỗng).",
-  ENCRYPTED_PDF: "PDF của JD được đặt mật khẩu.",
-  DOCX_TOO_LARGE: "File DOCX của JD quá lớn khi giải nén.",
-  UNREADABLE: "File JD bị hỏng, không đọc được.",
-  UNSUPPORTED_FORMAT: "Định dạng file JD không được hỗ trợ.",
-  UNPRICED_MODEL: "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
-  STUCK: "Hệ thống chưa phân tích được JD sau nhiều lần thử.",
-};
+// The parse errors the catalog words (job.parseError); any other reads as a failed parse.
+const PARSE_ERRORS = [
+  "NO_TEXT",
+  "ENCRYPTED_PDF",
+  "DOCX_TOO_LARGE",
+  "UNREADABLE",
+  "UNSUPPORTED_FORMAT",
+  "UNPRICED_MODEL",
+  "STUCK",
+] as const;
 
 // Secondary actions read as link-on-light: one filled button per page (DESIGN.md).
 const LINK_BUTTON = "font-medium underline";
@@ -39,6 +41,8 @@ const LINK_BUTTON = "font-medium underline";
  * move the Job through its lifecycle; a Reviewer, or anyone on an archived Job, only reads. */
 export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const { id } = use(params);
+  const t = useTranslations("job");
+  const statusName = useTranslations("lifecycle.status");
   const role = useRole();
   const [job, setJob] = useState<Job | null>(null);
   const [missing, setMissing] = useState(false);
@@ -64,12 +68,12 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
 
   const editable = job !== null && role !== null && canEdit(role, job.status);
   return (
-    <main className="min-h-screen">
+    <main className="flex-1">
       <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
         {missing ? (
-          <p>Không tìm thấy Job.</p>
+          <p>{t("notFound")}</p>
         ) : !job || !role ? (
-          <div aria-busy="true" aria-label="Đang tải Job" className="flex flex-col gap-4">
+          <div aria-busy="true" aria-label={t("loading")} className="flex flex-col gap-4">
             <div className="h-9 w-2/3 animate-pulse rounded-md bg-hairline-cloud" />
             <div className="h-40 animate-pulse rounded-md bg-hairline-cloud" />
           </div>
@@ -78,12 +82,12 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
             <header className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="heading-display text-3xl font-semibold">{job.title}</h1>
-                <Badge>{STATUS_NAMES[job.status]}</Badge>
+                <Badge>{statusName(job.status)}</Badge>
               </div>
               {role === "REVIEWER" ? (
-                <p className="text-sm">Bạn xem Job này với vai trò Reviewer: chỉ đọc.</p>
+                <p className="text-sm">{t("reviewerReadOnly")}</p>
               ) : job.status === "ARCHIVED" ? (
-                <p className="text-sm">Job đã lưu trữ nên chỉ đọc.</p>
+                <p className="text-sm">{t("archivedReadOnly")}</p>
               ) : (
                 <>
                   <StatusActions job={job} onChanged={setJob} />
@@ -92,7 +96,7 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
               )}
             </header>
             {job.parse_status === "PENDING" ? (
-              <p role="status">Đang phân tích JD…</p>
+              <p role="status">{t("parsing")}</p>
             ) : editable ? (
               // Remount on every saved or parsed version, so the form starts from it.
               <CriteriaForm
@@ -117,28 +121,24 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
 
 /** The criteria as confirmed or parsed, for those who may not edit them. */
 function CriteriaView({ job }: { job: Job }) {
+  const t = useTranslations("job");
+  const locale = useLocale();
   const criteria = job.criteria;
   const facts: [string, string | null][] = [
-    ["Cấp bậc", job.level],
-    ["Hình thức làm việc", job.work_mode],
-    ["Phòng ban", job.department],
-    ["Địa điểm", job.location],
-    [
-      "Hạn nộp hồ sơ",
-      job.apply_deadline && new Date(job.apply_deadline).toLocaleDateString("vi-VN"),
-    ],
-    ["Số năm kinh nghiệm tối thiểu", criteria?.min_years_experience?.toString() ?? null],
-    ["Học vấn", criteria?.education ?? null],
-    ["Dải lương", criteria?.salary_range ?? null],
-    [
-      "Trọng số",
-      `Technical ${job.weights.technical}%, Soft Skills ${job.weights.soft_skills}%, Experience ${job.weights.experience}%`,
-    ],
+    [t("level"), job.level],
+    [t("workMode"), job.work_mode],
+    [t("department"), job.department],
+    [t("location"), job.location],
+    [t("deadline"), job.apply_deadline && new Date(job.apply_deadline).toLocaleDateString(locale)],
+    [t("minYears"), criteria?.min_years_experience?.toLocaleString(locale) ?? null],
+    [t("education"), criteria?.education ?? null],
+    [t("salary"), criteria?.salary_range ?? null],
+    [t("weights"), t("weightsValue", job.weights)],
   ];
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="heading-display text-2xl font-semibold">Criteria</h2>
-      {!job.criteria_confirmed_at && <p className="text-sm">Criteria chưa được xác nhận.</p>}
+      <h2 className="heading-display text-2xl font-semibold">{t("criteria")}</h2>
+      {!job.criteria_confirmed_at && <p className="text-sm">{t("notConfirmed")}</p>}
       <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
         {facts.map(([label, value]) => (
           <div key={label} className="contents">
@@ -150,19 +150,19 @@ function CriteriaView({ job }: { job: Job }) {
       {criteria && (
         <>
           <div className="flex flex-col gap-2">
-            <h3 className="font-semibold">Kỹ năng</h3>
+            <h3 className="font-semibold">{t("skills")}</h3>
             <ul className="flex flex-wrap gap-2">
               {criteria.skills.map((skill) => (
                 <li key={skill.name} className="flex items-center gap-1">
                   {skill.name}
-                  {skill.must_have && <Badge>Must-have</Badge>}
+                  {skill.must_have && <Badge>{t("mustHave")}</Badge>}
                 </li>
               ))}
             </ul>
           </div>
           {criteria.responsibilities.length > 0 && (
             <div className="flex flex-col gap-2">
-              <h3 className="font-semibold">Trách nhiệm chính</h3>
+              <h3 className="font-semibold">{t("responsibilities")}</h3>
               <ul className="list-disc pl-5">
                 {criteria.responsibilities.map((line, i) => (
                   <li key={i}>{line}</li>
@@ -177,10 +177,14 @@ function CriteriaView({ job }: { job: Job }) {
 }
 
 function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void }) {
+  const t = useTranslations("job");
+  const locale = useLocale();
   const [form, setForm] = useState<Form>(() => formFromJob(job));
-  const [error, setError] = useState<string | null>(null);
+  // The refused status, worded at render in the language shown.
+  const [refused, setRefused] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
   const total = weightTotal(form.weights);
+  const parseError = PARSE_ERRORS.find((code) => code === job.parse_error);
   const review = (field: string) => job.verification?.[field] === "NEEDS_REVIEW";
   const set = (changes: Partial<Form>) => setForm({ ...form, ...changes });
 
@@ -194,32 +198,25 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
     });
     setPending(false);
     if (response.ok) return onSaved(await response.json());
-    setError(
-      response.status === 409
-        ? "JD vẫn đang được phân tích."
-        : "Không lưu được criteria. Kiểm tra lại các trường.",
-    );
+    setRefused(response.status);
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <h2 className="heading-display text-2xl font-semibold">Xác nhận criteria</h2>
+      <h2 className="heading-display text-2xl font-semibold">{t("confirmTitle")}</h2>
       {job.parse_status === "FAILED" && (
         <p role="alert">
-          {PARSE_ERRORS[job.parse_error ?? ""] ?? "Không phân tích được JD."} Hãy nhập criteria thủ
-          công.
+          {parseError ? t(`parseError.${parseError}`) : t("parseFailed")} {t("enterByHand")}
         </p>
       )}
       {job.criteria_confirmed_at && (
         <p role="status">
-          Đã xác nhận lúc {new Date(job.criteria_confirmed_at).toLocaleString("vi-VN")}.
+          {t("confirmedAt", { at: new Date(job.criteria_confirmed_at).toLocaleString(locale) })}
         </p>
       )}
-      {job.verification && (
-        <p className="text-sm">Trường gắn “Cần kiểm tra” không tìm thấy nguyên văn trong JD.</p>
-      )}
+      {job.verification && <p className="text-sm">{t("needsReviewNote")}</p>}
 
-      <Field label="Chức danh" review={review("title")}>
+      <Field label={t("jobTitle")} review={review("title")}>
         <input
           required
           maxLength={200}
@@ -229,7 +226,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Cấp bậc" review={review("level")}>
+        <Field label={t("level")} review={review("level")}>
           <select
             value={form.level}
             onChange={(e) => set({ level: e.target.value as Form["level"] })}
@@ -240,19 +237,19 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
             ))}
           </select>
         </Field>
-        <Field label="Hình thức làm việc" review={review("work_mode")}>
+        <Field label={t("workMode")} review={review("work_mode")}>
           <select
             value={form.work_mode}
             onChange={(e) => set({ work_mode: e.target.value as Form["work_mode"] })}
             className="text-input"
           >
-            <option value="">Không nêu</option>
+            <option value="">{t("notStated")}</option>
             {WORK_MODES.map((mode) => (
               <option key={mode}>{mode}</option>
             ))}
           </select>
         </Field>
-        <Field label="Phòng ban" review={review("department")}>
+        <Field label={t("department")} review={review("department")}>
           <input
             maxLength={200}
             value={form.department}
@@ -260,7 +257,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
             className="text-input"
           />
         </Field>
-        <Field label="Địa điểm" review={review("location")}>
+        <Field label={t("location")} review={review("location")}>
           <input
             maxLength={200}
             value={form.location}
@@ -270,11 +267,11 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
         </Field>
       </div>
 
-      <Group label="Kỹ năng" review={review("skills")}>
+      <Group label={t("skills")} review={review("skills")}>
         {form.skills.map((skill, i) => (
           <div key={i} className="flex items-center gap-3">
             <input
-              aria-label="Tên kỹ năng"
+              aria-label={t("skillName")}
               maxLength={200}
               value={skill.name}
               onChange={(e) =>
@@ -290,14 +287,14 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
                   set({ skills: form.skills.with(i, { ...skill, must_have: e.target.checked }) })
                 }
               />
-              Must-have
+              {t("mustHave")}
             </label>
             <button
               type="button"
               onClick={() => set({ skills: form.skills.toSpliced(i, 1) })}
               className={LINK_BUTTON}
             >
-              Xóa
+              {t("remove")}
             </button>
           </div>
         ))}
@@ -306,12 +303,12 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
           onClick={() => set({ skills: [...form.skills, { name: "", must_have: false }] })}
           className={`${LINK_BUTTON} self-start`}
         >
-          Thêm kỹ năng
+          {t("addSkill")}
         </button>
       </Group>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Số năm kinh nghiệm tối thiểu" review={review("min_years_experience")}>
+        <Field label={t("minYears")} review={review("min_years_experience")}>
           <input
             type="number"
             min={0}
@@ -322,7 +319,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
             className="text-input"
           />
         </Field>
-        <Field label="Dải lương" review={review("salary_range")}>
+        <Field label={t("salary")} review={review("salary_range")}>
           <input
             maxLength={200}
             value={form.salary_range}
@@ -331,7 +328,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
           />
         </Field>
       </div>
-      <Field label="Học vấn" review={review("education")}>
+      <Field label={t("education")} review={review("education")}>
         <input
           maxLength={2000}
           value={form.education}
@@ -339,7 +336,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
           className="text-input"
         />
       </Field>
-      <Field label="Trách nhiệm chính (mỗi dòng một ý)" review={review("responsibilities")}>
+      <Field label={t("responsibilitiesInput")} review={review("responsibilities")}>
         <textarea
           rows={5}
           value={form.responsibilities}
@@ -348,7 +345,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
         />
       </Field>
 
-      <Group label="Trọng số (%)">
+      <Group label={t("weightsPercent")}>
         <div className="grid gap-4 sm:grid-cols-3">
           {(
             [
@@ -373,17 +370,19 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
           ))}
         </div>
         <p aria-live="polite" className={total === 100 ? "text-sm" : "text-sm font-semibold"}>
-          Tổng: {total}%{total !== 100 && " (phải bằng 100%)"}
+          {total === 100 ? t("total", { total }) : t("totalInvalid", { total })}
         </p>
       </Group>
 
-      {error && <p role="alert">{error}</p>}
+      {refused !== null && (
+        <p role="alert">{refused === 409 ? t("stillParsing") : t("saveFailed")}</p>
+      )}
       <button
         type="submit"
         disabled={pending || total !== 100}
         className="self-start button-primary"
       >
-        Xác nhận criteria
+        {t("submit")}
       </button>
     </form>
   );
@@ -401,11 +400,12 @@ function Field({
   review?: boolean;
   children: ReactNode;
 }) {
+  const t = useTranslations("job");
   return (
     <label className={`flex flex-col gap-1 ${reviewed(review)}`}>
       <span className="flex items-center gap-2 font-medium">
         {label}
-        {review && <Badge>Cần kiểm tra</Badge>}
+        {review && <Badge>{t("needsReview")}</Badge>}
       </span>
       {children}
     </label>
@@ -422,11 +422,12 @@ function Group({
   review?: boolean;
   children: ReactNode;
 }) {
+  const t = useTranslations("job");
   return (
     <fieldset className={`flex flex-col gap-2 ${reviewed(review)}`}>
       <legend className="flex items-center gap-2 font-medium">
         {label}
-        {review && <Badge>Cần kiểm tra</Badge>}
+        {review && <Badge>{t("needsReview")}</Badge>}
       </legend>
       {children}
     </fieldset>

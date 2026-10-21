@@ -316,6 +316,38 @@ async def test_failed_send_shows_on_the_invitation_and_masks_its_token(
     assert "token=[redacted]" in email_body(admin.tenant_id)
 
 
+@pytest.mark.parametrize(
+    ("cookie", "subject", "body"),
+    [
+        ("NEXT_LOCALE=en", "Join", "as Recruiter"),
+        (None, "Lời mời tham gia", "với vai trò Recruiter"),
+        ("NEXT_LOCALE=fr", "Lời mời tham gia", "với vai trò Recruiter"),
+    ],
+)
+async def test_invitation_email_is_in_the_inviters_language(
+    client: AsyncClient,
+    admin: User,
+    enqueued: list[tuple[str, ...]],
+    sent_mail: list[EmailMessage],
+    cookie: str | None,
+    subject: str,
+    body: str,
+) -> None:
+    """NFR-USE-03: the language the Company Admin's UI is in; Vietnamese unless they chose."""
+    headers = {**admin.headers, **({"Cookie": cookie} if cookie else {})}
+    response = await client.post(
+        "/api/invitations", headers=headers, json={"email": email(), "role": "RECRUITER"}
+    )
+    assert response.status_code == 201
+
+    send_all(enqueued)
+
+    [message] = sent_mail
+    assert message["Subject"].startswith(subject)
+    assert body in message.get_content()
+    assert token_in(message)
+
+
 @pytest.fixture
 async def member() -> AsyncIterator[AsyncClient]:
     """A client of the invited Member's own, which holds their refresh cookie."""

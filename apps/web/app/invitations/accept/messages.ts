@@ -1,15 +1,17 @@
+import type { Translator } from "../../../i18n/messages";
+
 /** What the accept page says for the status acceptInvitation() returned; null on success. */
-export function acceptError(status: number): string | null {
+export function acceptError(t: Translator<"accept">, status: number): string | null {
   switch (status) {
     case 200:
       return null;
     case 400:
-      return "Lời mời không hợp lệ hoặc đã hết hạn. Hãy nhờ Company Admin mời lại.";
+      return t("invalid");
     case 422:
-      return "Kiểm tra lại họ tên và mật khẩu.";
+      return t("checkFields");
     case 0:
-      return "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
+      return t("offline");
     default:
-      return "Không tạo được tài khoản. Vui lòng thử lại.";
+      return t("failed");
   }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { type DragEvent, type FormEvent, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
@@ -8,9 +9,8 @@ import { useProgressEvents } from "../../events";
 import {
   type Card,
   type Filter,
-  SOURCE_NAMES,
+  SOURCES,
   STAGES,
-  STAGE_NAMES,
   type Source,
   type Stage,
   ask,
@@ -22,9 +22,8 @@ import {
 
 /** A move waiting for its reason: optional to reject, required to reopen. */
 type Asking = { card: Card; to: Stage; kind: "reject" | "reopen" };
-
-const total = (value: number | null) =>
-  value === null ? "—" : value.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+/** Why the last move failed: the API's status, or a move the board itself refused. */
+type Refusal = { status: number } | { from: Stage; to: Stage };
 
 /** The Job's Applications on a Kanban Board, one column per Stage (FR-A3.2). Cards move by
  * drag-and-drop, by their own Stage menu, or several at once; a Reviewer only reads. */
@@ -39,6 +38,7 @@ export function Pipeline({
   /** Told how many Applications the Job has, after each load. */
   onApplications: (count: number) => void;
 }) {
+  const t = useTranslations("pipeline");
   const [cards, setCards] = useState<Card[] | null>(null);
   // Bumped to reload the board.
   const [version, setVersion] = useState(0);
@@ -48,7 +48,8 @@ export function Pipeline({
   const [asking, setAsking] = useState<Asking | null>(null);
   const [over, setOver] = useState<Stage | null>(null);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Worded at render, so switching language rewords it.
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
 
   useEffect(() => {
     apiFetch(`/api/jobs/${jobId}/applications`).then(async (r) => {
@@ -79,7 +80,7 @@ export function Pipeline({
       window.location.replace("/login");
       return false;
     }
-    setError(response.ok ? null : moveError(response.status));
+    setRefusal(response.ok ? null : { status: response.status });
     reload();
     return response.ok;
   }
@@ -97,7 +98,7 @@ export function Pipeline({
   function request(card: Card, to: Stage) {
     if (card.stage === to) return;
     if (!targets(card.stage).includes(to)) {
-      setError(`Không chuyển được từ ${STAGE_NAMES[card.stage]} sang ${STAGE_NAMES[to]}.`);
+      setRefusal({ from: card.stage, to });
       return;
     }
     const kind = ask(card.stage, to);
@@ -127,7 +128,7 @@ export function Pipeline({
 
   if (!cards) {
     return (
-      <div aria-busy="true" aria-label="Đang tải Kanban" className="flex gap-3 overflow-hidden">
+      <div aria-busy="true" aria-label={t("loading")} className="flex gap-3 overflow-hidden">
         {STAGES.slice(0, 4).map((stage) => (
           <div
             key={stage}
@@ -146,28 +147,36 @@ export function Pipeline({
       return next;
     });
 
+  const error =
+    refusal &&
+    ("status" in refusal
+      ? moveError(t, refusal.status)
+      : t("cantMove", { from: t(`stage.${refusal.from}`), to: t(`stage.${refusal.to}`) }));
+
   return (
     <section className="flex flex-col gap-4 border-t border-hairline-cloud pt-6">
-      <h2 className="heading-display text-2xl font-semibold">Pipeline ({cards.length})</h2>
+      <h2 className="heading-display text-2xl font-semibold">
+        {t("title", { count: cards.length })}
+      </h2>
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm font-medium">
-          Nguồn
+          {t("sourceLabel")}
           <select
             value={filter.source}
             onChange={(e) => setFilter({ ...filter, source: e.target.value as Source | "" })}
             className="text-input"
           >
-            <option value="">Tất cả</option>
-            {Object.entries(SOURCE_NAMES).map(([source, name]) => (
+            <option value="">{t("all")}</option>
+            {SOURCES.map((source) => (
               <option key={source} value={source}>
-                {name}
+                {t(`source.${source}`)}
               </option>
             ))}
           </select>
         </label>
         {(["min", "max"] as const).map((bound) => (
           <label key={bound} className="flex w-28 flex-col gap-1 text-sm font-medium">
-            {bound === "min" ? "Total từ" : "Total đến"}
+            {bound === "min" ? t("totalFrom") : t("totalTo")}
             <input
               type="number"
               min={0}
@@ -183,16 +192,16 @@ export function Pipeline({
       {editable && chosen.length > 0 && (
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Đổi stage {chosen.length} thẻ đã chọn sang
+            {t("bulkTo", { count: chosen.length })}
             <select
               value={bulkTo}
               onChange={(e) => setBulkTo(e.target.value as Stage | "")}
               className="text-input"
             >
-              <option value="">Chọn stage</option>
+              <option value="">{t("chooseStage")}</option>
               {bulkTargets(chosen).map((stage) => (
                 <option key={stage} value={stage}>
-                  {STAGE_NAMES[stage]}
+                  {t(`stage.${stage}`)}
                 </option>
               ))}
             </select>
@@ -203,22 +212,19 @@ export function Pipeline({
             onClick={moveSelected}
             className="button-outline"
           >
-            Đổi stage
+            {t("move")}
           </button>
           <button
             type="button"
             onClick={() => setSelected(new Set())}
             className="font-medium underline"
           >
-            Bỏ chọn
+            {t("clearSelection")}
           </button>
         </div>
       )}
       {editable && chosen.length > 0 && bulkTargets(chosen).length === 0 && (
-        <p className="text-sm">
-          Không có stage chung cho các thẻ đã chọn. Thẻ Hired không chuyển được; thẻ Rejected mở lại
-          từng thẻ một vì cần lý do.
-        </p>
+        <p className="text-sm">{t("noCommonStage")}</p>
       )}
       {error && <p role="alert">{error}</p>}
 
@@ -228,7 +234,7 @@ export function Pipeline({
           return (
             <section
               key={stage}
-              aria-label={STAGE_NAMES[stage]}
+              aria-label={t(`stage.${stage}`)}
               onDragOver={
                 editable
                   ? (e) => {
@@ -246,7 +252,7 @@ export function Pipeline({
               }`}
             >
               <h3 className="text-sm font-semibold tracking-[0.2px] uppercase">
-                {STAGE_NAMES[stage]} ({column.length})
+                {t(`stage.${stage}`)} ({column.length})
               </h3>
               {column.map((card) => (
                 <KanbanCard
@@ -292,7 +298,13 @@ function KanbanCard({
   onAnswer: (reason: string) => void;
   onCancel: () => void;
 }) {
-  const name = card.full_name ?? "Chưa rõ tên";
+  const t = useTranslations("pipeline");
+  const locale = useLocale();
+  const name = card.full_name ?? t("unnamed");
+  const total =
+    card.total_score === null
+      ? "—"
+      : card.total_score.toLocaleString(locale, { maximumFractionDigits: 2 });
   const moves = targets(card.stage);
   return (
     <article
@@ -306,7 +318,7 @@ function KanbanCard({
         {editable && (
           <input
             type="checkbox"
-            aria-label={`Chọn ${name}`}
+            aria-label={t("select", { name })}
             checked={selected}
             onChange={onSelect}
             className="mt-1"
@@ -319,22 +331,24 @@ function KanbanCard({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span>
-          Total <span className="font-mono">{total(card.total_score)}</span>
+          Total <span className="font-mono">{total}</span>
         </span>
-        <Badge>{SOURCE_NAMES[card.source]}</Badge>
+        <Badge>{t(`source.${card.source}`)}</Badge>
       </div>
-      {card.rejected_reason && <p className="text-sm">Lý do: {card.rejected_reason}</p>}
+      {card.rejected_reason && (
+        <p className="text-sm">{t("reason", { reason: card.rejected_reason })}</p>
+      )}
       {editable && moves.length > 0 && !asking && (
         <select
-          aria-label={`Chuyển ${name} sang stage`}
+          aria-label={t("moveCard", { name })}
           value=""
           onChange={(e) => onMove(e.target.value as Stage)}
           className="text-input text-sm"
         >
-          <option value="">{card.stage === "REJECTED" ? "Mở lại sang…" : "Chuyển sang…"}</option>
+          <option value="">{card.stage === "REJECTED" ? t("reopenTo") : t("moveTo")}</option>
           {moves.map((stage) => (
             <option key={stage} value={stage}>
-              {STAGE_NAMES[stage]}
+              {t(`stage.${stage}`)}
             </option>
           ))}
         </select>
@@ -354,6 +368,7 @@ function ReasonForm({
   onAnswer: (reason: string) => void;
   onCancel: () => void;
 }) {
+  const t = useTranslations("pipeline");
   const [reason, setReason] = useState("");
   const reopen = asking.kind === "reopen";
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -363,7 +378,7 @@ function ReasonForm({
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-2">
       <label className="flex flex-col gap-1 font-medium">
-        {reopen ? `Lý do mở lại sang ${STAGE_NAMES[asking.to]}` : "Lý do từ chối (không bắt buộc)"}
+        {reopen ? t("reopenReason", { stage: t(`stage.${asking.to}`) }) : t("rejectReason")}
         <textarea
           required={reopen}
           maxLength={2000}
@@ -379,10 +394,10 @@ function ReasonForm({
           disabled={reopen && reason.trim() === ""}
           className="button-outline px-3 py-2"
         >
-          {reopen ? "Mở lại" : "Từ chối"}
+          {reopen ? t("reopen") : t("reject")}
         </button>
         <button type="button" onClick={onCancel} className="font-medium underline">
-          Hủy
+          {t("cancel")}
         </button>
       </div>
     </form>

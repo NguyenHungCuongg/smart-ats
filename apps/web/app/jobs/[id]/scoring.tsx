@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
@@ -14,30 +15,22 @@ import {
   scoreBlocker,
 } from "../scoring";
 
-const START_ERRORS: Record<number, string> = {
-  409: "Job chưa đủ điều kiện chấm điểm hoặc đang được chấm.",
-  503: "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
+const START_ERRORS: Record<number, "notEligible" | "unpricedModel"> = {
+  409: "notEligible",
+  503: "unpricedModel",
 };
 
-const RESULT_ERRORS: Record<string, string> = {
-  NO_TEXT: "File CV hoặc JD không có lớp văn bản.",
-  ENCRYPTED_PDF: "File CV hoặc JD được đặt mật khẩu.",
-  DOCX_TOO_LARGE: "File DOCX của CV hoặc JD quá lớn khi giải nén.",
-  UNREADABLE: "File CV hoặc JD bị hỏng, không đọc được.",
-  UNSUPPORTED_FORMAT: "Định dạng file CV hoặc JD không được hỗ trợ.",
-  READ_FAILED: "Không đọc được file CV hoặc JD.",
-  SCORING_FAILED: "Lời gọi AI bị lỗi.",
-  STUCK: "Hệ thống chưa chấm được Application này sau nhiều lần thử.",
-};
-
-const RUN_STATUSES: Record<ScoringRun["status"], string> = {
-  RUNNING: "Đang chạy",
-  COMPLETED: "Hoàn tất",
-  PARTIAL: "Hoàn tất, có lỗi",
-};
-
-const score = (value: number | null) =>
-  value === null ? "—" : value.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+// The result errors the catalog words (scoring.resultError); any other reads as a failure.
+const RESULT_ERRORS = [
+  "NO_TEXT",
+  "ENCRYPTED_PDF",
+  "DOCX_TOO_LARGE",
+  "UNREADABLE",
+  "UNSUPPORTED_FORMAT",
+  "READ_FAILED",
+  "SCORING_FAILED",
+  "STUCK",
+] as const;
 
 /** Start a Scoring Run of the Job and show the Fit-Gap Report of each Application (FR-A1.3). */
 export function Scoring({
@@ -50,13 +43,16 @@ export function Scoring({
   editable: boolean;
   applications: number;
 }) {
+  const t = useTranslations("scoring");
+  const locale = useLocale();
   const [run, setRun] = useState<ScoringRun | null>(null);
   // The run shown: set by a start before its first load, so its events are not dropped.
   const [runId, setRunId] = useState<string | null>(null);
   // Bumped to reload the run.
   const [version, setVersion] = useState(0);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The refused status, worded at render in the language shown.
+  const [refused, setRefused] = useState<number | null>(null);
   // A load answered after a newer one would bring back an older run, whose id then filters
   // out the events of the newer one.
   const [load] = useState(() =>
@@ -89,24 +85,27 @@ export function Scoring({
     setPending(false);
     if (response.status === 401) return window.location.replace("/login");
     if (response.ok) {
-      setError(null);
+      setRefused(null);
       setRunId((await response.json()).run_id);
     } else {
-      setError(START_ERRORS[response.status] ?? "Không bắt đầu chấm điểm được. Thử lại.");
+      setRefused(response.status);
     }
     setVersion((v) => v + 1);
   }
 
-  const blocker = scoreBlocker(job, applications, run);
+  const blocker = scoreBlocker(t, job, applications, run);
   return (
     <section className="flex flex-col gap-4 border-t border-hairline-cloud pt-6">
-      <h2 className="heading-display text-2xl font-semibold">Chấm điểm</h2>
+      <h2 className="heading-display text-2xl font-semibold">{t("title")}</h2>
       {run && (
         <p className="text-sm">
-          Lần chấm gần nhất: {new Date(run.created_at).toLocaleString("vi-VN")} ·{" "}
-          {RUN_STATUSES[run.status]} · model <code className="font-mono">{run.model}</code> · trọng
-          số Technical {run.weights.technical}%, Soft Skills {run.weights.soft_skills}%, Experience{" "}
-          {run.weights.experience}%
+          {t.rich("latestRun", {
+            at: new Date(run.created_at).toLocaleString(locale),
+            status: t(`runStatus.${run.status}`),
+            model: run.model,
+            ...run.weights,
+            code: (chunks) => <code className="font-mono">{chunks}</code>,
+          })}
         </p>
       )}
       {editable && (
@@ -116,18 +115,18 @@ export function Scoring({
               {blocker}
             </p>
           )}
-          {error && <p role="alert">{error}</p>}
+          {refused !== null && <p role="alert">{t(START_ERRORS[refused] ?? "startFailed")}</p>}
           <button
             type="button"
             onClick={onStart}
             disabled={pending || blocker !== null}
             className="self-start button-outline"
           >
-            {run ? "Chấm lại" : "Chấm điểm"}
+            {run ? t("rescore") : t("score")}
           </button>
         </>
       )}
-      {!editable && !run && <p className="text-sm">Job chưa được chấm điểm.</p>}
+      {!editable && !run && <p className="text-sm">{t("notScored")}</p>}
       {run?.results.map((result) => (
         <Result key={result.application_id} result={result} />
       ))}
@@ -142,22 +141,20 @@ const REPORT_PARTS = [
 ] as const;
 
 function Result({ result }: { result: ScoreResult }) {
+  const t = useTranslations("scoring");
+  const resultError = RESULT_ERRORS.find((code) => code === result.error_code);
   const rubric = result.rubric_grades;
   const report = result.fit_gap_report;
   const detail = result.must_have_detail;
   return (
     <article className="flex flex-col gap-4 rounded-xl border border-hairline-cloud bg-surface-canvas-light p-6">
       <header className="flex flex-wrap items-center gap-3">
-        <h3 className="text-xl font-semibold">{result.full_name ?? "Ứng viên"}</h3>
-        {result.cv_document_id !== result.current_cv_document_id && (
-          <Badge>CV đã thay đổi sau lần chấm</Badge>
-        )}
+        <h3 className="text-xl font-semibold">{result.full_name ?? t("candidate")}</h3>
+        {result.cv_document_id !== result.current_cv_document_id && <Badge>{t("cvChanged")}</Badge>}
       </header>
-      {result.status === "PENDING" && <p role="status">Đang chấm…</p>}
+      {result.status === "PENDING" && <p role="status">{t("scoringOne")}</p>}
       {result.status === "FAILED" && (
-        <p role="alert">
-          {RESULT_ERRORS[result.error_code ?? ""] ?? "Không chấm được Application này."}
-        </p>
+        <p role="alert">{resultError ? t(`resultError.${resultError}`) : t("resultFailed")}</p>
       )}
       {result.status === "SCORED" && rubric && report && (
         <>
@@ -165,7 +162,7 @@ function Result({ result }: { result: ScoreResult }) {
             <Score label="Total" value={result.total_score} />
             <Score label="Technical Fit" value={result.technical_score} />
             <Score label="Soft-Skill Claims" value={result.soft_skills_score}>
-              <Badge>Cần kiểm chứng khi phỏng vấn</Badge>
+              <Badge>{t("verifyInInterview")}</Badge>
             </Score>
             <Score label="Experience Fit" value={result.experience_score} />
           </div>
@@ -173,15 +170,18 @@ function Result({ result }: { result: ScoreResult }) {
           {detail && (
             <div className="flex flex-col gap-1 text-sm">
               <p className="font-medium">
-                Must-have Coverage: {Math.round((result.must_have_coverage ?? 0) * 100)}% (
-                {detail.matched.length}/{detail.matched.length + detail.missing.length})
+                {t("coverage", {
+                  percent: Math.round((result.must_have_coverage ?? 0) * 100),
+                  matched: detail.matched.length,
+                  all: detail.matched.length + detail.missing.length,
+                })}
               </p>
-              <p>Đã khớp: {detail.matched.join(", ") || "—"}</p>
-              <p>Còn thiếu: {detail.missing.join(", ") || "—"}</p>
+              <p>{t("matched", { skills: detail.matched.join(", ") || "—" })}</p>
+              <p>{t("missing", { skills: detail.missing.join(", ") || "—" })}</p>
             </div>
           )}
 
-          <Part title="Lý do chấm từng trục">
+          <Part title={t("reasons")}>
             {(
               [
                 ["technical", "Technical"],
@@ -218,10 +218,13 @@ function Score({
   value: number | null;
   children?: ReactNode;
 }) {
+  const locale = useLocale();
   return (
     <div className="flex flex-col gap-1">
       <span className="text-sm font-medium">{label}</span>
-      <span className="text-3xl font-semibold">{score(value)}</span>
+      <span className="text-3xl font-semibold">
+        {value === null ? "—" : value.toLocaleString(locale, { maximumFractionDigits: 2 })}
+      </span>
       {children}
     </div>
   );
@@ -238,11 +241,12 @@ function Part({ title, children }: { title: string; children: ReactNode }) {
 
 /** A claim with the Evidence quoted for it, flagged when none was found in the source. */
 function Item({ claim, children }: { claim: Claim; children: ReactNode }) {
+  const t = useTranslations("scoring");
   return (
     <li className="flex flex-col gap-1 text-sm">
       <span className="flex flex-wrap items-center gap-2">
         {children}
-        {!claim.grounded && <Badge>Không có bằng chứng</Badge>}
+        {!claim.grounded && <Badge>{t("noEvidence")}</Badge>}
       </span>
       {claim.evidence.map((quote, i) => (
         <q key={i} className="border-l-2 border-hairline-cloud pl-3 italic">

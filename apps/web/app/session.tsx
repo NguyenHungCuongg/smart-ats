@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { apiFetch, logout } from "./auth";
@@ -21,6 +22,7 @@ export function useRole(): Role | null {
 
 /** The signed-in user with a logout button; sends anyone signed out to /login. */
 export function Session() {
+  const t = useTranslations("session");
   const [me, setMe] = useState<Me | null>(null);
   const [offline, setOffline] = useState(false);
 
@@ -34,7 +36,7 @@ export function Session() {
     );
   }, []);
 
-  if (offline) return <p role="alert">Không kết nối được máy chủ. Tải lại trang để thử lại.</p>;
+  if (offline) return <p role="alert">{t("offline")}</p>;
   if (!me) {
     return (
       <div aria-busy="true" className="h-11 w-72 animate-pulse rounded-md bg-hairline-cloud" />
@@ -53,7 +55,7 @@ export function Session() {
         }}
         className="button-outline"
       >
-        Đăng xuất
+        {t("logout")}
       </button>
     </div>
   );
