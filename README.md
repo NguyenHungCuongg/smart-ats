@@ -85,7 +85,7 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; rea
 
 ## Demo: Job → CV → Score → Fit-Gap
 
-The end-to-end flow of Roadmap M1, on Docker Compose:
+The end-to-end flow of Roadmap phase 1, on Docker Compose:
 
 1. In `.env`, set `OPENAI_API_KEY`, or for free testing `LLM_PROVIDER=gemini` and `GEMINI_API_KEY` with Gemini names in `LLM_EXTRACTION_MODEL` and `LLM_REASONING_MODEL` (synthetic CVs only, never in production; see `.env.example`). Each model must have a price in `smart_ats_scoring.pricing.PRICES`, or parsing and scoring refuse to call it.
 2. Start the stack and seed: `docker compose up -d --build --wait`, then `docker compose run --rm -e SEED_PASSWORD=<password> migrate python -m app.seed`.

@@ -2,8 +2,8 @@
 
 ## Smart ATS — Nền tảng ATS Đa Người Thuê Hỗ trợ AI
 
-**Phiên bản:** 3.3
-**Ngày:** 2026-10-19
+**Phiên bản:** 3.4
+**Ngày:** 2026-10-21
 **Đối tượng đọc:** Nhóm phát triển, GVHD
 
 > PRD là nguồn sự thật cho **bối cảnh, định vị, nguyên tắc thiết kế, người dùng, hành trình chính và các quyết định phạm vi**. Yêu cầu chi tiết, tiêu chí nghiệm thu và mọi con số nằm trong [SRS](../SRS/software_requirements_specification.md) và được dẫn bằng mã (FR-…, NFR-…), không chép lại. Thuật ngữ theo `CONTEXT.md`. Bản đồ tài liệu: [CONTRIBUTING.md](../../CONTRIBUTING.md#bản-đồ-tài-liệu).
@@ -99,6 +99,7 @@ Chỉ Company Admin và Recruiter được khởi tạo Campaign.
 |              | Kanban trên Application (5 Stage hoạt động + 2 Stage kết thúc), bulk action                                    | FR-A3.2      | P1      |
 |              | Activity timeline & audit log                                                                                  | FR-A3.3      | P1      |
 |              | Public Apply Link                                                                                              | FR-A3.4      | P1      |
+|              | Đăng tin đa kênh: Facebook Page qua API, chia sẻ lên Facebook/LinkedIn/X, Google for Jobs                      | FR-A3.5      | P1      |
 | C1 Nền tảng  | Xác thực bằng mật khẩu, phiên đăng nhập                                                                        | FR-C1.1      | P1      |
 |              | Đăng nhập Google                                                                                               | FR-C1.1      | P2      |
 |              | Quản lý Workspace & Member, lời mời                                                                            | FR-C1.2      | P1      |
@@ -152,6 +153,13 @@ Ghi lại các quyết định phạm vi quan trọng để giải trình khi b�
 | **Talent Rediscovery**                       | Tận dụng embedding đã có; biến Talent Pool thành tài sản của tenant; là tool quan trọng cho Agent.                                                                                  |
 | **AI Usage Ledger & AI Budget**              | Cần để enforce hạn mức theo chi phí thật, đo cost trong thực nghiệm, và là câu chuyện SaaS thực tế.                                                                                 |
 | **Bảo vệ dữ liệu cá nhân**                   | CV chứa dữ liệu cá nhân và được gửi tới nhà cung cấp LLM nước ngoài; sản phẩm "doanh nghiệp dùng thật" bắt buộc có consent, retention và xóa dữ liệu.                               |
+
+### 5.5. Bổ sung trong v3.4
+
+| Bổ sung                            | Lý do                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Đăng tin đa kênh**               | Recruiter SME đăng cùng một tin lên nhiều nơi bằng tay. Chỉ Facebook Page gọi API thật, vì đó là kênh tuyển dụng phổ biến của SME Việt Nam và miễn phí; Job Posting API của LinkedIn và các job board Việt Nam chỉ dành cho partner (SRS §6), nên các kênh còn lại dùng share intent và Google for Jobs. Một kênh gọi API thật đủ chứng minh luồng đăng mà không mở rộng bề mặt bảo mật của token bên thứ ba. |
+| **Giao diện tiếng Anh trở lại P1** | Roadmap không còn ràng buộc thời gian; ứng viên và Member không đọc tiếng Việt cũng dùng được trang Public Apply và email.                                                                                                                                                                                                                                                                                    |
 
 ---
 

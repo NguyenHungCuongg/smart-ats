@@ -15,7 +15,7 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 | Bảng, cột, ràng buộc, index                                   | [ERD](docs/ERD/entity_relationship_diagram.md)         |
 | Thuật ngữ                                                     | [CONTEXT.md](CONTEXT.md)                               |
 | Đóng góp học thuật, dataset, thực nghiệm                      | [Kế hoạch Thực nghiệm](docs/EVAL/experiment_plan.md)   |
-| Giai đoạn, mốc, phân công, rủi ro                             | [Roadmap](docs/PLAN/roadmap.md)                        |
+| Giai đoạn, tiêu chí hoàn thành, rủi ro                        | [Roadmap](docs/PLAN/roadmap.md)                        |
 | Việc cụ thể và trạng thái                                     | GitHub issues                                          |
 | Cài đặt, chạy, lệnh                                           | [README.md](README.md)                                 |
 | Tài liệu tham khảo khoa học                                   | [docs/references/README.md](docs/references/README.md) |
@@ -28,7 +28,7 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 3. **Commit.** Theo [Conventional Commits](https://www.conventionalcommits.org/), viết tiếng Anh, thể mệnh lệnh: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `style:`, `test:`, kèm scope khi hữu ích (`fix(ci): …`).
 4. **Pull request** vào `develop` theo [PR template](.github/pull_request_template.md), body có `Closes #<số>`. Khi PR được merge vào `develop`, workflow `close-issues-on-develop-merge` tự đóng issue.
 5. **Sửa theo review:** thêm commit `chore: address review on <chủ đề>` vào cùng PR. Góp ý đến sau khi PR đã merge thì mở branch mới `feature/issue-<số>-<mô-tả>-review-followup`.
-6. **`main`** chỉ nhận merge từ `develop`, tại các mốc của Roadmap.
+6. **`main`** chỉ nhận merge từ `develop`, khi hoàn thành một giai đoạn của Roadmap.
 
 ## Điều kiện merge
 
@@ -49,6 +49,7 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 - [ ] Tool mới của Agent chỉ tạo dữ liệu dẫn xuất (bất biến FR-A0).
 - [ ] Nội dung CV/JD đưa vào prompt nằm trong khối untrusted; lời gọi chấm điểm không có tool (FR-C2.2).
 - [ ] Không log hoặc gửi ra ngoài PII và secret; không commit `.env` (NFR-SEC-10).
+- [ ] Token của bên thứ ba (Page access token) chỉ lưu dạng mã hóa, chỉ giải mã ngay trước lời gọi API, không có trong response, log hay Audit Log (FR-A3.5, SAD §5.6).
 
 ## Viết tài liệu
 

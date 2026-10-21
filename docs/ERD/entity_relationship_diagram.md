@@ -2,8 +2,8 @@
 
 ## Smart ATS — Nền tảng ATS Đa Người Thuê Hỗ trợ AI
 
-**Phiên bản:** 3.2
-**Ngày:** 2026-10-08
+**Phiên bản:** 3.3
+**Ngày:** 2026-10-21
 
 > ERD là nguồn sự thật cho **lược đồ dữ liệu**: bảng, cột, ràng buộc, index. Yêu cầu nằm trong [SRS](../SRS/software_requirements_specification.md); thuật ngữ trong `CONTEXT.md`; lý do thiết kế trong `docs/adr/`. Sơ đồ: `docs/ERD/database_diagram.html`.
 >
@@ -129,6 +129,7 @@ Index `(tenant_id, email)`: tìm lời mời đang chờ của một email.
 | weight_technical, weight_soft_skills, weight_experience | numeric(3,2) NN          | `CHECK (sum = 1.00)`, mỗi trọng số `>= 0`                                                                                                                           |
 | public_apply_enabled                                    | boolean NN default false |                                                                                                                                                                     |
 | public_slug                                             | text UQ                  | Public Apply Link                                                                                                                                                   |
+| published_at                                            | timestamptz              | lần đầu Job chuyển sang `PUBLISHED`; `datePosted` của `JobPosting` (FR-A3.5)                                                                                        |
 | apply_deadline                                          | date                     |                                                                                                                                                                     |
 | created_by                                              | uuid FK → users NN       |                                                                                                                                                                     |
 | created_at, updated_at                                  | timestamptz NN           |                                                                                                                                                                     |
@@ -249,7 +250,7 @@ Index `(tenant_id, email)`: tìm lời mời đang chờ của một email.
 | id                                    | uuid PK             |                                                                                                                                                                                        |
 | tenant_id                             | uuid NN             |                                                                                                                                                                                        |
 | job_id                                | uuid FK → jobs NN   | index `(tenant_id, job_id, created_at)` để lấy run mới nhất                                                                                                                            |
-| campaign_id                           | uuid FK → campaigns | `NULL` với lượt chạy thủ công; thêm cùng bảng `campaigns` (M4), nullable nên không cần backfill                                                                                        |
+| campaign_id                           | uuid FK → campaigns | `NULL` với lượt chạy thủ công; thêm cùng bảng `campaigns` (GĐ 4), nullable nên không cần backfill                                                                                      |
 | trigger_mode                          | text NN             | `MANUAL`, `AGENT`                                                                                                                                                                      |
 | weights                               | jsonb NN            | snapshot đóng băng `{technical, soft_skills, experience}` từ `jobs.weight_*`, dạng phân số                                                                                             |
 | criteria_snapshot                     | jsonb NN            | snapshot đóng băng: `jobs.criteria` cộng `title`, `level`                                                                                                                              |
@@ -394,6 +395,36 @@ Index `(tenant_id, email)`: tìm lời mời đang chờ của một email.
 | sent_by             | uuid FK → users        |                                                                                    |
 | created_at, sent_at | timestamptz            |                                                                                    |
 
+### `channel_connections` — Facebook Page đã kết nối của Workspace
+
+| Cột              | Kiểu               | Ghi chú                                                                    |
+| ---------------- | ------------------ | -------------------------------------------------------------------------- |
+| id               | uuid PK            |                                                                            |
+| tenant_id        | uuid NN            |                                                                            |
+| channel          | text NN            | `FACEBOOK_PAGE`; `UNIQUE (tenant_id, channel)`: một Page cho mỗi Workspace |
+| external_id      | text NN            | id của Page                                                                |
+| name             | text NN            | tên Page, hiện ở trang cài đặt                                             |
+| token_ciphertext | bytea NN           | Page access token đã mã hóa (SAD §5.6); không bao giờ trả về client        |
+| connected_by     | uuid FK → users NN |                                                                            |
+| created_at       | timestamptz NN     |                                                                            |
+
+Ngắt kết nối thì xóa dòng; Channel Post đã đăng vẫn giữ.
+
+### `channel_posts` — Channel Post
+
+| Cột              | Kiểu               | Ghi chú                                                                     |
+| ---------------- | ------------------ | --------------------------------------------------------------------------- |
+| id               | uuid PK            |                                                                             |
+| tenant_id        | uuid NN            |                                                                             |
+| job_id           | uuid FK → jobs NN  |                                                                             |
+| channel          | text NN            | `FACEBOOK_PAGE`                                                             |
+| target_id        | text NN            | id của Page được đăng lên; `UNIQUE (tenant_id, job_id, channel, target_id)` |
+| external_post_id | text NN            | id bài trên Channel                                                         |
+| url              | text NN            | link bài                                                                    |
+| body             | text NN            | Job Ad đã đăng                                                              |
+| posted_by        | uuid FK → users NN |                                                                             |
+| posted_at        | timestamptz NN     |                                                                             |
+
 ---
 
 ## 7. Vận hành
@@ -439,13 +470,13 @@ Thuộc sở hữu của `ats_owner`. `ats_app` chỉ có quyền `EXECUTE`. M�
 
 Vì RLS bị force, policy ràng buộc cả `ats_owner`: một hàm `SECURITY DEFINER` không thấy dòng nào của bảng tenant khi chưa có tenant context, nên mỗi hàm ở đây phải tự đặt context. `auth_find_user` lần lượt đặt context của từng Tenant để tìm, rồi trả lại context của caller (migration `0002`).
 
-| Hàm                                 | Trả về                                                                                   | Dùng cho                      |
-| ----------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------- |
-| `auth_find_user(email)`             | id, tenant_id, role, password_hash, is_active, locked_until                              | Đăng nhập                     |
-| `auth_find_user_by_google_sub(sub)` | như trên                                                                                 | Đăng nhập Google              |
-| `public_job_by_slug(slug)`          | tenant_id, job_id, title, status, apply_deadline, tên/logo/URL quyền riêng tư của tenant | Public Apply Link             |
-| `accept_invitation(token_hash)`     | tenant_id, email, role (và đánh dấu đã chấp nhận)                                        | Chấp nhận lời mời             |
-| `active_tenant_ids()`               | id của các tenant `ACTIVE`                                                               | Lượt quét của `beat` (SAD §6) |
+| Hàm                                 | Trả về                                                                                                                                              | Dùng cho                                            |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `auth_find_user(email)`             | id, tenant_id, role, password_hash, is_active, locked_until                                                                                         | Đăng nhập                                           |
+| `auth_find_user_by_google_sub(sub)` | như trên                                                                                                                                            | Đăng nhập Google                                    |
+| `public_job_by_slug(slug)`          | tenant_id, job_id, title, status, apply_deadline, location, work_mode, published_at, criteria trừ dải lương, tên/logo/URL quyền riêng tư của tenant | Public Apply Link, Job Ad và `JobPosting` (FR-A3.5) |
+| `accept_invitation(token_hash)`     | tenant_id, email, role (và đánh dấu đã chấp nhận)                                                                                                   | Chấp nhận lời mời                                   |
+| `active_tenant_ids()`               | id của các tenant `ACTIVE`                                                                                                                          | Lượt quét của `beat` (SAD §6)                       |
 
 `accept_invitation` làm giống `auth_find_user` (migration `0008`): chỉ nhận lời mời chưa hết hạn, chưa dùng, chưa thu hồi, đánh dấu `accepted_at` rồi trả lại context của caller. Caller tự đặt context của tenant trả về và tạo User trong cùng transaction, nên tạo User lỗi thì lời mời vẫn dùng được.
 
@@ -463,3 +494,4 @@ Vì RLS bị force, policy ràng buộc cả `ats_owner`: một hàm `SECURITY D
 - `candidates UNIQUE (tenant_id, email) WHERE email IS NOT NULL`.
 - `ai_usage_entries (tenant_id, created_at)`.
 - `jobs UNIQUE (public_slug)`.
+- `channel_connections UNIQUE (tenant_id, channel)`; `channel_posts UNIQUE (tenant_id, job_id, channel, target_id)`.

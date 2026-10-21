@@ -68,6 +68,18 @@ _Avoid_: Reverse matching, sourcing
 The per-Job public URL where a person submits a CV and becomes a Candidate with an Application.
 _Avoid_: Career page, job board
 
+**Job Ad**:
+The public text advertising one Job, composed from the Job and pointing to its Public Apply Link.
+_Avoid_: Job posting, tin đăng
+
+**Channel**:
+An external platform a Job Ad is spread to, such as a Facebook Page, LinkedIn or Google for Jobs.
+_Avoid_: Job board, integration, platform
+
+**Channel Post**:
+One Job Ad published to one Channel by Smart ATS itself, with the link to the post on that Channel.
+_Avoid_: Share (a Recruiter sharing by hand creates no Channel Post), syndication
+
 ### Evaluation
 
 **Scoring Run**:

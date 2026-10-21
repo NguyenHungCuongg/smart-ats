@@ -2,8 +2,8 @@
 
 ## Smart ATS — Nền tảng ATS Đa Người Thuê Hỗ trợ AI
 
-**Phiên bản:** 3.2
-**Ngày:** 2026-10-08
+**Phiên bản:** 3.3
+**Ngày:** 2026-10-21
 **Đối tượng đọc:** Nhóm phát triển (kỹ thuật, vận hành)
 
 > SAD là nguồn sự thật cho **kiến trúc, flow xử lý, công nghệ và phiên bản**. Yêu cầu và mọi ngưỡng nằm trong [SRS](../SRS/software_requirements_specification.md) và được dẫn bằng mã; lý do của từng quyết định nằm trong `docs/adr/`; thuật ngữ trong `CONTEXT.md`; lược đồ dữ liệu trong [ERD](../ERD/entity_relationship_diagram.md). Sơ đồ: `docs/SAD/architecture_diagram.html`.
@@ -77,6 +77,8 @@ Thuộc tính chất lượng theo thứ tự ưu tiên: **cô lập tenant**, *
 |                    | pgvector                                                                                                    | 0.8.x             | HNSW index                                                                  |
 | **Cache/Broker**   | Redis                                                                                                       | 8.x               | Hoặc Valkey 9.x (tương thích, giấy phép BSD)                                |
 | **Object storage** | AWS S3 (production) / SeaweedFS 4.x (local, staging)                                                        |                   | Repository mã nguồn của MinIO đã bị lưu trữ (archived) — không dùng         |
+| **Mạng xã hội**    | Meta Graph API (Facebook Page)                                                                              | v26.0             | Phiên bản đặt trong cấu hình; app ở development mode (SRS §5)               |
+|                    | cryptography (Fernet)                                                                                       | 50.x              | Mã hóa Page access token (§5.6)                                             |
 | **Email**          | Amazon SES hoặc Resend (production) / Mailpit (local)                                                       |                   | Webhook bounce — P2                                                         |
 | **Edge**           | Caddy                                                                                                       |                   | TLS và reverse proxy, không buffer SSE                                      |
 | **Observability**  | structlog 26.x; Langfuse 4.x (P2)                                                                           |                   |                                                                             |
@@ -245,6 +247,23 @@ LIMIT 50
 ```
 
 Index HNSW giữ truy vấn nhanh. Cô lập không cần thêm điều kiện lọc, vì RLS đã giới hạn các dòng.
+
+### 5.6. Đăng tin Đa kênh (FR-A3.5)
+
+**Kết nối Facebook Page.** Company Admin bấm kết nối; web chuyển sang Facebook Login xin `pages_manage_posts`, `pages_read_engagement`, `pages_show_list`, với `state` ký bằng khóa của API và gắn với user để chống CSRF. Callback ở FastAPI đổi code lấy user token, đổi sang user token dài hạn, rồi gọi `GET /{user-id}/accounts` để lấy Page access token dài hạn (không có ngày hết hạn) của Page mà Admin chọn. Token được mã hóa bằng Fernet với khóa `CHANNEL_TOKEN_KEY` (biến môi trường, NFR-SEC-10) rồi ghi vào `channel_connections`; user token không được lưu.
+
+**Đăng.** Recruiter gửi nội dung Job Ad đã sửa. Trong một `tenant_session`, API khóa dòng Job (`SELECT … FOR UPDATE`), kiểm tra điều kiện của FR-A3.5 và chưa có Channel Post cho Page đó, giải mã token, gọi `POST /{page_id}/feed` với `message` là Job Ad và `link` là Public Apply Link, rồi ghi `channel_posts` và Audit Log trong cùng transaction. Lời gọi là một HTTP request đồng bộ có timeout, không qua Celery, nên transaction giữ khóa trong lúc chờ Graph API; nhờ khóa, request đăng thứ hai cho cùng Job phải chờ, rồi thấy Channel Post đã có. Graph API trả lỗi token (mã `190`) thì API đề nghị Company Admin kết nối lại.
+
+**Share intent.** Web dựng URL ngay ở client, không gọi API: `https://www.facebook.com/dialog/share?app_id=…&href=…` (chỉ nhận link và hashtag), URL chia sẻ của LinkedIn (chỉ nhận link), `https://x.com/intent/tweet?text=…&url=…`. Facebook và LinkedIn lấy bản xem trước từ thẻ Open Graph, nên nội dung Job Ad đi kèm qua nút Copy.
+
+**Trang Public Apply Link.** `/apply/{slug}` là server component: nó gọi endpoint công khai của FastAPI (dữ liệu từ `public_job_by_slug`, ERD §8) để HTML trả về đã có thẻ Open Graph và JSON-LD `JobPosting` cho crawler. Đây là đọc dữ liệu để render, không phải Server Action hay route handler (ADR-0003). Template Job Ad nằm ở web, trong file ngôn ngữ (§5.7), và dùng cho cả ô soạn của Recruiter lẫn `description` của JSON-LD. Không dùng Google Indexing API: Google tìm trang qua crawl, và JSON-LD được kiểm bằng Rich Results Test.
+
+### 5.7. Ngôn ngữ giao diện (NFR-USE-03)
+
+- **Web:** `next-intl` không dùng i18n routing; URL không đổi. Ngôn ngữ đọc từ cookie `NEXT_LOCALE`, do nút chuyển ngôn ngữ ghi. Không có cookie thì trang Public Apply theo `Accept-Language`, các trang khác dùng `vi`. Chuỗi nằm trong `apps/web/messages/vi.json` và `en.json`; một test bảo đảm hai file có cùng tập key.
+- **Lỗi từ API:** `detail` giữ tiếng Anh cho nhà phát triển; web hiển thị thông báo theo status code và mã lỗi, lấy từ file ngôn ngữ.
+- **Email:** web và API cùng origin qua Caddy, nên API đọc được cookie `NEXT_LOCALE` của request tạo ra email, theo cùng thứ tự ưu tiên như web. Subject và body được render bằng ngôn ngữ đó ngay khi ghi dòng `email_messages`, nên outbox không cần lưu ngôn ngữ.
+- **Không dịch:** Fit-Gap Report và Evidence giữ nguyên ngôn ngữ gốc; nội dung CV/JD không bao giờ được dịch.
 
 ---
 

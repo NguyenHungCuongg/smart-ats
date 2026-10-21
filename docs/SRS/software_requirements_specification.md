@@ -5,8 +5,8 @@
 ### Smart ATS — Software Requirements Specification (SRS)
 
 > **Mã tài liệu / Document ID**: UIT-KHOALUAN-SRS-2026-V3
-> **Phiên bản / Version**: 3.3 — Hạ Google và giao diện tiếng Anh xuống P2
-> **Ngày ban hành / Date**: 2026-10-19
+> **Phiên bản / Version**: 3.4 — Đăng tin đa kênh, giao diện tiếng Anh về P1
+> **Ngày ban hành / Date**: 2026-10-21
 > **Tác giả / Author**: Nhóm nghiên cứu Đồ án Tốt nghiệp
 > **Giảng viên hướng dẫn / Advisor**: [Tên GVHD]
 > **Đơn vị / Institution**: Khoa Kỹ thuật Phần mềm / Hệ thống Thông tin — Đại học Công nghệ Thông tin, ĐHQG TP.HCM (UIT)
@@ -21,6 +21,7 @@
 > - v3.1 (2026-09-28): Đồng bộ PRD/SAD/ERD; sửa RBAC mâu thuẫn; bổ sung thực thể `Application`; sửa thiết kế RLS (FORCE RLS, worker tenant context, pre-auth lookup); Checkpoint bền vững bằng LangGraph interrupt; phương pháp chấm điểm lai (deterministic + rubric); thêm Public Apply Link, gửi email thật, Talent Rediscovery, AI Usage Ledger, bảo vệ dữ liệu cá nhân; sửa thực nghiệm; roadmap 26 tuần; cập nhật tech stack (tra cứu 2026-09-28)
 > - **v3.2 (2026-10-08)**: Tái cấu trúc, không đổi yêu cầu. Bối cảnh, định vị và quyết định phạm vi chuyển sang PRD; phân loại, đóng góp và thực nghiệm chuyển sang Kế hoạch Thực nghiệm; lộ trình, phân công và rủi ro chuyển sang Roadmap; tech stack và hạ tầng chuyển sang SAD; thêm mục Ràng buộc Thiết kế; mỗi con số chỉ định nghĩa ở một chỗ; NFR-REL-05 không còn quy định đường dẫn endpoint; đổi tên file thành `software_requirements_specification.md`
 > - **v3.3 (2026-10-19)**: Chỉ còn một thành viên làm nên cắt sớm theo Roadmap §5: đăng nhập Google (FR-C1.1) và giao diện Tiếng Anh (NFR-USE-03) hạ xuống P2; xử lý CV/JD song ngữ giữ P1
+> - **v3.4 (2026-10-21)**: Roadmap bỏ lịch, phân công và danh sách cắt giảm (Roadmap §5 mà v3.3 dẫn không còn). Giao diện Tiếng Anh (NFR-USE-03) về P1, gồm trang Public Apply và email. Thêm FR-A3.5 Đăng tin Đa kênh; Job Board syndication ra khỏi §6, chỉ còn Job Posting API của job board ngoài phạm vi
 
 ---
 
@@ -48,7 +49,7 @@ Tài liệu đặc tả những gì Smart ATS phải làm và phải đạt, ở
 ### 1.3. Quy ước
 
 - **Mã yêu cầu**: `FR-<module><số>` cho yêu cầu chức năng, `NFR-<nhóm>-<số>` cho phi chức năng. Mã stable: không đánh số lại khi xóa; tài liệu khác dẫn chiếu bằng mã.
-- **Mức ưu tiên**: **P1** = bắt buộc cho demo và thực nghiệm; **P2** = làm nếu còn thời gian, không ảnh hưởng thực nghiệm.
+- **Mức ưu tiên**: **P1** = bắt buộc cho demo và thực nghiệm; **P2** = không bắt buộc cho demo, không ảnh hưởng thực nghiệm.
 - **Con số**: mỗi ngưỡng, giới hạn, thời hạn chỉ ghi ở một yêu cầu; chỗ khác dẫn mã yêu cầu đó.
 - **Thuật ngữ**: viết hoa theo `CONTEXT.md` (Job, Candidate, Application, Stage, Scoring Run…).
 
@@ -94,6 +95,8 @@ Mỗi User thuộc **đúng một** Tenant (trừ System Admin không thuộc te
 | Xử lý yêu cầu xóa dữ liệu ứng viên, cấu hình Retention         |      ❌      |      ✅       |      ❌       |     ❌      |
 | Tạo & Parse Job (FR-A1.1), quản lý vòng đời Job (FR-A3.1)      |      ❌      |      ✅       |      ✅       |     ❌      |
 | Bật/tắt Public Apply Link (FR-A3.4)                            |      ❌      |      ✅       |      ✅       |     ❌      |
+| Kết nối, ngắt kết nối Facebook Page (FR-A3.5)                  |      ❌      |      ✅       |      ❌       |     ❌      |
+| Đăng và chia sẻ Job Ad (FR-A3.5)                               |      ❌      |      ✅       |      ✅       |     ❌      |
 | Upload & Parse CV (FR-A1.2)                                    |      ❌      |      ✅       |      ✅       |     ❌      |
 | Chạy Scoring (FR-A1.3), Rediscovery (FR-A1.6)                  |      ❌      |      ✅       |      ✅       |     ❌      |
 | Kích hoạt Agent & Recruiter Decision (FR-A0)                   |      ❌      |      ✅       |      ✅       |     ❌      |
@@ -390,7 +393,7 @@ Applied → Screening → Shortlisted → Interview → Offer → Hired
 
 #### `FR-A3.3` [P1] Activity Timeline & Audit Log
 
-Ghi nhận (append-only): tạo/nhận Application, chạy parsing/scoring, đổi stage (ai, cũ → mới), email đã gửi, comment & Interview Score, Campaign và Recruiter Decision, thay đổi criteria/trọng số Job, thay đổi Member/role, xóa dữ liệu ứng viên. Hành động của Agent được ghi với `actor_type = AGENT`.
+Ghi nhận (append-only): tạo/nhận Application, chạy parsing/scoring, đổi stage (ai, cũ → mới), email đã gửi, comment & Interview Score, Campaign và Recruiter Decision, thay đổi criteria/trọng số Job, thay đổi Member/role, kết nối/ngắt kết nối Facebook Page, Channel Post đã đăng, xóa dữ liệu ứng viên. Hành động của Agent được ghi với `actor_type = AGENT`.
 
 #### `FR-A3.4` [P1] Public Apply Link
 
@@ -407,6 +410,32 @@ Ghi nhận (append-only): tạo/nhận Application, chạy parsing/scoring, đ�
 - Job không ở `PUBLISHED` → trang báo đã đóng, không nhận file.
 - Nộp hai lần cùng email cho cùng Job → không tạo Application thứ hai, báo "đã nhận hồ sơ".
 - Endpoint công khai không thể đọc dữ liệu tenant nào ngoài Job được chỉ định (test trong Experiment 4).
+
+#### `FR-A3.5` [P1] Đăng tin Đa kênh
+
+**Mô tả:** Recruiter soạn Job Ad một lần rồi đưa lên nhiều Channel, không chép lại ở từng nơi. Job Ad sinh từ template theo Job (tên, kỹ năng và trách nhiệm chính trong criteria, địa điểm, work mode, hạn nộp) kèm Public Apply Link, bằng ngôn ngữ giao diện đang dùng (NFR-USE-03); Recruiter sửa trước khi đăng hoặc chia sẻ. Job Ad không được lưu; chỉ Channel Post được lưu.
+
+**Điều kiện:** Job ở `PUBLISHED` và Public Apply Link đang bật.
+
+| Channel            | Cách đưa lên                                                                            | Tạo Channel Post |
+| ------------------ | --------------------------------------------------------------------------------------- | :--------------: |
+| Facebook Page      | Graph API, đăng lên Page mà Company Admin đã kết nối                                    |        ✅        |
+| Facebook, LinkedIn | Mở trang chia sẻ của nền tảng với Public Apply Link; nội dung Job Ad chép bằng nút Copy |        ❌        |
+| X                  | Mở trang soạn bài với Job Ad rút gọn và Public Apply Link, vừa giới hạn ký tự của X     |        ❌        |
+| Google for Jobs    | Dữ liệu có cấu trúc `JobPosting` trên trang Public Apply Link                           |        ❌        |
+
+**Kết nối Facebook Page:** Company Admin kết nối một Page cho Workspace qua Facebook Login và ngắt kết nối được. Page access token được mã hóa khi lưu và không bao giờ trả về client. Giới hạn của Meta app: §5.
+
+**Trang Public Apply Link:** có thẻ Open Graph (tên Job, đoạn đầu Job Ad, logo tenant) để bản xem trước khi chia sẻ hiển thị đúng, và dữ liệu có cấu trúc `JobPosting` với mô tả lấy từ Job Ad, không công khai dải lương. Job `REMOTE` khai báo là làm từ xa hoàn toàn; Job `HYBRID` và `ONSITE` khai báo địa điểm. Job không ở `PUBLISHED` thì trang không có dữ liệu có cấu trúc.
+
+**Acceptance Criteria:**
+
+- Job không ở `PUBLISHED` hoặc Public Apply Link đang tắt → không đăng và không chia sẻ được.
+- Đăng lần hai cùng Job lên cùng Facebook Page → không tạo Channel Post thứ hai, trả về link bài đã đăng.
+- Graph API lỗi hoặc token bị thu hồi → không tạo Channel Post, báo lỗi và đề nghị Company Admin kết nối lại.
+- Page access token không xuất hiện trong response, log hay Audit Log.
+- Channel Post và kết nối Facebook Page của tenant này không đọc được từ tenant khác (test trong Experiment 4).
+- Trang Public Apply Link của một Job `PUBLISHED` qua Rich Results Test của Google không có lỗi `JobPosting`.
 
 ---
 
@@ -537,12 +566,12 @@ Toàn bộ nội dung từ file là **untrusted input**:
 
 ### 4.4. Khả dụng & UX
 
-| Mã             | Hạng mục            | Đặc tả                                                                                                                   |
-| -------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **NFR-USE-01** | Onboarding          | Recruiter mới hoàn thành lần chấm điểm đầu tiên (từ tạo Job tới xem Fit-Gap) ≤ 5 phút trong usability test với ≥ 5 người |
-| **NFR-USE-02** | Phản hồi trạng thái | Tác vụ > 3 giây có progress (% hoặc x/y)                                                                                 |
-| **NFR-USE-03** | Ngôn ngữ            | Giao diện Tiếng Việt (mặc định) và Tiếng Anh (P2); xử lý CV/JD tiếng Việt và tiếng Anh                                   |
-| **NFR-USE-04** | Trình duyệt         | 2 phiên bản mới nhất của Chrome, Edge, Firefox, Safari; trang Public Apply dùng được trên di động                        |
+| Mã             | Hạng mục            | Đặc tả                                                                                                                                                                                                                                                                                                              |
+| -------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **NFR-USE-01** | Onboarding          | Recruiter mới hoàn thành lần chấm điểm đầu tiên (từ tạo Job tới xem Fit-Gap) ≤ 5 phút trong usability test với ≥ 5 người                                                                                                                                                                                            |
+| **NFR-USE-02** | Phản hồi trạng thái | Tác vụ > 3 giây có progress (% hoặc x/y)                                                                                                                                                                                                                                                                            |
+| **NFR-USE-03** | Ngôn ngữ            | Giao diện Tiếng Việt (mặc định) và Tiếng Anh, gồm trang Public Apply và email; người dùng đổi ngôn ngữ ngay trên giao diện; trang Public Apply mặc định theo ngôn ngữ trình duyệt; email gửi bằng ngôn ngữ của người thao tác tạo ra nó; Fit-Gap Report và Evidence không dịch; xử lý CV/JD tiếng Việt và tiếng Anh |
+| **NFR-USE-04** | Trình duyệt         | 2 phiên bản mới nhất của Chrome, Edge, Firefox, Safari; trang Public Apply dùng được trên di động                                                                                                                                                                                                                   |
 
 ---
 
@@ -550,38 +579,39 @@ Toàn bộ nội dung từ file là **untrusted input**:
 
 Những ràng buộc mà yêu cầu ở §3–§4 phụ thuộc vào. Công nghệ và phiên bản cụ thể: SAD §2.
 
-| Ràng buộc                                                                         | Lý do                                                                                                                         |
-| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| PostgreSQL 18 trở lên, có pgvector; một shared schema cho mọi tenant              | Forced RLS (ADR-0001), tìm kiếm vector chạy dưới cùng RLS (ADR-0005), `uuidv7()` có sẵn                                       |
-| Next.js chỉ làm frontend; FastAPI sở hữu auth và toàn bộ nghiệp vụ                | Một nơi duy nhất kiểm tra RBAC, tenant context và audit (ADR-0003)                                                            |
-| Một nhà cung cấp LLM (OpenAI); model chọn qua cấu hình, không hard-code           | Thực nghiệm so sánh được nhiều model (Config D vs D-luna); mỗi nhà cung cấp cần tinh chỉnh prompt riêng nên không có fallback |
-| Production chỉ dùng OpenAI; Gemini chỉ thử với dữ liệu tổng hợp                   | Free tier Gemini dùng dữ liệu cải thiện sản phẩm Google (FR-C1.5); bật bằng `LLM_PROVIDER=gemini`                             |
-| Không dùng thư viện giấy phép AGPL (ví dụ PyMuPDF)                                | Sản phẩm hướng tới SaaS thương mại                                                                                            |
-| Email gửi qua dịch vụ transactional (SES hoặc Resend); local dùng sandbox bắt thư | Không vận hành mail server (§6)                                                                                               |
-| Object storage tương thích S3                                                     | Cùng code cho production (S3) và local                                                                                        |
-| Triển khai demo bằng Docker Compose trên một VPS; `api` và worker stateless       | Quy mô đồ án; vẫn mở rộng ngang được về sau                                                                                   |
+| Ràng buộc                                                                                                  | Lý do                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL 18 trở lên, có pgvector; một shared schema cho mọi tenant                                       | Forced RLS (ADR-0001), tìm kiếm vector chạy dưới cùng RLS (ADR-0005), `uuidv7()` có sẵn                                       |
+| Next.js chỉ làm frontend; FastAPI sở hữu auth và toàn bộ nghiệp vụ                                         | Một nơi duy nhất kiểm tra RBAC, tenant context và audit (ADR-0003)                                                            |
+| Một nhà cung cấp LLM (OpenAI); model chọn qua cấu hình, không hard-code                                    | Thực nghiệm so sánh được nhiều model (Config D vs D-luna); mỗi nhà cung cấp cần tinh chỉnh prompt riêng nên không có fallback |
+| Production chỉ dùng OpenAI; Gemini chỉ thử với dữ liệu tổng hợp                                            | Free tier Gemini dùng dữ liệu cải thiện sản phẩm Google (FR-C1.5); bật bằng `LLM_PROVIDER=gemini`                             |
+| Không dùng thư viện giấy phép AGPL (ví dụ PyMuPDF)                                                         | Sản phẩm hướng tới SaaS thương mại                                                                                            |
+| Email gửi qua dịch vụ transactional (SES hoặc Resend); local dùng sandbox bắt thư                          | Không vận hành mail server (§6)                                                                                               |
+| Object storage tương thích S3                                                                              | Cùng code cho production (S3) và local                                                                                        |
+| Triển khai demo bằng Docker Compose trên một VPS; `api` và worker stateless                                | Quy mô đồ án; vẫn mở rộng ngang được về sau                                                                                   |
+| Meta app ở development mode: chỉ người có role trên app kết nối được Page, và chỉ họ thấy bài đăng qua API | Live mode cần Advanced Access, mà Advanced Access đòi Business Verification; đồ án không có pháp nhân                         |
 
 ---
 
 ## 6. Phạm vi Ngoài Đề tài (Out of Scope)
 
-| Tính năng                                                                                                    | Lý do                                                                      |
-| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| **Career Platform / tài khoản ứng viên** (Reverse Matching, Career Advisor, CV Builder, cổng theo dõi hồ sơ) | Sản phẩm B2C độc lập; ứng viên chỉ tương tác qua Public Apply Link         |
-| **Offer/Contract Generator**                                                                                 | CRUD thuần, không có giá trị AI                                            |
-| **Mail server tự vận hành, đọc email đến (inbound)**                                                         | Dùng dịch vụ transactional email; hộp thư hai chiều là một sản phẩm riêng  |
-| **Tích hợp lịch (Google/Outlook Calendar), đặt lịch phỏng vấn tự động**                                      | Tích hợp OAuth bên thứ ba phức tạp; email mời chứa khung giờ đề xuất là đủ |
-| **e-Signature**                                                                                              | Tích hợp pháp lý phức tạp, ngoài domain                                    |
-| **Video/Voice Interview Bot**                                                                                | Đề tài nghiên cứu riêng                                                    |
-| **ERP/CRM, Job Board syndication (LinkedIn, TopCV)**                                                         | Connector thương mại, không cần cho thesis                                 |
-| **Một User thuộc nhiều Tenant**                                                                              | Tăng độ phức tạp auth/RLS; MVP dùng một tài khoản cho mỗi tenant           |
-| **SSO doanh nghiệp (SAML/OIDC tùy biến)**                                                                    | Nhu cầu của enterprise, không phải SME                                     |
-| **Thanh toán, hóa đơn tự động**                                                                              | `plan_type` và AI Budget đủ minh họa mô hình SaaS                          |
-| **Nhà cung cấp LLM dự phòng thứ hai**                                                                        | Mỗi nhà cung cấp cần tinh chỉnh và đánh giá prompt riêng                   |
-| **Schema-per-tenant / DB-per-tenant**                                                                        | Shared schema + Forced RLS đáp ứng yêu cầu (ADR-0001)                      |
-| **Kubernetes, multi-region, HA database**                                                                    | Quy mô demo; kiến trúc stateless cho phép mở rộng sau                      |
+| Tính năng                                                                                                    | Lý do                                                                             |
+| ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| **Career Platform / tài khoản ứng viên** (Reverse Matching, Career Advisor, CV Builder, cổng theo dõi hồ sơ) | Sản phẩm B2C độc lập; ứng viên chỉ tương tác qua Public Apply Link                |
+| **Offer/Contract Generator**                                                                                 | CRUD thuần, không có giá trị AI                                                   |
+| **Mail server tự vận hành, đọc email đến (inbound)**                                                         | Dùng dịch vụ transactional email; hộp thư hai chiều là một sản phẩm riêng         |
+| **Tích hợp lịch (Google/Outlook Calendar), đặt lịch phỏng vấn tự động**                                      | Tích hợp OAuth bên thứ ba phức tạp; email mời chứa khung giờ đề xuất là đủ        |
+| **e-Signature**                                                                                              | Tích hợp pháp lý phức tạp, ngoài domain                                           |
+| **Video/Voice Interview Bot**                                                                                | Đề tài nghiên cứu riêng                                                           |
+| **ERP/CRM; đăng tin qua Job Posting API của job board (LinkedIn Jobs, TopCV, VietnamWorks, ITviec)**         | Connector thương mại hoặc chỉ dành cho partner; FR-A3.5 dùng các Channel miễn phí |
+| **Một User thuộc nhiều Tenant**                                                                              | Tăng độ phức tạp auth/RLS; MVP dùng một tài khoản cho mỗi tenant                  |
+| **SSO doanh nghiệp (SAML/OIDC tùy biến)**                                                                    | Nhu cầu của enterprise, không phải SME                                            |
+| **Thanh toán, hóa đơn tự động**                                                                              | `plan_type` và AI Budget đủ minh họa mô hình SaaS                                 |
+| **Nhà cung cấp LLM dự phòng thứ hai**                                                                        | Mỗi nhà cung cấp cần tinh chỉnh và đánh giá prompt riêng                          |
+| **Schema-per-tenant / DB-per-tenant**                                                                        | Shared schema + Forced RLS đáp ứng yêu cầu (ADR-0001)                             |
+| **Kubernetes, multi-region, HA database**                                                                    | Quy mô demo; kiến trúc stateless cho phép mở rộng sau                             |
 
 ---
 
 > **Xác nhận Phê duyệt Tài liệu**:
-> SRS v3.2 là căn cứ kỹ thuật và phạm vi chính thức cho toàn bộ quá trình thiết kế, hiện thực, kiểm thử và nghiệm thu Đồ án Tốt nghiệp tại Trường Đại học Công nghệ Thông tin (UIT). Đóng góp của đồ án và cách chứng minh: [Kế hoạch Thực nghiệm §1](../EVAL/experiment_plan.md#1-phân-loại--đóng-góp-của-đồ-án).
+> SRS v3.4 là căn cứ kỹ thuật và phạm vi chính thức cho toàn bộ quá trình thiết kế, hiện thực, kiểm thử và nghiệm thu Đồ án Tốt nghiệp tại Trường Đại học Công nghệ Thông tin (UIT). Đóng góp của đồ án và cách chứng minh: [Kế hoạch Thực nghiệm §1](../EVAL/experiment_plan.md#1-phân-loại--đóng-góp-của-đồ-án).
