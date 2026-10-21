@@ -7,6 +7,9 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-4">
       <h1 className="text-3xl font-semibold">Smart ATS</h1>
       <Session />
+      <Link href="/jobs" className="underline">
+        Danh sách Job
+      </Link>
       <Link href="/jobs/new" className="underline">
         Tạo Job từ JD
       </Link>

@@ -1,5 +1,7 @@
 // A Job's criteria as the API sends them, and the edit form over them (FR-A1.1).
 
+import type { JobStatus } from "./lifecycle";
+
 export const LEVELS = ["INTERN", "JUNIOR", "MID", "SENIOR", "LEAD", "MANAGER"] as const;
 export const WORK_MODES = ["REMOTE", "HYBRID", "ONSITE"] as const;
 
@@ -23,7 +25,7 @@ export type Job = {
   department: string | null;
   location: string | null;
   work_mode: WorkMode | null;
-  status: string;
+  status: JobStatus;
   parse_status: "PENDING" | "SUCCEEDED" | "FAILED";
   parse_error: string | null;
   criteria: Criteria | null;
@@ -31,6 +33,8 @@ export type Job = {
   verification: Record<string, "VERIFIED" | "NEEDS_REVIEW"> | null;
   weights: Weights;
   criteria_confirmed_at: string | null;
+  /** YYYY-MM-DD. */
+  apply_deadline: string | null;
 };
 
 export type Confirmation = Pick<

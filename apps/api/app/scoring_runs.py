@@ -18,7 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app import events, outbox, storage, usage
-from app.jobs import Recruiter, Weights
+from app.jobs import JobReader, LockedJob, Weights
 from app.worker import tenant_task
 from smart_ats_scoring.extraction import ExtractionError, extract_text
 from smart_ats_scoring.llm import UnusableResponse, llm_from_env
@@ -73,15 +73,13 @@ class ScoringRun(BaseModel):
 
 
 @router.post("/{job_id}/scoring-runs", status_code=status.HTTP_202_ACCEPTED)
-async def create(job_id: uuid.UUID, auth: Recruiter) -> RunCreated:
+async def create(job_id: uuid.UUID, auth: LockedJob) -> RunCreated:
     """Score every Application the Job has now; the scoring runs on queue llm."""
-    # The row lock makes concurrent requests take turns, so only one passes the running check.
+    # LockedJob's row lock makes concurrent requests take turns, so only one passes the running
+    # check.
     confirmed = await auth.db.scalar(
-        text("SELECT criteria_confirmed_at IS NOT NULL FROM jobs WHERE id = :id FOR UPDATE"),
-        {"id": job_id},
+        text("SELECT criteria_confirmed_at IS NOT NULL FROM jobs WHERE id = :id"), {"id": job_id}
     )
-    if confirmed is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
     # A statement of its own, so its snapshot is taken after the lock and sees the run that
     # the request it waited for committed.
     checks = (
@@ -150,7 +148,7 @@ async def create(job_id: uuid.UUID, auth: Recruiter) -> RunCreated:
 
 
 @router.get("/{job_id}/scoring-runs/latest")
-async def latest(job_id: uuid.UUID, auth: Recruiter) -> ScoringRun:
+async def latest(job_id: uuid.UUID, auth: JobReader) -> ScoringRun:
     """The Job's newest run with its results; 404 for a Job never scored."""
     run = (
         await auth.db.execute(
@@ -163,7 +161,6 @@ async def latest(job_id: uuid.UUID, auth: Recruiter) -> ScoringRun:
             {"job_id": job_id},
         )
     ).one_or_none()
-    # Another Tenant's Job is hidden by RLS, so it is a 404 like a missing one (SAD §4.3).
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "The Job has no Scoring Run")
     results = await auth.db.execute(

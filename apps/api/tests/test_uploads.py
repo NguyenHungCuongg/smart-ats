@@ -292,17 +292,6 @@ async def test_other_tenants_job_is_not_found_on_every_endpoint(
     assert objects == {}
 
 
-async def test_reviewer_cannot_upload_or_list(
-    client: AsyncClient, recruiter: User, job: str
-) -> None:
-    reviewer = make_user("REVIEWER", recruiter.tenant_id)
-
-    assert (await upload(client, reviewer, job)).status_code == 403
-    for path in ("uploads", "applications"):
-        response = await client.get(f"/api/jobs/{job}/{path}", headers=reviewer.headers)
-        assert response.status_code == 403
-
-
 # The parse task, run in-process as a worker would run what the API enqueued.
 
 PROFILE: dict[str, Any] = {

@@ -3,8 +3,21 @@
 import { useEffect, useState } from "react";
 
 import { apiFetch, logout } from "./auth";
+import type { Role } from "./settings/members/members";
 
 type Me = { email: string; full_name: string; role: string };
+
+/** The signed-in user's role once known, for pages that show each role what it may do. */
+export function useRole(): Role | null {
+  const [role, setRole] = useState<Role | null>(null);
+  useEffect(() => {
+    apiFetch("/api/auth/me").then(async (response) => {
+      if (response.ok) setRole((await response.json()).role);
+      else window.location.replace("/login");
+    });
+  }, []);
+  return role;
+}
 
 /** The signed-in user with a logout button; sends anyone signed out to /login. */
 export function Session() {

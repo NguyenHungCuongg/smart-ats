@@ -162,6 +162,7 @@ async def test_upload_creates_a_draft_job_and_enqueues_its_parse(
         "verification": None,
         "weights": {"technical": 55, "soft_skills": 15, "experience": 30},
         "criteria_confirmed_at": None,
+        "apply_deadline": None,
     }
 
 
@@ -601,18 +602,6 @@ async def test_other_tenants_job_is_not_found_on_every_endpoint(
     assert (await client.get(f"/api/jobs/{parsed_job}", headers=other.headers)).status_code == 404
     assert (await confirm(client, other, parsed_job)).status_code == 404
     assert (await get_job(client, recruiter, parsed_job))["criteria_confirmed_at"] is None
-
-
-@pytest.mark.usefixtures("redis")
-async def test_reviewer_cannot_read_or_confirm_a_job(
-    client: AsyncClient, recruiter: User, parsed_job: str
-) -> None:
-    reviewer = make_user("REVIEWER", recruiter.tenant_id)
-
-    assert (
-        await client.get(f"/api/jobs/{parsed_job}", headers=reviewer.headers)
-    ).status_code == 403
-    assert (await confirm(client, reviewer, parsed_job)).status_code == 403
 
 
 # The database alone holds the weights to 100%, whatever the caller.

@@ -3,6 +3,9 @@
 The API inserts a DRAFT Job with placeholders and enqueues `jobs.parse` once that commits; the
 task overwrites the placeholders with the parsed criteria and tells the Recruiter over SSE.
 Scoring takes only Jobs whose criteria a Recruiter has confirmed (criteria_confirmed_at).
+
+A Job then moves through the lifecycle of FR-A3.1 and is read by the Reviewers assigned to it.
+The dependencies here decide who reads and who writes a Job for every router under /api/jobs.
 """
 
 import asyncio
@@ -10,12 +13,13 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from collections.abc import Awaitable, Callable
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import PurePath
 from typing import Annotated, Any, Literal, Self
 
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,18 +39,89 @@ MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 
 Level = Literal["INTERN", "JUNIOR", "MID", "SENIOR", "LEAD", "MANAGER"]
 WorkMode = Literal["REMOTE", "HYBRID", "ONSITE"]
+JobStatus = Literal["DRAFT", "PUBLISHED", "PAUSED", "CLOSED", "ARCHIVED"]
+Action = Literal["publish", "pause", "resume", "close", "archive", "reopen"]
+
+# The edges of FR-A3.1's diagram; any other (status, action) is refused.
+TRANSITIONS: dict[tuple[JobStatus, Action], JobStatus] = {
+    ("DRAFT", "publish"): "PUBLISHED",
+    ("PUBLISHED", "pause"): "PAUSED",
+    ("PAUSED", "resume"): "PUBLISHED",
+    ("PUBLISHED", "close"): "CLOSED",
+    ("PAUSED", "close"): "CLOSED",
+    ("CLOSED", "archive"): "ARCHIVED",
+    ("CLOSED", "reopen"): "PUBLISHED",
+}
 
 router = APIRouter(prefix="/api/jobs")
 
 
+MANAGERS = ("COMPANY_ADMIN", "RECRUITER")
+
+
 def _recruiter(auth: Authenticated) -> Auth:
     # SRS §2: creating Jobs and configuring criteria is for Company Admins and Recruiters.
-    if auth.role not in ("COMPANY_ADMIN", "RECRUITER"):
+    if auth.role not in MANAGERS:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only Recruiters manage Jobs")
     return auth
 
 
 Recruiter = Annotated[Auth, Depends(_recruiter)]
+
+
+# The one definition of the Jobs a user may read, for one Job and for the list (SRS §2.1).
+_VISIBLE = (
+    "(:all OR EXISTS ("
+    "  SELECT 1 FROM job_reviewers r WHERE r.job_id = j.id AND r.user_id = :user_id))"
+)
+
+
+def _visible_to(auth: Auth) -> dict[str, Any]:
+    return {"all": auth.role in MANAGERS, "user_id": auth.user_id}
+
+
+async def _job_reader(job_id: uuid.UUID, auth: Authenticated) -> Auth:
+    """Any Job of the Tenant for Company Admins and Recruiters, only an assigned one for a
+    Reviewer (SRS §2.1). An unassigned Job is a 404 like another Tenant's (SAD §4.3)."""
+    visible = await auth.db.scalar(
+        text(f"SELECT 1 FROM jobs j WHERE id = :id AND {_VISIBLE}"),
+        {"id": job_id, **_visible_to(auth)},
+    )
+    if visible is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    return auth
+
+
+async def _job_manager(job_id: uuid.UUID, auth: Recruiter) -> Auth:
+    return await _job_reader(job_id, auth)
+
+
+# Every endpoint that reads a Job or its Applications takes one of these: JobReader where
+# assigned Reviewers read too, JobManager where only Company Admins and Recruiters do.
+JobReader = Annotated[Auth, Depends(_job_reader)]
+JobManager = Annotated[Auth, Depends(_job_manager)]
+
+
+def _job_writer(lock: Literal["FOR KEY SHARE", "FOR UPDATE"]) -> Callable[..., Awaitable[Auth]]:
+    async def dependency(job_id: uuid.UUID, auth: Recruiter) -> Auth:
+        # Checked under the row lock, which waits for a transition that is archiving the Job.
+        job_status = await auth.db.scalar(
+            text(f"SELECT status FROM jobs WHERE id = :id {lock}"), {"id": job_id}
+        )
+        if job_status is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+        if job_status == "ARCHIVED":
+            raise HTTPException(status.HTTP_409_CONFLICT, "An archived Job is read-only")
+        return auth
+
+    return dependency
+
+
+# Every endpoint that writes to a Job or its Applications takes one of these, so none forgets
+# that ARCHIVED is read-only (FR-A3.1). KEY SHARE does not wait for a JD parse, which holds
+# NO KEY UPDATE through its LLM call; FOR UPDATE does, and makes writers take turns.
+JobWriter = Annotated[Auth, Depends(_job_writer("FOR KEY SHARE"))]
+LockedJob = Annotated[Auth, Depends(_job_writer("FOR UPDATE"))]
 
 
 class Weights(BaseModel):
@@ -85,7 +160,7 @@ class Job(BaseModel):
     department: str | None
     location: str | None
     work_mode: WorkMode | None
-    status: str
+    status: JobStatus
     parse_status: Literal["PENDING", "SUCCEEDED", "FAILED"]
     parse_error: str | None
     # As parsed until confirmed: the LLM's output is not held to the limits of Criteria.
@@ -94,10 +169,45 @@ class Job(BaseModel):
     verification: dict[str, Literal["VERIFIED", "NEEDS_REVIEW"]] | None
     weights: Weights
     criteria_confirmed_at: datetime | None
+    apply_deadline: date | None
 
 
 class JobCreated(BaseModel):
     id: uuid.UUID
+
+
+class JobSummary(BaseModel):
+    id: uuid.UUID
+    title: str
+    level: Level
+    department: str | None
+    location: str | None
+    status: JobStatus
+    application_count: int
+    created_at: datetime
+
+
+class Transition(BaseModel):
+    action: Action
+
+
+class MetadataChange(BaseModel):
+    """The fields sent change; one left out stays."""
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    level: Level | None = None
+    department: str | None = Field(None, max_length=200)
+    location: str | None = Field(None, max_length=200)
+    work_mode: WorkMode | None = None
+    apply_deadline: date | None = None
+
+    @model_validator(mode="after")
+    def _title_and_level_are_not_null(self) -> Self:
+        if any(
+            getattr(self, field) is None for field in {"title", "level"} & self.model_fields_set
+        ):
+            raise ValueError("title and level cannot be null")
+        return self
 
 
 class CriteriaConfirmation(BaseModel):
@@ -163,9 +273,27 @@ async def create(
     return JobCreated(id=job_id)
 
 
+@router.get("")
+async def list_jobs(
+    auth: Authenticated, job_status: Annotated[JobStatus | None, Query(alias="status")] = None
+) -> list[JobSummary]:
+    """The Jobs the user may read, as _job_reader decides, newest first."""
+    rows = await auth.db.execute(
+        text(
+            "SELECT j.id, j.title, j.level, j.department, j.location, j.status, j.created_at,"
+            "  (SELECT count(*) FROM applications a WHERE a.job_id = j.id) AS application_count"
+            " FROM jobs j"
+            f" WHERE {_VISIBLE} AND (CAST(:status AS text) IS NULL OR j.status = :status)"
+            " ORDER BY j.created_at DESC, j.id DESC"
+        ),
+        {"status": job_status, **_visible_to(auth)},
+    )
+    return [JobSummary.model_validate(row._mapping) for row in rows]
+
+
 _SELECT_JOB = text("""
     SELECT id, title, level, department, location, work_mode, status, parse_status, parse_error,
-      criteria, criteria_verification AS verification, criteria_confirmed_at,
+      criteria, criteria_verification AS verification, criteria_confirmed_at, apply_deadline,
       (weight_technical * 100)::int AS technical,
       (weight_soft_skills * 100)::int AS soft_skills,
       (weight_experience * 100)::int AS experience
@@ -184,21 +312,23 @@ async def _job(db: AsyncSession, job_id: uuid.UUID) -> Job:
 
 
 @router.get("/{job_id}")
-async def get(job_id: uuid.UUID, auth: Recruiter) -> Job:
+async def get(job_id: uuid.UUID, auth: JobReader) -> Job:
     return await _job(auth.db, job_id)
 
 
-@router.put("/{job_id}/criteria")
-async def confirm_criteria(job_id: uuid.UUID, body: CriteriaConfirmation, auth: Recruiter) -> Job:
-    """Save the Recruiter's edits and confirm the criteria, which makes the Job scorable."""
-    parse_status = await auth.db.scalar(
-        text("SELECT parse_status FROM jobs WHERE id = :id FOR UPDATE"), {"id": job_id}
+async def _refuse_while_parsing(db: AsyncSession, job_id: uuid.UUID) -> None:
+    parse_status = await db.scalar(
+        text("SELECT parse_status FROM jobs WHERE id = :id"), {"id": job_id}
     )
-    if parse_status is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
     if parse_status == "PENDING":
-        # The parse would overwrite the confirmed criteria.
+        # The parse would overwrite what is saved now.
         raise HTTPException(status.HTTP_409_CONFLICT, "The JD Document is still being parsed")
+
+
+@router.put("/{job_id}/criteria")
+async def confirm_criteria(job_id: uuid.UUID, body: CriteriaConfirmation, auth: LockedJob) -> Job:
+    """Save the Recruiter's edits and confirm the criteria, which makes the Job scorable."""
+    await _refuse_while_parsing(auth.db, job_id)
     await auth.db.execute(
         text(
             "UPDATE jobs SET title = :title, level = :level, department = :department,"
@@ -217,6 +347,108 @@ async def confirm_criteria(job_id: uuid.UUID, body: CriteriaConfirmation, auth: 
         },
     )
     return await _job(auth.db, job_id)
+
+
+@router.post("/{job_id}/transitions")
+async def transition(job_id: uuid.UUID, body: Transition, auth: LockedJob) -> Job:
+    """Move the Job along one edge of FR-A3.1. LockedJob's row lock makes concurrent
+    transitions take turns, so each checks its edge against what the one before it left."""
+    current = await auth.db.scalar(text("SELECT status FROM jobs WHERE id = :id"), {"id": job_id})
+    to = TRANSITIONS.get((current, body.action))
+    if to is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"A {current} Job cannot {body.action}")
+    await auth.db.execute(
+        text("UPDATE jobs SET status = :to, updated_at = now() WHERE id = :id"),
+        {"id": job_id, "to": to},
+    )
+    return await _job(auth.db, job_id)
+
+
+@router.patch("/{job_id}")
+async def change_metadata(job_id: uuid.UUID, body: MetadataChange, auth: LockedJob) -> Job:
+    """Edit the Job's metadata (FR-A3.1); its Reviewers have an endpoint of their own."""
+    await _refuse_while_parsing(auth.db, job_id)
+    changes = body.model_dump(exclude_unset=True)
+    if changes:
+        # The column names are MetadataChange's own fields, never the client's text.
+        assignments = ", ".join(f"{column} = :{column}" for column in changes)
+        await auth.db.execute(
+            text(f"UPDATE jobs SET {assignments}, updated_at = now() WHERE id = :id"),
+            {"id": job_id, **changes},
+        )
+    return await _job(auth.db, job_id)
+
+
+class Reviewer(BaseModel):
+    id: uuid.UUID
+    full_name: str
+    email: str
+    assigned: bool
+
+
+class ReviewerAssignment(BaseModel):
+    user_ids: list[uuid.UUID]
+
+
+async def _reviewers(db: AsyncSession, job_id: uuid.UUID) -> list[Reviewer]:
+    rows = await db.execute(
+        text(
+            "SELECT u.id, u.full_name, u.email, r.user_id IS NOT NULL AS assigned FROM users u"
+            " LEFT JOIN job_reviewers r ON r.user_id = u.id AND r.job_id = :job_id"
+            " WHERE u.role = 'REVIEWER' AND u.is_active ORDER BY u.full_name, u.id"
+        ),
+        {"job_id": job_id},
+    )
+    return [Reviewer.model_validate(row._mapping) for row in rows]
+
+
+@router.get("/{job_id}/reviewers")
+async def list_reviewers(job_id: uuid.UUID, auth: JobManager) -> list[Reviewer]:
+    """The Workspace's active Reviewers, each marked whether the Job is assigned to them."""
+    return await _reviewers(auth.db, job_id)
+
+
+@router.put("/{job_id}/reviewers")
+async def assign_reviewers(
+    job_id: uuid.UUID, body: ReviewerAssignment, auth: LockedJob
+) -> list[Reviewer]:
+    """Replace the Job's Reviewer Assignments with user_ids; the lock makes two replacements
+    take turns, so neither keeps what the other removed."""
+    ids = list(set(body.user_ids))
+    reviewers = set(
+        await auth.db.scalars(
+            text(
+                "SELECT id FROM users"
+                " WHERE id = ANY(CAST(:ids AS uuid[])) AND role = 'REVIEWER' AND is_active"
+            ),
+            {"ids": ids},
+        )
+    )
+    if invalid := [str(id) for id in ids if id not in reviewers]:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {
+                "message": "Only active Reviewers of the Workspace can be assigned",
+                "user_ids": invalid,
+            },
+        )
+    await auth.db.execute(
+        text(
+            "DELETE FROM job_reviewers"
+            " WHERE job_id = :job_id AND user_id <> ALL(CAST(:ids AS uuid[]))"
+        ),
+        {"job_id": job_id, "ids": ids},
+    )
+    # One already assigned keeps who assigned them and when.
+    await auth.db.execute(
+        text(
+            "INSERT INTO job_reviewers (tenant_id, job_id, user_id, assigned_by)"
+            " SELECT :tenant_id, :job_id, unnest(CAST(:ids AS uuid[])), :user_id"
+            " ON CONFLICT DO NOTHING"
+        ),
+        {"tenant_id": auth.tenant_id, "job_id": job_id, "ids": ids, "user_id": auth.user_id},
+    )
+    return await _reviewers(auth.db, job_id)
 
 
 @tenant_task(name="jobs.parse", queue="llm")
