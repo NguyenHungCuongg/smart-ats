@@ -214,6 +214,17 @@ def call(method: str, path: str, **kwargs: Any) -> Probe:
     return probe
 
 
+async def move_first(client: AsyncClient, user: User, job_id: str) -> Response:
+    """Move the first Application of the Job, as user finds it."""
+    response = await client.get(f"/api/jobs/{job_id}/applications", headers=user.headers)
+    application = response.json()[0]
+    return await client.patch(
+        f"/api/applications/{application['id']}/stage",
+        headers=user.headers,
+        json={"to_stage": "SCREENING", "version": application["version"]},
+    )
+
+
 EVERYONE = ("COMPANY_ADMIN", "RECRUITER", "REVIEWER")
 MATRIX: list[tuple[str, dict[str, str], list[Probe] | str]] = [
     ("Quản lý Tenant, gói, AI Budget nền tảng", dict.fromkeys(EVERYONE, DENIED), "FR-C1.4"),
@@ -282,7 +293,18 @@ MATRIX: list[tuple[str, dict[str, str], list[Probe] | str]] = [
     ("Xuất PDF (FR-A1.5)", {"REVIEWER": DENIED}, "FR-A1.5"),
     ("Soạn & gửi Email (FR-A2.1)", {"REVIEWER": DENIED}, "FR-A2.1"),
     ("Comment & Interview Score (FR-A2.2)", {"REVIEWER": ASSIGNED}, "FR-A2.2"),
-    ("Đổi Stage, Bulk Actions (FR-A3.2)", {"REVIEWER": DENIED}, "FR-A3.2"),
+    (
+        "Đổi Stage, Bulk Actions (FR-A3.2)",
+        {"REVIEWER": DENIED},
+        [
+            move_first,
+            call(
+                "POST",
+                "/api/jobs/{job}/applications/stage",
+                json={"applications": [], "to_stage": "SCREENING"},
+            ),
+        ],
+    ),
     (
         "Gán Reviewer",
         {"REVIEWER": DENIED},

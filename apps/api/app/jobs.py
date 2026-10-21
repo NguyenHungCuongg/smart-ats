@@ -80,7 +80,7 @@ def _visible_to(auth: Auth) -> dict[str, Any]:
     return {"all": auth.role in MANAGERS, "user_id": auth.user_id}
 
 
-async def _job_reader(job_id: uuid.UUID, auth: Authenticated) -> Auth:
+async def job_reader(job_id: uuid.UUID, auth: Authenticated) -> Auth:
     """Any Job of the Tenant for Company Admins and Recruiters, only an assigned one for a
     Reviewer (SRS §2.1). An unassigned Job is a 404 like another Tenant's (SAD §4.3)."""
     visible = await auth.db.scalar(
@@ -93,12 +93,12 @@ async def _job_reader(job_id: uuid.UUID, auth: Authenticated) -> Auth:
 
 
 async def _job_manager(job_id: uuid.UUID, auth: Recruiter) -> Auth:
-    return await _job_reader(job_id, auth)
+    return await job_reader(job_id, auth)
 
 
 # Every endpoint that reads a Job or its Applications takes one of these: JobReader where
 # assigned Reviewers read too, JobManager where only Company Admins and Recruiters do.
-JobReader = Annotated[Auth, Depends(_job_reader)]
+JobReader = Annotated[Auth, Depends(job_reader)]
 JobManager = Annotated[Auth, Depends(_job_manager)]
 
 
@@ -120,7 +120,9 @@ def _job_writer(lock: Literal["FOR KEY SHARE", "FOR UPDATE"]) -> Callable[..., A
 # Every endpoint that writes to a Job or its Applications takes one of these, so none forgets
 # that ARCHIVED is read-only (FR-A3.1). KEY SHARE does not wait for a JD parse, which holds
 # NO KEY UPDATE through its LLM call; FOR UPDATE does, and makes writers take turns.
-JobWriter = Annotated[Auth, Depends(_job_writer("FOR KEY SHARE"))]
+# job_writer is also called directly by a write that finds its Job through an Application.
+job_writer = _job_writer("FOR KEY SHARE")
+JobWriter = Annotated[Auth, Depends(job_writer)]
 LockedJob = Annotated[Auth, Depends(_job_writer("FOR UPDATE"))]
 
 
@@ -277,7 +279,7 @@ async def create(
 async def list_jobs(
     auth: Authenticated, job_status: Annotated[JobStatus | None, Query(alias="status")] = None
 ) -> list[JobSummary]:
-    """The Jobs the user may read, as _job_reader decides, newest first."""
+    """The Jobs the user may read, as job_reader decides, newest first."""
     rows = await auth.db.execute(
         text(
             "SELECT j.id, j.title, j.level, j.department, j.location, j.status, j.created_at,"

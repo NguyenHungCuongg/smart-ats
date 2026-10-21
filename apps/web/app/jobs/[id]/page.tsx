@@ -17,6 +17,7 @@ import {
 } from "../criteria";
 import { STATUS_NAMES, canEdit } from "../lifecycle";
 import { MetadataForm, StatusActions } from "./lifecycle";
+import { Pipeline } from "./pipeline";
 import { Reviewers } from "./reviewers";
 import { Scoring } from "./scoring";
 import { Uploads } from "./uploads";
@@ -104,7 +105,8 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
             )}
             {editable && <Reviewers jobId={id} />}
             {/* CVs go into any Job; only scoring needs confirmed criteria. */}
-            <Uploads jobId={id} editable={editable} onApplications={setApplications} />
+            {editable && <Uploads jobId={id} />}
+            <Pipeline jobId={id} editable={editable} onApplications={setApplications} />
             <Scoring job={job} editable={editable} applications={applications} />
           </>
         )}

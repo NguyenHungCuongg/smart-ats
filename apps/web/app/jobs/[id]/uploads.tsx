@@ -7,15 +7,6 @@ import { Badge } from "../../badge";
 import { useProgressEvents } from "../../events";
 import { type Batch, type Item, uploadError } from "../uploads";
 
-type Application = {
-  id: string;
-  full_name: string | null;
-  /** Absent for a Reviewer, who sees no contact details (SRS §2.1). */
-  email?: string | null;
-  stage: string;
-  file_name: string;
-};
-
 const ITEM_ERRORS: Record<string, string> = {
   NO_TEXT: "CV không có lớp văn bản (bản scan hoặc file rỗng).",
   ENCRYPTED_PDF: "PDF được đặt mật khẩu.",
@@ -41,22 +32,11 @@ const DEDUPES: Record<NonNullable<Item["dedupe"]>, string> = {
 
 const ACCEPT = ".pdf,.docx";
 
-/** Upload CVs into the Job as Upload Batches (FR-A1.2), follow their parses, and list the Job's
- * Applications. */
-export function Uploads({
-  jobId,
-  editable,
-  onApplications,
-}: {
-  jobId: string;
-  /** Whether CVs may go in: not for a Reviewer, nor into an archived Job. */
-  editable: boolean;
-  /** Told how many Applications the Job has, after each load. */
-  onApplications: (count: number) => void;
-}) {
+/** Upload CVs into the Job as Upload Batches (FR-A1.2) and follow their parses; the Kanban
+ * Board shows the Applications they create. Only for those who may write to the Job. */
+export function Uploads({ jobId }: { jobId: string }) {
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
-  // Bumped to reload both lists.
+  // Bumped to reload the batches.
   const [version, setVersion] = useState(0);
   const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -65,17 +45,8 @@ export function Uploads({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Only those who upload follow the batches.
-    if (editable) {
-      apiFetch(`/api/jobs/${jobId}/uploads`).then(async (r) => r.ok && setBatches(await r.json()));
-    }
-    apiFetch(`/api/jobs/${jobId}/applications`).then(async (r) => {
-      if (!r.ok) return;
-      const list: Application[] = await r.json();
-      setApplications(list);
-      onApplications(list.length);
-    });
-  }, [jobId, editable, version, onApplications]);
+    apiFetch(`/api/jobs/${jobId}/uploads`).then(async (r) => r.ok && setBatches(await r.json()));
+  }, [jobId, version]);
   // Each finished item moves its batch's x/y on (NFR-USE-02).
   useProgressEvents(
     "upload.item",
@@ -127,65 +98,62 @@ export function Uploads({
     setFiles([...event.dataTransfer.files]);
   }
 
-  const contact = applications.some((a) => "email" in a);
   return (
     <section className="flex flex-col gap-4 border-t border-hairline-cloud pt-6">
       <h2 className="heading-display text-2xl font-semibold">Ứng viên</h2>
-      {editable && (
-        <form onSubmit={onSubmit} className="flex flex-col gap-3">
-          <label
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-            className={`flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed px-4 py-8 text-center has-focus-visible:ring-2 has-focus-visible:ring-ring-focus ${
-              dragging
-                ? "border-ink-deep bg-surface-press-light"
-                : "border-hairline-cool bg-surface-canvas-light"
-            }`}
-          >
-            <span className="font-medium">Kéo-thả CV vào đây hoặc bấm để chọn</span>
-            <span className="text-sm">PDF hoặc DOCX, tối đa 50 file mỗi lần, mỗi file 10 MB</span>
-            <input
-              type="file"
-              multiple
-              accept={ACCEPT}
-              onChange={(e) => setFiles([...(e.target.files ?? [])])}
-              className="sr-only"
-            />
-          </label>
-          {files.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium">Đã chọn {files.length} file</span>
-              <ul aria-label="File đã chọn" className="flex flex-wrap gap-x-3 font-mono text-sm">
-                {files.map((file, i) => (
-                  <li key={i}>{file.name}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-              className="mt-1"
-            />
-            Tôi xác nhận đã có sự đồng ý của ứng viên hoặc cơ sở pháp lý hợp lệ để xử lý dữ liệu cá
-            nhân trong các CV này.
-          </label>
-          {error && <p role="alert">{error}</p>}
-          <button
-            type="submit"
-            disabled={pending || !consent || files.length === 0}
-            className="self-start button-outline"
-          >
-            Tải CV lên
-          </button>
-        </form>
-      )}
+      <form onSubmit={onSubmit} className="flex flex-col gap-3">
+        <label
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          className={`flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed px-4 py-8 text-center has-focus-visible:ring-2 has-focus-visible:ring-ring-focus ${
+            dragging
+              ? "border-ink-deep bg-surface-press-light"
+              : "border-hairline-cool bg-surface-canvas-light"
+          }`}
+        >
+          <span className="font-medium">Kéo-thả CV vào đây hoặc bấm để chọn</span>
+          <span className="text-sm">PDF hoặc DOCX, tối đa 50 file mỗi lần, mỗi file 10 MB</span>
+          <input
+            type="file"
+            multiple
+            accept={ACCEPT}
+            onChange={(e) => setFiles([...(e.target.files ?? [])])}
+            className="sr-only"
+          />
+        </label>
+        {files.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Đã chọn {files.length} file</span>
+            <ul aria-label="File đã chọn" className="flex flex-wrap gap-x-3 font-mono text-sm">
+              {files.map((file, i) => (
+                <li key={i}>{file.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            className="mt-1"
+          />
+          Tôi xác nhận đã có sự đồng ý của ứng viên hoặc cơ sở pháp lý hợp lệ để xử lý dữ liệu cá
+          nhân trong các CV này.
+        </label>
+        {error && <p role="alert">{error}</p>}
+        <button
+          type="submit"
+          disabled={pending || !consent || files.length === 0}
+          className="self-start button-outline"
+        >
+          Tải CV lên
+        </button>
+      </form>
 
       {batches.map((batch) => (
         <BatchProgress
@@ -196,32 +164,6 @@ export function Uploads({
           onRetry={(file) => send([file])}
         />
       ))}
-
-      <h3 className="text-xl font-semibold">Application ({applications.length})</h3>
-      {applications.length > 0 && (
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-hairline-cloud">
-              <th className="py-2 font-medium">Họ tên</th>
-              {contact && <th className="py-2 font-medium">Email</th>}
-              <th className="py-2 font-medium">Stage</th>
-              <th className="py-2 font-medium">CV</th>
-            </tr>
-          </thead>
-          <tbody>
-            {applications.map((a) => (
-              <tr key={a.id} className="border-b border-hairline-cloud">
-                <td className="py-2">{a.full_name ?? "—"}</td>
-                {contact && <td className="py-2">{a.email ?? "—"}</td>}
-                <td className="py-2">
-                  <Badge>{a.stage}</Badge>
-                </td>
-                <td className="py-2 font-mono">{a.file_name}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
     </section>
   );
 }
