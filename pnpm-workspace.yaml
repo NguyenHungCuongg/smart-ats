@@ -2,6 +2,9 @@ packages:
   - apps/web
 
 allowBuilds:
+  # next-intl's message extractor, unused here; both ship prebuilt binaries anyway.
+  "@parcel/watcher": false
+  "@swc/core": false
   unrs-resolver: false
 
 engineStrict: true

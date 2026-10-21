@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { type DragEvent, type FormEvent, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
@@ -7,34 +8,25 @@ import { Badge } from "../../badge";
 import { useProgressEvents } from "../../events";
 import { type Batch, type Item, uploadError } from "../uploads";
 
-const ITEM_ERRORS: Record<string, string> = {
-  NO_TEXT: "CV không có lớp văn bản (bản scan hoặc file rỗng).",
-  ENCRYPTED_PDF: "PDF được đặt mật khẩu.",
-  DOCX_TOO_LARGE: "File DOCX quá lớn khi giải nén.",
-  UNREADABLE: "File bị hỏng, không đọc được.",
-  UNSUPPORTED_FORMAT: "Định dạng file không được hỗ trợ.",
-  UNPRICED_MODEL: "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
-  PARSE_FAILED: "Không phân tích được CV.",
-  STUCK: "Hệ thống chưa xử lý được CV sau nhiều lần thử.",
-};
-
-const STATUSES: Record<Item["status"], string> = {
-  PENDING: "Đang xử lý…",
-  SUCCEEDED: "Thành công",
-  FAILED: "Lỗi",
-};
-
-const DEDUPES: Record<NonNullable<Item["dedupe"]>, string> = {
-  EXISTING_CANDIDATE: "Ứng viên đã có",
-  CV_REPLACED: "Đã thay CV",
-  ALREADY_APPLIED: "Đã ứng tuyển",
-};
+// The item errors the catalog words (uploads.itemError); any other reads as a failure, never
+// as the API's own message, which is English for developers.
+const ITEM_ERRORS = [
+  "NO_TEXT",
+  "ENCRYPTED_PDF",
+  "DOCX_TOO_LARGE",
+  "UNREADABLE",
+  "UNSUPPORTED_FORMAT",
+  "UNPRICED_MODEL",
+  "PARSE_FAILED",
+  "STUCK",
+] as const;
 
 const ACCEPT = ".pdf,.docx";
 
 /** Upload CVs into the Job as Upload Batches (FR-A1.2) and follow their parses; the Kanban
  * Board shows the Applications they create. Only for those who may write to the Job. */
 export function Uploads({ jobId }: { jobId: string }) {
+  const t = useTranslations("uploads");
   const [batches, setBatches] = useState<Batch[]>([]);
   // Bumped to reload the batches.
   const [version, setVersion] = useState(0);
@@ -42,7 +34,8 @@ export function Uploads({ jobId }: { jobId: string }) {
   const [dragging, setDragging] = useState(false);
   const [consent, setConsent] = useState(false);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The refusal, worded at render in the language shown.
+  const [refused, setRefused] = useState<{ status: number; detail: unknown } | null>(null);
 
   useEffect(() => {
     apiFetch(`/api/jobs/${jobId}/uploads`).then(async (r) => r.ok && setBatches(await r.json()));
@@ -73,10 +66,10 @@ export function Uploads({ jobId }: { jobId: string }) {
         .json()
         .then((b) => b.detail)
         .catch(() => undefined);
-      setError(uploadError(response.status, detail));
+      setRefused({ status: response.status, detail });
       return false;
     }
-    setError(null);
+    setRefused(null);
     // Each upload is attested afresh.
     setConsent(false);
     setVersion((v) => v + 1);
@@ -100,7 +93,7 @@ export function Uploads({ jobId }: { jobId: string }) {
 
   return (
     <section className="flex flex-col gap-4 border-t border-hairline-cloud pt-6">
-      <h2 className="heading-display text-2xl font-semibold">Ứng viên</h2>
+      <h2 className="heading-display text-2xl font-semibold">{t("title")}</h2>
       <form onSubmit={onSubmit} className="flex flex-col gap-3">
         <label
           onDragOver={(e) => {
@@ -115,8 +108,8 @@ export function Uploads({ jobId }: { jobId: string }) {
               : "border-hairline-cool bg-surface-canvas-light"
           }`}
         >
-          <span className="font-medium">Kéo-thả CV vào đây hoặc bấm để chọn</span>
-          <span className="text-sm">PDF hoặc DOCX, tối đa 50 file mỗi lần, mỗi file 10 MB</span>
+          <span className="font-medium">{t("drop")}</span>
+          <span className="text-sm">{t("accepted")}</span>
           <input
             type="file"
             multiple
@@ -127,8 +120,8 @@ export function Uploads({ jobId }: { jobId: string }) {
         </label>
         {files.length > 0 && (
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">Đã chọn {files.length} file</span>
-            <ul aria-label="File đã chọn" className="flex flex-wrap gap-x-3 font-mono text-sm">
+            <span className="text-sm font-medium">{t("chosen", { count: files.length })}</span>
+            <ul aria-label={t("chosenList")} className="flex flex-wrap gap-x-3 font-mono text-sm">
               {files.map((file, i) => (
                 <li key={i}>{file.name}</li>
               ))}
@@ -142,16 +135,15 @@ export function Uploads({ jobId }: { jobId: string }) {
             onChange={(e) => setConsent(e.target.checked)}
             className="mt-1"
           />
-          Tôi xác nhận đã có sự đồng ý của ứng viên hoặc cơ sở pháp lý hợp lệ để xử lý dữ liệu cá
-          nhân trong các CV này.
+          {t("consent")}
         </label>
-        {error && <p role="alert">{error}</p>}
+        {refused && <p role="alert">{uploadError(t, refused.status, refused.detail)}</p>}
         <button
           type="submit"
           disabled={pending || !consent || files.length === 0}
           className="self-start button-outline"
         >
-          Tải CV lên
+          {t("submit")}
         </button>
       </form>
 
@@ -179,23 +171,29 @@ function BatchProgress({
   canRetry: boolean;
   onRetry: (file: File) => void;
 }) {
+  const t = useTranslations("uploads");
+  const locale = useLocale();
   const running = batch.status === "PROCESSING";
+  const itemError = (item: Item) => {
+    const code = ITEM_ERRORS.find((known) => known === item.error_code);
+    return code ? t(`itemError.${code}`) : t("itemFailed");
+  };
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
         <span className="font-medium">
-          Lô tải lên lúc {new Date(batch.created_at).toLocaleString("vi-VN")}
+          {t("batchAt", { at: new Date(batch.created_at).toLocaleString(locale) })}
         </span>
         <span role={running ? "status" : undefined}>
-          Đã xử lý {batch.processed}/{batch.total} CV
-          {batch.failed > 0 && ` · ${batch.failed} lỗi`}
+          {t("processed", { processed: batch.processed, total: batch.total })}
+          {batch.failed > 0 && ` · ${t("failedCount", { count: batch.failed })}`}
         </span>
-        {!running && <Badge>Hoàn tất</Badge>}
+        {!running && <Badge>{t("done")}</Badge>}
       </div>
       {running && (
         <div
           role="progressbar"
-          aria-label="Tiến độ lô tải lên"
+          aria-label={t("progress")}
           aria-valuemin={0}
           aria-valuemax={batch.total}
           aria-valuenow={batch.processed}
@@ -207,24 +205,22 @@ function BatchProgress({
           />
         </div>
       )}
-      {batch.failed > 0 && !canRetry && (
-        <p className="text-sm">Đánh dấu ô xác nhận ở trên để tải lại từng file lỗi.</p>
-      )}
-      <ul aria-label="File trong lô" className="flex flex-col divide-y divide-hairline-cloud">
+      {batch.failed > 0 && !canRetry && <p className="text-sm">{t("retryHint")}</p>}
+      <ul aria-label={t("batchFiles")} className="flex flex-col divide-y divide-hairline-cloud">
         {batch.items.map((item) => (
           <li key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
             <span className="font-mono text-sm">{item.file_name}</span>
-            <span className="text-sm">{STATUSES[item.status]}</span>
-            {item.dedupe && <Badge>{DEDUPES[item.dedupe]}</Badge>}
+            <span className="text-sm">{t(`itemStatus.${item.status}`)}</span>
+            {item.dedupe && <Badge>{t(`dedupe.${item.dedupe}`)}</Badge>}
             {item.status === "FAILED" && (
               <>
                 <label className="ml-auto cursor-pointer button-outline has-focus-visible:ring-2 has-focus-visible:ring-ring-focus has-disabled:cursor-default has-disabled:border-hairline-cloud has-disabled:bg-hairline-cloud has-disabled:text-accent-violet-mid">
-                  Tải lại
+                  {t("retry")}
                   <input
                     type="file"
                     accept={ACCEPT}
                     disabled={!canRetry}
-                    aria-label={`Tải lại ${item.file_name}`}
+                    aria-label={t("retryFile", { file: item.file_name })}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       e.target.value = "";
@@ -234,8 +230,8 @@ function BatchProgress({
                   />
                 </label>
                 <span className="w-full text-sm">
-                  <code className="font-mono">{item.error_code}</code>:{" "}
-                  {ITEM_ERRORS[item.error_code ?? ""] ?? item.error_message} Sửa file rồi tải lại.
+                  <code className="font-mono">{item.error_code}</code>: {itemError(item)}{" "}
+                  {t("fixAndRetry")}
                 </span>
               </>
             )}

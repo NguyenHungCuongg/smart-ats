@@ -1,5 +1,6 @@
 // A Job's latest Scoring Run as the API sends it, and when a new one may start (FR-A1.3).
 
+import type { Translator } from "../../i18n/messages";
 import type { Job, Weights } from "./criteria";
 
 /** One Fit-Gap Report item or rubric reason; `grounded` is false when no Evidence is left. */
@@ -39,13 +40,14 @@ export type ScoringRun = {
 
 /** Why the Job cannot be scored now, or null when it can. */
 export function scoreBlocker(
+  t: Translator<"scoring">,
   job: Pick<Job, "criteria_confirmed_at">,
   applications: number,
   run: Pick<ScoringRun, "running"> | null,
 ): string | null {
-  if (!job.criteria_confirmed_at) return "Xác nhận criteria trước khi chấm điểm.";
-  if (applications === 0) return "Job chưa có Application nào.";
-  if (run?.running) return "Đang chấm điểm…";
+  if (!job.criteria_confirmed_at) return t("notConfirmed");
+  if (applications === 0) return t("noApplications");
+  if (run?.running) return t("running");
   return null;
 }
 

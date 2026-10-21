@@ -13,7 +13,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -29,6 +29,22 @@ INVITATION_TTL = timedelta(hours=48)
 
 TenantRole = Literal["COMPANY_ADMIN", "RECRUITER", "REVIEWER"]
 ROLE_NAMES = {"COMPANY_ADMIN": "Company Admin", "RECRUITER": "Recruiter", "REVIEWER": "Reviewer"}
+
+# Subject and body of the invitation email in each language (NFR-USE-03).
+_INVITATION_EMAIL: dict[emails.Locale, tuple[str, str]] = {
+    "vi": (
+        "Lời mời tham gia {workspace} trên Smart ATS",
+        "{workspace} mời bạn tham gia Smart ATS với vai trò {role}.\n\n"
+        "Mở liên kết sau để tạo tài khoản. Liên kết chỉ dùng được một lần và hết hạn"
+        " sau {hours} giờ:\n{link}\n",
+    ),
+    "en": (
+        "Join {workspace} on Smart ATS",
+        "{workspace} invited you to Smart ATS as {role}.\n\n"
+        "Open this link to create your account. The link works once and expires"
+        " in {hours} hours:\n{link}\n",
+    ),
+}
 
 # Wrong, expired, used or revoked token, or an email that already has an account elsewhere:
 # one answer, so it reveals nothing about which (FR-C1.2).
@@ -118,7 +134,11 @@ async def list_members(auth: CompanyAdmin) -> Members:
 
 
 @router.post("/invitations", status_code=status.HTTP_201_CREATED)
-async def invite(body: InvitationRequest, auth: CompanyAdmin) -> InvitationCreated:
+async def invite(
+    body: InvitationRequest,
+    auth: CompanyAdmin,
+    next_locale: Annotated[str | None, Cookie(alias="NEXT_LOCALE")] = None,
+) -> InvitationCreated:
     """Invite email as role; its email is QUEUED with it and sent once both commit (SAD §5.4)."""
     db = auth.db
     # Invitations of one email run one at a time, so the revoke below sees every pending one.
@@ -142,6 +162,7 @@ async def invite(body: InvitationRequest, auth: CompanyAdmin) -> InvitationCreat
     # emails.finish masks the token once sent by its "token=" parameter: keep that name.
     link = f"{os.environ['WEB_BASE_URL']}/invitations/accept?token={token}"
     hours = INVITATION_TTL // timedelta(hours=1)
+    subject, message = _INVITATION_EMAIL[emails.locale(next_locale)]
     email_id = await db.scalar(
         text(
             "INSERT INTO email_messages (tenant_id, kind, to_address, subject, body, status,"
@@ -152,11 +173,9 @@ async def invite(body: InvitationRequest, auth: CompanyAdmin) -> InvitationCreat
         {
             "tenant_id": auth.tenant_id,
             "to": body.email,
-            "subject": f"Lời mời tham gia {workspace} trên Smart ATS",
-            "body": (
-                f"{workspace} mời bạn tham gia Smart ATS với vai trò {ROLE_NAMES[body.role]}.\n\n"
-                f"Mở liên kết sau để tạo tài khoản. Liên kết chỉ dùng được một lần và hết hạn"
-                f" sau {hours} giờ:\n{link}\n"
+            "subject": subject.format(workspace=workspace),
+            "body": message.format(
+                workspace=workspace, role=ROLE_NAMES[body.role], hours=hours, link=link
             ),
             "user_id": auth.user_id,
         },

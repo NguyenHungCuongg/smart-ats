@@ -1,20 +1,23 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { type FormEvent, useState } from "react";
 
 import { apiFetch } from "../../auth";
 import type { Job } from "../criteria";
-import { ACTION_NAMES, type Action, actionsFor, transitionError } from "../lifecycle";
+import { type Action, actionsFor, transitionError } from "../lifecycle";
 
 /** The lifecycle actions valid from the Job's status (FR-A3.1). */
 export function StatusActions({ job, onChanged }: { job: Job; onChanged: (job: Job) => void }) {
+  const t = useTranslations("lifecycle");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The refused status, worded at render in the language shown.
+  const [refused, setRefused] = useState<number | null>(null);
   const actions = actionsFor(job.status);
   if (actions.length === 0) return null;
 
   async function run(action: Action) {
-    if (action === "archive" && !window.confirm("Job lưu trữ sẽ chỉ đọc vĩnh viễn. Lưu trữ?")) {
+    if (action === "archive" && !window.confirm(t("confirmArchive"))) {
       return;
     }
     setPending(true);
@@ -26,10 +29,10 @@ export function StatusActions({ job, onChanged }: { job: Job; onChanged: (job: J
     setPending(false);
     if (response.status === 401) return window.location.replace("/login");
     if (response.ok) {
-      setError(null);
+      setRefused(null);
       return onChanged(await response.json());
     }
-    setError(transitionError(response.status));
+    setRefused(response.status);
   }
 
   return (
@@ -43,20 +46,21 @@ export function StatusActions({ job, onChanged }: { job: Job; onChanged: (job: J
             onClick={() => run(action)}
             className="button-outline"
           >
-            {ACTION_NAMES[action]}
+            {t(`action.${action}`)}
           </button>
         ))}
       </div>
-      {error && <p role="alert">{error}</p>}
+      {refused !== null && <p role="alert">{transitionError(t, refused)}</p>}
     </div>
   );
 }
 
 /** The Job's apply deadline; department and location are edited with the criteria. */
 export function MetadataForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void }) {
+  const t = useTranslations("lifecycle");
   const [deadline, setDeadline] = useState(job.apply_deadline ?? "");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [refused, setRefused] = useState<number | null>(null);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,20 +72,16 @@ export function MetadataForm({ job, onSaved }: { job: Job; onSaved: (job: Job) =
     });
     setPending(false);
     if (response.ok) {
-      setError(null);
+      setRefused(null);
       return onSaved(await response.json());
     }
-    setError(
-      response.status === 409
-        ? "JD vẫn đang được phân tích hoặc Job đã lưu trữ."
-        : "Không lưu được hạn nộp.",
-    );
+    setRefused(response.status);
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3">
       <label className="flex flex-col gap-1">
-        <span className="font-medium">Hạn nộp hồ sơ</span>
+        <span className="font-medium">{t("deadline")}</span>
         <input
           type="date"
           value={deadline}
@@ -94,11 +94,11 @@ export function MetadataForm({ job, onSaved }: { job: Job; onSaved: (job: Job) =
         disabled={pending || deadline === (job.apply_deadline ?? "")}
         className="button-outline"
       >
-        Lưu hạn nộp
+        {t("saveDeadline")}
       </button>
-      {error && (
+      {refused !== null && (
         <p role="alert" className="w-full">
-          {error}
+          {refused === 409 ? t("deadlineConflict") : t("deadlineFailed")}
         </p>
       )}
     </form>

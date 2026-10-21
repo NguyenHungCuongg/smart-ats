@@ -19,6 +19,16 @@ from app.worker import tenant_task
 
 log = logging.getLogger(__name__)
 
+Locale = Literal["vi", "en"]
+
+
+def locale(next_locale: str | None) -> Locale:
+    """The language of an email, rendered when its row is written (NFR-USE-03, SAD §5.7): the
+    NEXT_LOCALE cookie the web's language switch writes on the request that makes it, else
+    Vietnamese, as on the web. A signed-in action is never a public page, so Accept-Language
+    plays no part."""
+    return "en" if next_locale == "en" else "vi"
+
 
 def deliver(message: EmailMessage) -> None:
     """Hand message to the SMTP server: Mailpit locally, SES or Resend in production."""

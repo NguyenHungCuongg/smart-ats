@@ -1,15 +1,17 @@
+import type { Translator } from "../../i18n/messages";
+
 /** What /login says for the status login() returned; null on success. */
-export function loginError(status: number): string | null {
+export function loginError(t: Translator<"login">, status: number): string | null {
   switch (status) {
     case 200:
       return null;
     case 401:
-      return "Email hoặc mật khẩu không đúng.";
+      return t("wrongPassword");
     case 429:
-      return "Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau.";
+      return t("locked");
     case 0:
-      return "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
+      return t("offline");
     default:
-      return "Đăng nhập không thành công. Vui lòng thử lại.";
+      return t("failed");
   }
 }

@@ -1,5 +1,7 @@
 // The Application pipeline of FR-A3.2 as the Kanban Board shows it; the API holds the same rules.
 
+import type { Translator } from "../../i18n/messages";
+
 export const STAGES = [
   "APPLIED",
   "SCREENING",
@@ -10,23 +12,8 @@ export const STAGES = [
   "REJECTED",
 ] as const;
 export type Stage = (typeof STAGES)[number];
-export type Source = "UPLOAD" | "PUBLIC_APPLY" | "REDISCOVERY";
-
-export const STAGE_NAMES: Record<Stage, string> = {
-  APPLIED: "Applied",
-  SCREENING: "Screening",
-  SHORTLISTED: "Shortlisted",
-  INTERVIEW: "Interview",
-  OFFER: "Offer",
-  HIRED: "Hired",
-  REJECTED: "Rejected",
-};
-
-export const SOURCE_NAMES: Record<Source, string> = {
-  UPLOAD: "Tải lên",
-  PUBLIC_APPLY: "Public Apply",
-  REDISCOVERY: "Rediscovery",
-};
+export const SOURCES = ["UPLOAD", "PUBLIC_APPLY", "REDISCOVERY"] as const;
+export type Source = (typeof SOURCES)[number];
 
 /** An Application as GET /api/jobs/{id}/applications sends it. */
 export type Card = {
@@ -84,11 +71,9 @@ export function visible(cards: Card[], filter: Filter): Card[] {
 }
 
 /** Why a move failed. */
-export function moveError(status: number): string {
+export function moveError(t: Translator<"pipeline">, status: number): string {
   // 409: another user moved a card first, or the move breaks a rule of the Stage it is in now.
-  if (status === 409) {
-    return "Board vừa thay đổi hoặc thao tác không hợp lệ với stage hiện tại. Đã tải lại board.";
-  }
-  if (status === 422) return "Mở lại Application cần ghi lý do.";
-  return "Không đổi được stage. Vui lòng thử lại.";
+  if (status === 409) return t("conflict");
+  if (status === 422) return t("reasonRequired");
+  return t("failed");
 }

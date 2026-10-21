@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { type FormEvent, useState } from "react";
 
 import { acceptInvitation } from "../../auth";
@@ -8,8 +9,10 @@ import { acceptError } from "./messages";
 
 /** Name and password for the invited Member's account; the token stays in the URL until sent. */
 export function AcceptForm() {
+  const t = useTranslations("accept");
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  // The status, not its message: switching language rewords an error already shown.
+  const [failed, setFailed] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -25,16 +28,17 @@ export function AcceptForm() {
     );
     setPending(false);
     if (status === 200) router.replace("/");
-    else setError(acceptError(status));
+    else setFailed(status);
   }
 
+  const error = failed === null ? null : acceptError(t, failed);
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex flex-1 items-center justify-center px-4">
       <form onSubmit={onSubmit} className="flex w-full max-w-80 flex-col gap-4">
-        <h1 className="heading-display text-3xl font-semibold">Nhận lời mời</h1>
-        <p>Tạo tài khoản để tham gia Workspace trên Smart ATS.</p>
+        <h1 className="heading-display text-3xl font-semibold">{t("title")}</h1>
+        <p>{t("intro")}</p>
         <label className="flex flex-col gap-1">
-          <span className="font-medium">Họ tên</span>
+          <span className="font-medium">{t("fullName")}</span>
           <input
             name="full_name"
             autoComplete="name"
@@ -44,7 +48,7 @@ export function AcceptForm() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="font-medium">Mật khẩu</span>
+          <span className="font-medium">{t("password")}</span>
           <input
             name="password"
             type="password"
@@ -60,7 +64,7 @@ export function AcceptForm() {
           </p>
         )}
         <button type="submit" disabled={pending} className="button-primary">
-          Tạo tài khoản
+          {t("submit")}
         </button>
       </form>
     </main>
