@@ -210,6 +210,7 @@ WRITES: dict[str, tuple[str, str, dict[str, Any]]] = {
         "/applications/stage",
         {"json": {"applications": [{"id": str(uuid.uuid4()), "version": 0}], "to_stage": "OFFER"}},
     ),
+    "toggle public apply": ("PATCH", "/public-apply", {"json": {"enabled": True}}),
 }
 
 

@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime
@@ -172,6 +173,8 @@ class Job(BaseModel):
     weights: Weights
     criteria_confirmed_at: datetime | None
     apply_deadline: date | None
+    public_apply_enabled: bool
+    public_slug: str | None
 
 
 class JobCreated(BaseModel):
@@ -296,6 +299,7 @@ async def list_jobs(
 _SELECT_JOB = text("""
     SELECT id, title, level, department, location, work_mode, status, parse_status, parse_error,
       criteria, criteria_verification AS verification, criteria_confirmed_at, apply_deadline,
+      public_apply_enabled, public_slug,
       (weight_technical * 100)::int AS technical,
       (weight_soft_skills * 100)::int AS soft_skills,
       (weight_experience * 100)::int AS experience
@@ -377,6 +381,37 @@ async def change_metadata(job_id: uuid.UUID, body: MetadataChange, auth: LockedJ
         await auth.db.execute(
             text(f"UPDATE jobs SET {assignments}, updated_at = now() WHERE id = :id"),
             {"id": job_id, **changes},
+        )
+    return await _job(auth.db, job_id)
+
+
+class PublicApplyToggle(BaseModel):
+    enabled: bool
+
+
+@router.patch("/{job_id}/public-apply")
+async def toggle_public_apply(job_id: uuid.UUID, body: PublicApplyToggle, auth: LockedJob) -> Job:
+    """Enable or disable the Job's Public Apply Link (FR-A3.4).
+
+    Enabling for the first time generates a random, unguessable public_slug.
+    Company Admins and Recruiters only; Reviewers are rejected by LockedJob (403).
+    """
+    await _refuse_while_parsing(auth.db, job_id)
+    if body.enabled:
+        slug = secrets.token_urlsafe(16)
+        await auth.db.execute(
+            text(
+                "UPDATE jobs SET public_apply_enabled = true,"
+                "  public_slug = coalesce(public_slug, :slug),"
+                "  updated_at = now()"
+                " WHERE id = :id"
+            ),
+            {"id": job_id, "slug": slug},
+        )
+    else:
+        await auth.db.execute(
+            text("UPDATE jobs SET public_apply_enabled = false, updated_at = now() WHERE id = :id"),
+            {"id": job_id},
         )
     return await _job(auth.db, job_id)
 

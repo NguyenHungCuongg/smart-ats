@@ -35,6 +35,8 @@ export type Job = {
   criteria_confirmed_at: string | null;
   /** YYYY-MM-DD. */
   apply_deadline: string | null;
+  public_apply_enabled: boolean;
+  public_slug: string | null;
 };
 
 export type Confirmation = Pick<

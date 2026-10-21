@@ -19,6 +19,7 @@ import {
 import { canEdit } from "../lifecycle";
 import { MetadataForm, StatusActions } from "./lifecycle";
 import { Pipeline } from "./pipeline";
+import { PublicApplySection } from "./public-apply";
 import { Reviewers } from "./reviewers";
 import { Scoring } from "./scoring";
 import { Uploads } from "./uploads";
@@ -92,6 +93,7 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
                 <>
                   <StatusActions job={job} onChanged={setJob} />
                   <MetadataForm key={job.apply_deadline} job={job} onSaved={setJob} />
+                  <PublicApplySection job={job} onSaved={setJob} />
                 </>
               )}
             </header>
