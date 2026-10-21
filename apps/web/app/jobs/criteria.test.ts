@@ -22,6 +22,7 @@ const parsed: Job = {
   verification: { education: "NEEDS_REVIEW" },
   weights: { technical: 55, soft_skills: 15, experience: 30 },
   criteria_confirmed_at: null,
+  apply_deadline: null,
 };
 
 test("an unedited form confirms the parsed criteria as they are", () => {

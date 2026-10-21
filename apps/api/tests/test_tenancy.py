@@ -158,6 +158,10 @@ TENANT_TABLES = {
         " weight_soft_skills, weight_experience, created_by)"
         " VALUES (:jobs, :t, 'Engineer', 'MID', 'DRAFT', 'PENDING', 0.5, 0.25, 0.25, :users)"
     ),
+    "job_reviewers": (
+        "INSERT INTO job_reviewers (tenant_id, job_id, user_id, assigned_by)"
+        " VALUES (:t, :jobs, :users, :users)"
+    ),
     "candidates": (
         "INSERT INTO candidates (id, tenant_id, consent_source, consent_at, last_activity_at)"
         " VALUES (:candidates, :t, 'RECRUITER_ATTESTED', now(), now())"

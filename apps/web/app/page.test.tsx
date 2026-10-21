@@ -6,3 +6,7 @@ import Home from "./page";
 test("home page shows the product name", () => {
   expect(renderToStaticMarkup(<Home />)).toContain("Smart ATS");
 });
+
+test("home page leads to the Job list", () => {
+  expect(renderToStaticMarkup(<Home />)).toContain('href="/jobs"');
+});

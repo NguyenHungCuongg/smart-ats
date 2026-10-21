@@ -18,11 +18,10 @@ from typing import Annotated, Any, Literal, NoReturn
 from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app import events, outbox, storage, usage
-from app.jobs import MAX_DOCUMENT_BYTES, Recruiter
+from app.jobs import MANAGERS, MAX_DOCUMENT_BYTES, JobManager, JobReader, JobWriter
 from app.worker import tenant_task
 from smart_ats_scoring import parsing
 from smart_ats_scoring.extraction import ExtractionError, document_type, extract_text
@@ -72,25 +71,24 @@ class UploadBatch(BaseModel):
 
 
 class Application(BaseModel):
+    """As a Reviewer sees it: without the Candidate's contact details (SRS §2.1)."""
+
     id: uuid.UUID
     candidate_id: uuid.UUID
     full_name: str | None
-    email: str | None
     stage: str
     file_name: str
     updated_at: datetime
 
 
-async def _require_job(db: AsyncSession, job_id: uuid.UUID) -> None:
-    # Another Tenant's Job is hidden by RLS, so it is a 404 like a missing one (SAD §4.3).
-    if await db.scalar(text("SELECT 1 FROM jobs WHERE id = :id"), {"id": job_id}) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+class ApplicationWithContact(Application):
+    email: str | None
 
 
 @router.post("/{job_id}/uploads", status_code=status.HTTP_202_ACCEPTED)
 async def create(
     job_id: uuid.UUID,
-    auth: Recruiter,
+    auth: JobWriter,
     files: list[UploadFile],
     consent_confirmed: Annotated[bool, Form()],
 ) -> UploadCreated:
@@ -101,7 +99,6 @@ async def create(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Confirm the lawful basis for processing the Candidate's personal data",
         )
-    await _require_job(auth.db, job_id)
     if len(files) > MAX_BATCH_FILES:
         _reject(status.HTTP_413_CONTENT_TOO_LARGE, f"At most {MAX_BATCH_FILES} CVs per upload", [])
 
@@ -184,10 +181,9 @@ def _reject(code: int, message: str, files: list[tuple[UploadFile, RejectReason]
 
 
 @router.get("/{job_id}/uploads")
-async def list_batches(job_id: uuid.UUID, auth: Recruiter) -> list[UploadBatch]:
+async def list_batches(job_id: uuid.UUID, auth: JobManager) -> list[UploadBatch]:
     """The Job's Upload Batches, newest first, with their progress and their items in the order
     sent, each with its failure or dedupe outcome."""
-    await _require_job(auth.db, job_id)
     rows = await auth.db.execute(
         text(
             "SELECT b.id, b.status, b.created_at, count(*) AS total,"
@@ -205,8 +201,9 @@ async def list_batches(job_id: uuid.UUID, auth: Recruiter) -> list[UploadBatch]:
 
 
 @router.get("/{job_id}/applications")
-async def list_applications(job_id: uuid.UUID, auth: Recruiter) -> list[Application]:
-    await _require_job(auth.db, job_id)
+async def list_applications(
+    job_id: uuid.UUID, auth: JobReader
+) -> list[ApplicationWithContact] | list[Application]:
     rows = await auth.db.execute(
         text(
             "SELECT a.id, a.candidate_id, c.full_name, c.email, a.stage, d.file_name,"
@@ -217,6 +214,8 @@ async def list_applications(job_id: uuid.UUID, auth: Recruiter) -> list[Applicat
         ),
         {"job_id": job_id},
     )
+    if auth.role in MANAGERS:
+        return [ApplicationWithContact(**row._mapping) for row in rows]
     return [Application(**row._mapping) for row in rows]
 
 

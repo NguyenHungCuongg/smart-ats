@@ -40,7 +40,16 @@ const score = (value: number | null) =>
   value === null ? "—" : value.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
 
 /** Start a Scoring Run of the Job and show the Fit-Gap Report of each Application (FR-A1.3). */
-export function Scoring({ job, applications }: { job: Job; applications: number }) {
+export function Scoring({
+  job,
+  editable,
+  applications,
+}: {
+  job: Job;
+  /** Whether a run may start: not for a Reviewer, nor on an archived Job. */
+  editable: boolean;
+  applications: number;
+}) {
   const [run, setRun] = useState<ScoringRun | null>(null);
   // The run shown: set by a start before its first load, so its events are not dropped.
   const [runId, setRunId] = useState<string | null>(null);
@@ -100,20 +109,25 @@ export function Scoring({ job, applications }: { job: Job; applications: number 
           {run.weights.experience}%
         </p>
       )}
-      {blocker && (
-        <p className="text-sm" role={run?.running ? "status" : undefined}>
-          {blocker}
-        </p>
+      {editable && (
+        <>
+          {blocker && (
+            <p className="text-sm" role={run?.running ? "status" : undefined}>
+              {blocker}
+            </p>
+          )}
+          {error && <p role="alert">{error}</p>}
+          <button
+            type="button"
+            onClick={onStart}
+            disabled={pending || blocker !== null}
+            className="self-start button-outline"
+          >
+            {run ? "Chấm lại" : "Chấm điểm"}
+          </button>
+        </>
       )}
-      {error && <p role="alert">{error}</p>}
-      <button
-        type="button"
-        onClick={onStart}
-        disabled={pending || blocker !== null}
-        className="self-start button-outline"
-      >
-        {run ? "Chấm lại" : "Chấm điểm"}
-      </button>
+      {!editable && !run && <p className="text-sm">Job chưa được chấm điểm.</p>}
       {run?.results.map((result) => (
         <Result key={result.application_id} result={result} />
       ))}

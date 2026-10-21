@@ -5,6 +5,7 @@ import { type FormEvent, type ReactNode, use, useEffect, useState } from "react"
 import { apiFetch } from "../../auth";
 import { Badge } from "../../badge";
 import { useProgressEvents } from "../../events";
+import { useRole } from "../../session";
 import {
   type Form,
   type Job,
@@ -14,6 +15,9 @@ import {
   toConfirmation,
   weightTotal,
 } from "../criteria";
+import { STATUS_NAMES, canEdit } from "../lifecycle";
+import { MetadataForm, StatusActions } from "./lifecycle";
+import { Reviewers } from "./reviewers";
 import { Scoring } from "./scoring";
 import { Uploads } from "./uploads";
 
@@ -30,9 +34,11 @@ const PARSE_ERRORS: Record<string, string> = {
 // Secondary actions read as link-on-light: one filled button per page (DESIGN.md).
 const LINK_BUTTON = "font-medium underline";
 
-/** Follows the parse of a Job's JD, then lets the Recruiter edit and confirm the criteria. */
+/** Follows the parse of a Job's JD, then lets the Recruiter edit and confirm the criteria and
+ * move the Job through its lifecycle; a Reviewer, or anyone on an archived Job, only reads. */
 export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const { id } = use(params);
+  const role = useRole();
   const [job, setJob] = useState<Job | null>(null);
   const [missing, setMissing] = useState(false);
   // Bumped to reload the Job.
@@ -55,34 +61,116 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
     () => setVersion((v) => v + 1),
   );
 
+  const editable = job !== null && role !== null && canEdit(role, job.status);
   return (
     <main className="min-h-screen">
       <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
         {missing ? (
           <p>Không tìm thấy Job.</p>
-        ) : !job ? (
+        ) : !job || !role ? (
           <div aria-busy="true" aria-label="Đang tải Job" className="flex flex-col gap-4">
             <div className="h-9 w-2/3 animate-pulse rounded-md bg-hairline-cloud" />
             <div className="h-40 animate-pulse rounded-md bg-hairline-cloud" />
           </div>
-        ) : job.parse_status === "PENDING" ? (
-          <>
-            <h1 className="heading-display text-3xl font-semibold">{job.title}</h1>
-            <p role="status">Đang phân tích JD…</p>
-          </>
         ) : (
-          // Remount on every saved or parsed version, so the form starts from it.
-          <CriteriaForm
-            key={`${job.parse_status}-${job.criteria_confirmed_at}`}
-            job={job}
-            onSaved={setJob}
-          />
+          <>
+            <header className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="heading-display text-3xl font-semibold">{job.title}</h1>
+                <Badge>{STATUS_NAMES[job.status]}</Badge>
+              </div>
+              {role === "REVIEWER" ? (
+                <p className="text-sm">Bạn xem Job này với vai trò Reviewer: chỉ đọc.</p>
+              ) : job.status === "ARCHIVED" ? (
+                <p className="text-sm">Job đã lưu trữ nên chỉ đọc.</p>
+              ) : (
+                <>
+                  <StatusActions job={job} onChanged={setJob} />
+                  <MetadataForm key={job.apply_deadline} job={job} onSaved={setJob} />
+                </>
+              )}
+            </header>
+            {job.parse_status === "PENDING" ? (
+              <p role="status">Đang phân tích JD…</p>
+            ) : editable ? (
+              // Remount on every saved or parsed version, so the form starts from it.
+              <CriteriaForm
+                key={`${job.parse_status}-${job.criteria_confirmed_at}`}
+                job={job}
+                onSaved={setJob}
+              />
+            ) : (
+              <CriteriaView job={job} />
+            )}
+            {editable && <Reviewers jobId={id} />}
+            {/* CVs go into any Job; only scoring needs confirmed criteria. */}
+            <Uploads jobId={id} editable={editable} onApplications={setApplications} />
+            <Scoring job={job} editable={editable} applications={applications} />
+          </>
         )}
-        {/* CVs go into any Job; only scoring needs confirmed criteria. */}
-        {job && <Uploads jobId={id} onApplications={setApplications} />}
-        {job && <Scoring job={job} applications={applications} />}
       </div>
     </main>
+  );
+}
+
+/** The criteria as confirmed or parsed, for those who may not edit them. */
+function CriteriaView({ job }: { job: Job }) {
+  const criteria = job.criteria;
+  const facts: [string, string | null][] = [
+    ["Cấp bậc", job.level],
+    ["Hình thức làm việc", job.work_mode],
+    ["Phòng ban", job.department],
+    ["Địa điểm", job.location],
+    [
+      "Hạn nộp hồ sơ",
+      job.apply_deadline && new Date(job.apply_deadline).toLocaleDateString("vi-VN"),
+    ],
+    ["Số năm kinh nghiệm tối thiểu", criteria?.min_years_experience?.toString() ?? null],
+    ["Học vấn", criteria?.education ?? null],
+    ["Dải lương", criteria?.salary_range ?? null],
+    [
+      "Trọng số",
+      `Technical ${job.weights.technical}%, Soft Skills ${job.weights.soft_skills}%, Experience ${job.weights.experience}%`,
+    ],
+  ];
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="heading-display text-2xl font-semibold">Criteria</h2>
+      {!job.criteria_confirmed_at && <p className="text-sm">Criteria chưa được xác nhận.</p>}
+      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
+        {facts.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="font-medium">{label}</dt>
+            <dd>{value ?? "—"}</dd>
+          </div>
+        ))}
+      </dl>
+      {criteria && (
+        <>
+          <div className="flex flex-col gap-2">
+            <h3 className="font-semibold">Kỹ năng</h3>
+            <ul className="flex flex-wrap gap-2">
+              {criteria.skills.map((skill) => (
+                <li key={skill.name} className="flex items-center gap-1">
+                  {skill.name}
+                  {skill.must_have && <Badge>Must-have</Badge>}
+                </li>
+              ))}
+            </ul>
+          </div>
+          {criteria.responsibilities.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h3 className="font-semibold">Trách nhiệm chính</h3>
+              <ul className="list-disc pl-5">
+                {criteria.responsibilities.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -113,7 +201,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <h1 className="heading-display text-3xl font-semibold">Xác nhận criteria</h1>
+      <h2 className="heading-display text-2xl font-semibold">Xác nhận criteria</h2>
       {job.parse_status === "FAILED" && (
         <p role="alert">
           {PARSE_ERRORS[job.parse_error ?? ""] ?? "Không phân tích được JD."} Hãy nhập criteria thủ

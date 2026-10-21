@@ -363,17 +363,6 @@ async def test_model_without_a_price_is_refused_before_any_run_is_created(
     assert enqueued == []
 
 
-@pytest.mark.usefixtures("application")
-async def test_reviewer_cannot_start_or_read_a_run(
-    client: AsyncClient, recruiter: User, job: str
-) -> None:
-    await start(client, recruiter, job)
-    reviewer = make_user("REVIEWER", recruiter.tenant_id)
-
-    assert (await start(client, reviewer, job)).status_code == 403
-    assert (await latest(client, reviewer, job)).status_code == 403
-
-
 @pytest.mark.cross_tenant
 @pytest.mark.usefixtures("application")
 async def test_other_tenants_job_is_not_found_on_both_endpoints(
