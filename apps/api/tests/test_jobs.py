@@ -163,6 +163,8 @@ async def test_upload_creates_a_draft_job_and_enqueues_its_parse(
         "weights": {"technical": 55, "soft_skills": 15, "experience": 30},
         "criteria_confirmed_at": None,
         "apply_deadline": None,
+        "public_apply_enabled": False,
+        "public_slug": None,
     }
 
 
@@ -636,3 +638,65 @@ def test_database_rejects_weights_that_do_not_make_100_percent(
 def test_database_accepts_weights_that_make_100_percent(recruiter: User) -> None:
     with tenant_session(recruiter.tenant_id) as session:
         insert_job(session, recruiter.id, ("0.55", "0.15", "0.30"))
+
+
+async def test_toggle_public_apply(client: AsyncClient, recruiter: User, parsed_job: str) -> None:
+    # Initially false and slug is None
+    job = await get_job(client, recruiter, parsed_job)
+    assert job["public_apply_enabled"] is False
+    assert job["public_slug"] is None
+
+    # Enable public apply -> generates random unguessable slug
+    res = await client.patch(
+        f"/api/jobs/{parsed_job}/public-apply",
+        json={"enabled": True},
+        headers=recruiter.headers,
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["public_apply_enabled"] is True
+    assert data["public_slug"] is not None
+    slug = data["public_slug"]
+    assert len(slug) >= 16
+
+    # Disable public apply -> keeps the slug
+    res_off = await client.patch(
+        f"/api/jobs/{parsed_job}/public-apply",
+        json={"enabled": False},
+        headers=recruiter.headers,
+    )
+    assert res_off.status_code == 200
+    assert res_off.json()["public_apply_enabled"] is False
+    assert res_off.json()["public_slug"] == slug
+
+    # Enable again -> keeps the same slug
+    res_on = await client.patch(
+        f"/api/jobs/{parsed_job}/public-apply",
+        json={"enabled": True},
+        headers=recruiter.headers,
+    )
+    assert res_on.status_code == 200
+    assert res_on.json()["public_apply_enabled"] is True
+    assert res_on.json()["public_slug"] == slug
+
+
+async def test_toggle_public_apply_rbac_and_cross_tenant(
+    client: AsyncClient, recruiter: User, parsed_job: str
+) -> None:
+    # Reviewer is forbidden (403)
+    reviewer = make_user("REVIEWER", recruiter.tenant_id)
+    res_rev = await client.patch(
+        f"/api/jobs/{parsed_job}/public-apply",
+        json={"enabled": True},
+        headers=reviewer.headers,
+    )
+    assert res_rev.status_code == 403
+
+    # Other tenant is 404
+    other = make_user()
+    res_other = await client.patch(
+        f"/api/jobs/{parsed_job}/public-apply",
+        json={"enabled": True},
+        headers=other.headers,
+    )
+    assert res_other.status_code == 404

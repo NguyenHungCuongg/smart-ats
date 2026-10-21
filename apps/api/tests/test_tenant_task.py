@@ -35,6 +35,7 @@ def test_check_loads_every_task_module_itself() -> None:
     )
     assert out.stdout.strip() == str(
         [
+            "apply.parse_cv",
             "emails.send_email",
             "jobs.parse",
             "scoring_runs.score_application",
@@ -47,6 +48,7 @@ def test_check_loads_every_task_module_itself() -> None:
 
 def test_every_tenant_task_is_redelivered_if_its_worker_dies(worker: Celery) -> None:
     for name in (
+        "apply.parse_cv",
         "jobs.parse",
         "uploads.parse_cv",
         "scoring_runs.score_application",

@@ -22,12 +22,35 @@ log = logging.getLogger(__name__)
 Locale = Literal["vi", "en"]
 
 
-def locale(next_locale: str | None) -> Locale:
+def locale(
+    next_locale: str | None = None,
+    accept_language: str | None = None,
+    is_public: bool = False,
+) -> Locale:
     """The language of an email, rendered when its row is written (NFR-USE-03, SAD §5.7): the
     NEXT_LOCALE cookie the web's language switch writes on the request that makes it, else
-    Vietnamese, as on the web. A signed-in action is never a public page, so Accept-Language
-    plays no part."""
-    return "en" if next_locale == "en" else "vi"
+    if is_public and Accept-Language is given, the browser's preferred supported language,
+    else Vietnamese."""
+    if next_locale in ("vi", "en"):
+        return "en" if next_locale == "en" else "vi"
+    if is_public and accept_language:
+        ranked: list[tuple[str, float]] = []
+        for part in accept_language.split(","):
+            subparts = part.strip().split(";q=")
+            tag = subparts[0].split("-")[0].lower()
+            q = 1.0
+            if len(subparts) > 1:
+                try:
+                    q = float(subparts[1])
+                except ValueError:
+                    q = 0.0
+            if q > 0:
+                ranked.append((tag, q))
+        ranked.sort(key=lambda x: x[1], reverse=True)
+        for tag, _ in ranked:
+            if tag in ("vi", "en"):
+                return tag  # type: ignore[return-value]
+    return "vi"
 
 
 def deliver(message: EmailMessage) -> None:

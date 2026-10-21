@@ -13,7 +13,14 @@ from app.db import tenant_session
 celery_app = Celery(
     "smart_ats",
     broker=os.environ["REDIS_URL"],
-    include=["app.emails", "app.jobs", "app.scoring_runs", "app.sweep", "app.uploads"],
+    include=[
+        "app.apply",
+        "app.emails",
+        "app.jobs",
+        "app.scoring_runs",
+        "app.sweep",
+        "app.uploads",
+    ],
 )
 celery_app.conf.update(
     task_queues=[Queue(name) for name in ("llm", "default", "agent", "email")],
