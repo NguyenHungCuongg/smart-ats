@@ -119,7 +119,9 @@ async def _move(
             " logged AS ("
             "  INSERT INTO application_stage_history (tenant_id, application_id, from_stage,"
             "    to_stage, changed_by, note)"
-            "  SELECT :tenant_id, id, from_stage, stage, :user_id, :note FROM moved)"
+            # A rejection's reason, which a reopen clears from the Application, stays here.
+            "  SELECT :tenant_id, id, from_stage, stage, :user_id,"
+            "    coalesce(CAST(:note AS text), CAST(:rejected_reason AS text)) FROM moved)"
             " SELECT id, stage, version FROM moved ORDER BY id"
         ),
         {

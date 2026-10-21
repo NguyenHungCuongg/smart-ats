@@ -62,27 +62,34 @@ def job(recruiter: User, objects: dict[str, bytes]) -> str:
 def test_backfill_gives_each_application_its_creation(
     recruiter: User, objects: dict[str, bytes], job: str
 ) -> None:
+    other = make_user()
     command.downgrade(ALEMBIC, "0009")
     application = add_application(recruiter, objects, job)
     query(recruiter, "UPDATE applications SET stage = 'INTERVIEW' RETURNING id")
+    other_application = add_application(other, objects, make_job(other, objects))
 
     command.upgrade(ALEMBIC, "head")
 
-    [created_at] = query(recruiter, "SELECT created_at FROM applications")
-    assert query(
-        recruiter,
-        "SELECT from_stage, to_stage, changed_by, changed_at, note"
-        " FROM application_stage_history WHERE application_id = :id",
-        id=application["id"],
-    ) == [
-        {
-            "from_stage": None,
-            "to_stage": "INTERVIEW",
-            "changed_by": recruiter.id,
-            "changed_at": created_at["created_at"],
-            "note": "backfill",
-        }
-    ]
+    # Each Tenant's Applications, though forced RLS binds the migration's owner too.
+    for user, row, stage in (
+        (recruiter, application, "INTERVIEW"),
+        (other, other_application, "APPLIED"),
+    ):
+        [created_at] = query(user, "SELECT created_at FROM applications")
+        assert query(
+            user,
+            "SELECT from_stage, to_stage, changed_by, changed_at, note"
+            " FROM application_stage_history WHERE application_id = :id",
+            id=row["id"],
+        ) == [
+            {
+                "from_stage": None,
+                "to_stage": stage,
+                "changed_by": user.id,
+                "changed_at": created_at["created_at"],
+                "note": "backfill",
+            }
+        ]
 
 
 @pytest.mark.parametrize(
@@ -189,7 +196,11 @@ async def test_rejecting_keeps_the_reason_and_reopening_drops_it(
     assert response.status_code == 200
     card = (await cards(client, recruiter, job))[application]
     assert (card["stage"], card["rejected_reason"]) == ("OFFER", None)
-    assert (await history(client, recruiter, application))[-1]["note"] == "Ứng viên bổ sung CV"
+    # The history keeps the reason the Application no longer has.
+    assert [c["note"] for c in await history(client, recruiter, application)] == [
+        "Thiếu Python",
+        "Ứng viên bổ sung CV",
+    ]
 
 
 @pytest.mark.parametrize("note", [None, "   "], ids=["none", "blank"])

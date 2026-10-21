@@ -19,8 +19,11 @@ def upgrade() -> None:
           id uuid PRIMARY KEY DEFAULT uuidv7(),
           tenant_id uuid NOT NULL REFERENCES tenants (id),
           application_id uuid NOT NULL,
-          from_stage text,
-          to_stage text NOT NULL,
+          -- The Stages of applications.stage (0004).
+          from_stage text CHECK (from_stage IN ('APPLIED', 'SCREENING', 'SHORTLISTED',
+            'INTERVIEW', 'OFFER', 'HIRED', 'REJECTED')),
+          to_stage text NOT NULL CHECK (to_stage IN ('APPLIED', 'SCREENING', 'SHORTLISTED',
+            'INTERVIEW', 'OFFER', 'HIRED', 'REJECTED')),
           changed_by uuid,
           note text,
           changed_at timestamptz NOT NULL DEFAULT now(),
