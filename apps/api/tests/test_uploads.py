@@ -410,6 +410,32 @@ async def test_parse_creates_the_candidate_cv_document_and_application(
 
 
 @pytest.mark.usefixtures("redis")
+async def test_parse_records_the_applications_creation_once_in_its_stage_history(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    llm: FakeLlm,
+    enqueued: list[tuple[str, ...]],
+) -> None:
+    await uploaded(client, recruiter, job, enqueued)
+    # A new CV of the same applicant moves no Stage (FR-A3.2).
+    await uploaded(client, recruiter, job, enqueued, docx("Nguyễn Văn An - CV 2026"))
+
+    [application] = await applications(client, recruiter, job)
+    response = await client.get(
+        f"/api/applications/{application['id']}/stage-history", headers=recruiter.headers
+    )
+    assert response.status_code == 200
+    [created] = response.json()
+    assert {k: created[k] for k in ("from_stage", "to_stage", "changed_by", "note")} == {
+        "from_stage": None,
+        "to_stage": "APPLIED",
+        "changed_by": str(recruiter.id),
+        "note": None,
+    }
+
+
+@pytest.mark.usefixtures("redis")
 async def test_blind_profile_in_the_database_holds_no_name_or_contact_details(
     client: AsyncClient,
     recruiter: User,

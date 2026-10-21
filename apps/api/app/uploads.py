@@ -77,6 +77,12 @@ class Application(BaseModel):
     candidate_id: uuid.UUID
     full_name: str | None
     stage: str
+    rejected_reason: str | None
+    # Sent back with a Stage change (optimistic locking, FR-A3.2).
+    version: int
+    source: Literal["UPLOAD", "PUBLIC_APPLY", "REDISCOVERY"]
+    # Of the newest Scoring Run that scored it, so a run in progress keeps the last one shown.
+    total_score: float | None
     file_name: str
     updated_at: datetime
 
@@ -206,8 +212,12 @@ async def list_applications(
 ) -> list[ApplicationWithContact] | list[Application]:
     rows = await auth.db.execute(
         text(
-            "SELECT a.id, a.candidate_id, c.full_name, c.email, a.stage, d.file_name,"
-            "  a.updated_at"
+            "SELECT a.id, a.candidate_id, c.full_name, c.email, a.stage, a.rejected_reason,"
+            "  a.version, a.source, d.file_name, a.updated_at,"
+            "  (SELECT s.total_score FROM score_results s"
+            "    JOIN scoring_runs r ON r.id = s.scoring_run_id"
+            "    WHERE s.application_id = a.id AND s.status = 'SCORED'"
+            "    ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS total_score"
             " FROM applications a JOIN candidates c ON c.id = a.candidate_id"
             "  JOIN cv_documents d ON d.id = a.cv_document_id"
             " WHERE a.job_id = :job_id ORDER BY a.created_at DESC"
@@ -320,7 +330,7 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
             " ON CONFLICT (job_id, candidate_id) DO UPDATE"
             "  SET cv_document_id = EXCLUDED.cv_document_id, updated_at = now()"
             "  WHERE applications.cv_document_id <> EXCLUDED.cv_document_id"
-            " RETURNING old.id IS NOT NULL AS existed"
+            " RETURNING id, old.id IS NOT NULL AS existed"
         ),
         {
             "tenant_id": tenant_id,
@@ -336,6 +346,14 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
         dedupe = "CV_REPLACED"
     else:
         dedupe = "EXISTING_CANDIDATE" if existing_candidate else None
+        # Its creation opens its Stage history (FR-A3.2), by whoever uploaded the CV.
+        session.execute(
+            text(
+                "INSERT INTO application_stage_history (tenant_id, application_id, to_stage,"
+                "  changed_by) VALUES (:tenant_id, :id, 'APPLIED', :user_id)"
+            ),
+            {"tenant_id": tenant_id, "id": application.id, "user_id": item.created_by},
+        )
     finish_item(session, item, "SUCCEEDED", cv_id=cv_id, dedupe=dedupe)
 
 

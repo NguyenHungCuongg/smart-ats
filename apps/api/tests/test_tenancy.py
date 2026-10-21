@@ -175,6 +175,10 @@ TENANT_TABLES = {
         "INSERT INTO applications (id, tenant_id, job_id, candidate_id, cv_document_id, source,"
         " stage) VALUES (:applications, :t, :jobs, :candidates, :cv_documents, 'UPLOAD', 'APPLIED')"
     ),
+    "application_stage_history": (
+        "INSERT INTO application_stage_history (id, tenant_id, application_id, to_stage,"
+        " changed_by) VALUES (:application_stage_history, :t, :applications, 'APPLIED', :users)"
+    ),
     "upload_batches": (
         "INSERT INTO upload_batches (id, tenant_id, job_id, created_by, total_count, status)"
         " VALUES (:upload_batches, :t, :jobs, :users, 1, 'PROCESSING')"

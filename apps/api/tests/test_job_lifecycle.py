@@ -1,6 +1,7 @@
 """The Job lifecycle of FR-A3.1: transitions, metadata, and ARCHIVED as read-only."""
 
 import asyncio
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any, get_args
 
@@ -9,7 +10,7 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient, Response
 
-from app import jobs, scoring_runs, uploads
+from app import jobs, pipeline, scoring_runs, uploads
 from app.main import app
 from tests.test_jobs import CONFIRMATION, User, make_user
 from tests.test_scoring_runs import make_job, query
@@ -203,6 +204,12 @@ WRITES: dict[str, tuple[str, str, dict[str, Any]]] = {
     "assign reviewers": ("PUT", "/reviewers", {"json": {"user_ids": []}}),
     "edit metadata": ("PATCH", "", {"json": {"location": "HCM"}}),
     "transition": ("POST", "/transitions", {"json": {"action": "reopen"}}),
+    # The Job has no Application: refused for it, it would be a 404.
+    "move stages": (
+        "POST",
+        "/applications/stage",
+        {"json": {"applications": [{"id": str(uuid.uuid4()), "version": 0}], "to_stage": "OFFER"}},
+    ),
 }
 
 
@@ -251,7 +258,7 @@ def test_every_write_under_a_job_takes_a_writer_dependency() -> None:
     }
     routes = {
         (method, route.path): route
-        for module in (jobs, uploads, scoring_runs)
+        for module in (jobs, uploads, scoring_runs, pipeline)
         for route in module.router.routes
         if isinstance(route, APIRoute)
         for method in route.methods or ()
