@@ -12,9 +12,36 @@ Multi-tenant ATS with explainable AI scoring. Requirements: [`docs/SRS/software_
 | `packages/scoring` | Scoring library: Document Extraction, JD/CV parsing, Blind Profile (uv workspace) |
 | `infra/`           | Docker and service configuration                                                  |
 
+## Quick start (Docker only)
+
+To just run the app, Docker is the only requirement: the images install every dependency themselves.
+
+```sh
+cp .env.example .env                  # works as is for local use
+docker compose up -d --build --wait   # first build takes a few minutes
+docker compose run --rm -e SEED_PASSWORD=<password> migrate python -m app.seed
+```
+
+Then trust Caddy's certificate (see [Infrastructure](#infrastructure)) and sign in at https://localhost/login as `recruiter@demo.local` or `admin@demo.local` with `<password>`. Scoring and parsing need an LLM key: see [Demo: Job → CV → Score → Fit-Gap](#demo-job--cv--score--fit-gap).
+
+There is no `requirements.txt`. Python dependencies are declared in each `pyproject.toml` and pinned in `uv.lock`; `uv sync` installs them on the host, and the API image runs `uv sync --frozen` itself.
+
+In `docker compose ps -a`, `migrate` showing `Exited (0)` is the expected end state, not a crash: it applies the schema and exits. It creates tables only, with no rows; the demo tenant and users come from the seed command above.
+
+### Troubleshooting
+
+| Symptom                                                                    | Cause and fix                                                                                                                                                                                             |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `required variable ... is missing a value: set in .env`                    | No `.env`: `cp .env.example .env`.                                                                                                                                                                        |
+| `migrate` fails with `password authentication failed for user "ats_owner"` | The PostgreSQL volume was created with other passwords (an earlier run, or `.env` edited afterwards); the init scripts run only on an empty volume. Reset it: `docker compose down -v`, then start again. |
+| `postgres` does not start, `port is already allocated` / `bind` error      | A local PostgreSQL (or Redis) already uses the port. Set `POSTGRES_HOST_PORT` (or `REDIS_HOST_PORT`) in `.env` to a free port.                                                                            |
+| App starts but has no Job, user or login                                   | Expected before seeding: run the seed command above.                                                                                                                                                      |
+
+Read the failing service's log with `docker compose logs migrate` (or `postgres`).
+
 ## Setup
 
-Requires Node 24, [uv](https://docs.astral.sh/uv/) and Docker.
+For development (tests, linters, running processes on the host). Requires Node 24, [uv](https://docs.astral.sh/uv/) and Docker.
 
 ```sh
 corepack enable          # provides the pnpm version pinned in package.json
