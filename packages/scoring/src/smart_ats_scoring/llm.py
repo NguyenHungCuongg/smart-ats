@@ -98,7 +98,6 @@ class OpenAiLlm:
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-GEMINI_SEED = 20260101  # fixed, so repeated runs are comparable (ADR-0006)
 
 
 class GeminiLlm:
@@ -128,7 +127,8 @@ class GeminiLlm:
                 "json_schema": {"name": name, "schema": schema, "strict": True},
             },
             temperature=omit if temperature is None else temperature,
-            seed=GEMINI_SEED,
+            # No seed: this endpoint rejects it with 400 "Unknown name seed" (ADR-0006: seed
+            # only where the model supports it).
         )
         if response.usage is None:
             raise RuntimeError(f"{self.model} returned no usage")
