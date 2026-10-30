@@ -6,7 +6,6 @@ from typing import Any
 import pytest
 
 from smart_ats_scoring.llm import (
-    GEMINI_SEED,
     GeminiLlm,
     OpenAiLlm,
     UnusableResponse,
@@ -74,12 +73,12 @@ def test_gemini_reply_cut_off_at_the_token_limit_raises_with_its_usage() -> None
     assert exc.value.usage == Usage("gemini-test", 100, 50, 0)
 
 
-def test_gemini_call_sends_a_fixed_seed() -> None:
+def test_gemini_call_sends_no_seed_which_its_endpoint_rejects() -> None:
     sent: dict[str, Any] = {}
 
     result = _gemini('{"title": "Back"}', "stop", sent).structured("system", "user", "name", {})
 
-    assert sent["seed"] == GEMINI_SEED
+    assert "seed" not in sent
     assert result.data == {"title": "Back"}
 
 
