@@ -144,7 +144,7 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set in .env}
       INTERNAL_API_URL: http://api:8000
       NEXT_PUBLIC_FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
-      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      WEB_BASE_URL: ${WEB_BASE_URL:?set in .env}
     ports:
       - 127.0.0.1:3000:3000
     # Next.js calls the API for public SSR pages; the browser calls the API directly otherwise (ADR-0003).

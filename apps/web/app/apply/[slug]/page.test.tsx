@@ -8,17 +8,22 @@ import { ApplyForm, type PublicJob } from "./form";
 import PublicApplyPage, { generateMetadata } from "./page";
 import { fetchPublicJob, getPublicApplyUrl } from "./public-job";
 
-let currentLocale: Locale = "en";
+let cookieLocale: string | undefined;
+let acceptLanguage: string | null = "en-US,en;q=0.9";
+
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => (cookieLocale ? { value: cookieLocale } : undefined) }),
+  headers: async () => ({ get: () => acceptLanguage }),
+}));
 
 vi.mock("next-intl/server", () => ({
-  getLocale: vi.fn(async () => currentLocale),
-  getTranslations: vi.fn(async (namespace: string) => {
-    return createTranslator({
-      locale: currentLocale,
-      messages: CATALOGS[currentLocale],
-      namespace: namespace as keyof (typeof CATALOGS)[typeof currentLocale],
-    });
-  }),
+  getTranslations: vi.fn(async ({ locale, namespace }: { locale: Locale; namespace: string }) =>
+    createTranslator({
+      locale,
+      messages: CATALOGS[locale],
+      namespace: namespace as keyof (typeof CATALOGS)[Locale],
+    }),
+  ),
 }));
 
 const render = (locale: Locale) =>
@@ -62,7 +67,8 @@ describe("PublicApplyPage server rendering and metadata", () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
-    currentLocale = "en";
+    cookieLocale = undefined;
+    acceptLanguage = "en-US,en;q=0.9";
   });
 
   test("renders JobPosting JSON-LD when Job is PUBLISHED", async () => {
@@ -152,6 +158,32 @@ describe("PublicApplyPage server rendering and metadata", () => {
     expect(meta.openGraph?.title).toBe("DevOps Engineer");
     expect(meta.openGraph?.description).toBe(meta.description);
     expect(meta.openGraph?.images).toEqual([{ url: "https://example.com/logo.png" }]);
+  });
+
+  test("follows Accept-Language without the cookie, and the cookie over it", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => publishedJob });
+    const params = Promise.resolve({ slug: "devops-engineer" });
+
+    expect((await generateMetadata({ params })).description).toContain("Hiring: DevOps Engineer");
+    cookieLocale = "vi";
+    expect((await generateMetadata({ params })).description).toContain(
+      "Tuyển dụng: DevOps Engineer",
+    );
+  });
+
+  test("renders the form in the page's own language", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => publishedJob });
+    const page = await PublicApplyPage({ params: Promise.resolve({ slug: "devops-engineer" }) });
+
+    // The outer provider stands for the app's (vi); the page's own provider must win.
+    const html = renderToStaticMarkup(
+      <NextIntlClientProvider locale="vi" messages={CATALOGS.vi}>
+        {page}
+      </NextIntlClientProvider>,
+    );
+
+    expect(html).toContain(CATALOGS.en.apply.submit);
+    expect(html).not.toContain(CATALOGS.vi.apply.submit);
   });
 });
 
