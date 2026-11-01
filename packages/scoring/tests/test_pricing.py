@@ -45,3 +45,12 @@ def test_a_model_without_a_price_is_an_error() -> None:
 def test_the_reasoning_model_is_priced() -> None:
     # $2 input + $10 output per 1M tokens (OpenAI Standard tier, short context).
     assert pricing.cost(Usage("gpt-6-sol-2026-09-01", 1_000_000, 1_000_000, 0)) == Decimal("12")
+
+
+def test_the_openai_embedding_model_is_priced() -> None:
+    # $0.13 per 1M input tokens (OpenAI Standard tier); an embedding has no output tokens.
+    assert pricing.cost(Usage("text-embedding-3-large", 1_000_000, 0, 0)) == Decimal("0.13")
+
+
+def test_the_gemini_embedding_model_is_free() -> None:
+    assert pricing.cost(Usage("gemini-embedding-2", 1000, 0, 0)) == 0
