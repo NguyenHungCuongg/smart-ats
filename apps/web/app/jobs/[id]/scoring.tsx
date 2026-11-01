@@ -11,6 +11,7 @@ import {
   type Claim,
   type ScoreResult,
   type ScoringRun,
+  type TimelineEntry,
   newestOnly,
   scoreBlocker,
 } from "../scoring";
@@ -140,12 +141,14 @@ const REPORT_PARTS = [
   ["recommendations", "Recommendations"],
 ] as const;
 
-function Result({ result }: { result: ScoreResult }) {
+export function Result({ result }: { result: ScoreResult }) {
   const t = useTranslations("scoring");
+  const locale = useLocale();
   const resultError = RESULT_ERRORS.find((code) => code === result.error_code);
   const rubric = result.rubric_grades;
   const report = result.fit_gap_report;
   const detail = result.must_have_detail;
+  const timeline = result.experience_detail;
   return (
     <article className="flex flex-col gap-4 rounded-xl border border-hairline-cloud bg-surface-canvas-light p-6">
       <header className="flex flex-wrap items-center gap-3">
@@ -176,8 +179,49 @@ function Result({ result }: { result: ScoreResult }) {
                   all: detail.matched.length + detail.missing.length,
                 })}
               </p>
-              <p>{t("matched", { skills: detail.matched.join(", ") || "—" })}</p>
+              {detail.matches ? (
+                <ul className="flex flex-col gap-1">
+                  {detail.matches.map((match) => (
+                    <li key={match.must_have}>
+                      {t("match", {
+                        mustHave: match.must_have,
+                        cvSkill: match.cv_skill,
+                        method: t(`matchMethod.${match.method}`, {
+                          similarity:
+                            match.similarity?.toLocaleString(locale, {
+                              maximumFractionDigits: 2,
+                            }) ?? "",
+                        }),
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>{t("matched", { skills: detail.matched.join(", ") || "—" })}</p>
+              )}
               <p>{t("missing", { skills: detail.missing.join(", ") || "—" })}</p>
+            </div>
+          )}
+
+          {timeline && (
+            <div className="flex flex-col gap-1 text-sm">
+              <p className="font-medium">
+                {t("timeline", {
+                  years: (timeline.total_months / 12).toLocaleString(locale, {
+                    maximumFractionDigits: 1,
+                  }),
+                })}
+              </p>
+              <ul className="flex flex-col gap-1">
+                {timeline.entries.map((entry, i) => (
+                  <li key={i}>
+                    {t("timelineEntry", { ...written(entry), months: entry.months ?? 0 })}
+                  </li>
+                ))}
+                {timeline.unreadable.map((entry, i) => (
+                  <li key={`unreadable-${i}`}>{t("timelineUnreadable", written(entry))}</li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -207,6 +251,16 @@ function Result({ result }: { result: ScoreResult }) {
       )}
     </article>
   );
+}
+
+/** A work history entry's words as the CV writes them, a dash for what it leaves out. */
+function written(entry: TimelineEntry) {
+  return {
+    title: entry.title ?? "—",
+    company: entry.company ?? "—",
+    start: entry.start ?? "—",
+    end: entry.end ?? "—",
+  };
 }
 
 function Score({

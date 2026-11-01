@@ -7,6 +7,24 @@ import type { Job, Weights } from "./criteria";
 export type Claim = { text?: string; reason?: string; evidence: string[]; grounded: boolean };
 export type Axis = "technical" | "soft_skills" | "experience";
 
+/** How a must-have matched a CV skill, from Scoring v1 on. */
+export type Match = {
+  must_have: string;
+  cv_skill: string;
+  method: "EXACT" | "ALIAS" | "SEMANTIC";
+  /** The cosine of the two names, for a SEMANTIC match. */
+  similarity: number | null;
+};
+
+/** A work history entry; `months` is null when its dates could not be counted. */
+export type TimelineEntry = {
+  company: string | null;
+  title: string | null;
+  start: string | null;
+  end: string | null;
+  months: number | null;
+};
+
 export type ScoreResult = {
   application_id: string;
   full_name: string | null;
@@ -20,7 +38,15 @@ export type ScoreResult = {
   total_score: number | null;
   /** 0–1. */
   must_have_coverage: number | null;
-  must_have_detail: { matched: string[]; missing: string[] } | null;
+  /** `matches` is absent from a v0 Score Result. */
+  must_have_detail: { matched: string[]; missing: string[]; matches?: Match[] } | null;
+  /** The Experience timeline, computed from the CV; null before v1. */
+  experience_detail: {
+    entries: TimelineEntry[];
+    /** A month several entries share counts once. */
+    total_months: number;
+    unreadable: TimelineEntry[];
+  } | null;
   rubric_grades: Record<Axis, Claim & { grade: number }> | null;
   fit_gap_report: Record<"strengths" | "gaps" | "recommendations", Claim[]> | null;
   error_code: string | null;

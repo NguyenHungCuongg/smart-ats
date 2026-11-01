@@ -60,6 +60,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       # Frozen into each Scoring Run, whose tasks then call the run's model (SAD §5.2).
       LLM_REASONING_MODEL: ${LLM_REASONING_MODEL:?set in .env}
+      # Frozen the same way, for Must-have Coverage's semantic matching (SAD §5.2).
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:?set in .env}
       # The origin of the links in Member invitation emails (FR-C1.2).
       WEB_BASE_URL: ${WEB_BASE_URL:?set in .env}
       # Uvicorn takes the client IP from Caddy's X-Forwarded-For only for listed proxies; Caddy's

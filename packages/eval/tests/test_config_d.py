@@ -1,3 +1,4 @@
+import json
 from collections import Counter
 from dataclasses import replace
 from decimal import Decimal
@@ -8,8 +9,9 @@ import pytest
 
 from smart_ats_eval import dataset, harness
 from smart_ats_eval.__main__ import configs
-from smart_ats_eval.scoring_v0 import ScoringV0
-from smart_ats_scoring import pricing
+from smart_ats_eval.config_d import ConfigD
+from smart_ats_scoring import embedding, pricing
+from smart_ats_scoring.embedding import EmbeddingResult
 from smart_ats_scoring.llm import LlmResult, Usage
 
 SCRATCH = Path(__file__).parents[1] / "datasets" / "scratch-v1.json"
@@ -17,7 +19,8 @@ SCRATCH = Path(__file__).parents[1] / "datasets" / "scratch-v1.json"
 CRITERIA: dict[str, Any] = {
     "title": "Backend Developer (Junior)",
     "level": "JUNIOR",
-    "skills": [{"name": "Python", "must_have": True}],
+    # REST API is not in the CV, so every Application calls the Embedder once.
+    "skills": [{"name": "Python", "must_have": True}, {"name": "REST API", "must_have": True}],
     "min_years_experience": 1,
     "education": None,
     "responsibilities": [],
@@ -28,7 +31,16 @@ CRITERIA: dict[str, Any] = {
 }
 PROFILE: dict[str, Any] = {
     "contact": {"full_name": None, "email": None, "phone": None, "links": []},
-    "work_history": [],
+    "work_history": [
+        {
+            "company": "Acme",
+            "title": "Backend Developer",
+            "start": "01/2026",
+            "end": "nay",
+            "responsibilities": [],
+            "achievements": [],
+        }
+    ],
     "skills": {"hard": ["Python"], "soft": [], "tools": [], "languages": []},
     "education": [],
     "certifications": [],
@@ -53,6 +65,7 @@ class FakeLlm:
 
     def __init__(self) -> None:
         self.calls: Counter[str] = Counter()
+        self.scoring_prompts: list[str] = []
 
     def structured(
         self,
@@ -63,21 +76,48 @@ class FakeLlm:
         temperature: float | None = None,
     ) -> LlmResult:
         self.calls[name] += 1
+        if name == "score_result":
+            self.scoring_prompts.append(user)
         data = {"job_criteria": CRITERIA, "cv_profile": PROFILE, "score_result": ANSWER}[name]
         return LlmResult(data, Usage("fake-model", 1000, 500, 0))
 
 
+class FakeEmbedder:
+    """Embeds every string on an axis of its own, so nothing matches by meaning."""
+
+    model = "fake-embedding"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def embed(self, texts: list[str]) -> EmbeddingResult:
+        self.calls += 1
+        vectors = [[float(i == j) for j in range(len(texts))] for i in range(len(texts))]
+        return EmbeddingResult(vectors, Usage("fake-embedding", 1000, 0, 0))
+
+
 @pytest.fixture
 def fake_model_price(monkeypatch: pytest.MonkeyPatch) -> None:
-    # $2 per 1M input tokens, $10 per 1M output tokens.
+    # $2 per 1M input tokens, $10 per 1M output tokens; the embedding $2 per 1M tokens.
     monkeypatch.setitem(
         pricing.PRICES, "fake-model", pricing.Price(Decimal(2), Decimal(0), Decimal(10))
+    )
+    monkeypatch.setitem(
+        pricing.PRICES, "fake-embedding", pricing.Price(Decimal(2), Decimal(2), Decimal(0))
+    )
+    monkeypatch.setitem(embedding.THRESHOLDS, "fake-embedding", 0.9)
+
+
+def _document(user: str) -> Any:
+    return json.loads(
+        user.removeprefix("<untrusted_document>\n").removesuffix("\n</untrusted_document>")
     )
 
 
 @pytest.mark.usefixtures("fake_model_price")
-def test_scoring_v0_row_reports_versions_grounding_by_the_library_rule_and_cost() -> None:
+def test_config_d_row_reports_versions_grounding_by_the_library_rule_and_cost() -> None:
     llm = FakeLlm()
+    embedder = FakeEmbedder()
     data = dataset.load(SCRATCH)
     cv_text = "Kỹ năng: Python and FastAPI"
     data = replace(
@@ -88,22 +128,36 @@ def test_scoring_v0_row_reports_versions_grounding_by_the_library_rule_and_cost(
         ),
     )
 
-    table = harness.compare(data, [ScoringV0(llm, llm, "fake-model")], split="dev", runs=2)
+    table = harness.compare(data, [ConfigD(llm, llm, "fake-model", embedder)], split="dev", runs=2)
 
-    row = next(line for line in table.splitlines() if line.startswith("| Scoring v0 "))
+    row = next(line for line in table.splitlines() if line.startswith("| Config D "))
     cells = [cell.strip() for cell in row.strip("|").split("|")]
-    assert cells[1:4] == ["fake-model", "v1", "v0"]
+    assert cells[1:4] == ["fake-model", "v2", "v1"]
     # Every quote the LLM made counts, dropped ones included: only "Python" of the 3 per axis
     # is evidence; "and" is a stopword and the third is invented.
     assert cells[8] == "0.333"
-    # Each call costs 1000 x $2 + 500 x $10 = $0.007 per 1M tokens. An Application costs its CV
-    # parse, 1/6 of the JD parse and its scoring: 0.007 x (1 + 1/6 + 1) = 0.0152.
-    assert cells[10] == "0.0152"
+    # Each LLM call costs 1000 x $2 + 500 x $10 = $0.007 per 1M tokens, each embedding call
+    # 1000 x $2 = $0.002. An Application costs its CV parse, 1/6 of the JD parse, its embedding
+    # and its scoring: 0.007 x (1 + 1/6 + 1) + 0.002 = 0.0172.
+    assert cells[10] == "0.0172"
     # One Job and six CV Documents in dev: each parsed once, each Application scored per run.
     assert llm.calls == {"job_criteria": 1, "cv_profile": 6, "score_result": 12}
+    assert embedder.calls == 12
+    # "nay" runs to the dataset's as_of, 2026-10-13, whatever day the table is run:
+    # January to October 2026.
+    assert {
+        _document(prompt)["experience_timeline"]["total_months"] for prompt in llm.scoring_prompts
+    } == {10}
 
 
-def test_scoring_v0_is_compared_only_with_an_llm_key(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.fixture
+def calibrated_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-large")
+    monkeypatch.setitem(embedding.THRESHOLDS, "text-embedding-3-large", 0.9)
+
+
+@pytest.mark.usefixtures("calibrated_embedding")
+def test_config_d_is_compared_only_with_an_llm_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert [config.name for config in configs()] == ["Baseline (BM25)"]
@@ -114,16 +168,27 @@ def test_scoring_v0_is_compared_only_with_an_llm_key(monkeypatch: pytest.MonkeyP
     found = configs()
     assert [(config.name, config.model) for config in found] == [
         ("Baseline (BM25)", None),
-        ("Scoring v0", "gpt-6-sol"),
+        ("Config D", "gpt-6-sol"),
     ]
 
 
-def test_a_model_without_a_price_stops_the_run_before_any_call(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.usefixtures("calibrated_embedding")
+@pytest.mark.parametrize(
+    ("variable", "model"),
+    [
+        ("LLM_REASONING_MODEL", "unpriced-model"),
+        ("EMBEDDING_MODEL", "unpriced-embedding"),
+        # Priced, but with no similarity threshold.
+        ("EMBEDDING_MODEL", "gpt-6-luna"),
+    ],
+)
+def test_a_model_without_a_price_or_threshold_stops_the_run_before_any_call(
+    monkeypatch: pytest.MonkeyPatch, variable: str, model: str
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setenv("LLM_EXTRACTION_MODEL", "gpt-6-luna")
-    monkeypatch.setenv("LLM_REASONING_MODEL", "unpriced-model")
+    monkeypatch.setenv("LLM_REASONING_MODEL", "gpt-6-sol")
+    monkeypatch.setenv(variable, model)
 
-    with pytest.raises(SystemExit, match="unpriced-model"):
+    with pytest.raises(SystemExit, match=model):
         configs()

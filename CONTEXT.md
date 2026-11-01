@@ -98,6 +98,10 @@ _Avoid_: Sub-score, dimension
 The share of a Job's must-have skills evidenced in a CV Document, computed deterministically.
 _Avoid_: Keyword match
 
+**Experience Timeline**:
+The months of each work history entry in a CV Document, their total with overlaps counted once, and the entries whose dates cannot be read, computed deterministically for Experience Fit.
+_Avoid_: Years of experience (as estimated by the LLM)
+
 **Fit-Gap Report**:
 Strengths, Gaps and Recommendations for one Score Result, each backed by quoted Evidence.
 _Avoid_: Explanation, summary, AI comment

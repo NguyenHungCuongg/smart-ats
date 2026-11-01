@@ -12,7 +12,7 @@ from app import jobs, scoring_runs, storage, uploads
 from app.main import app
 from smart_ats_scoring import pricing
 from tests.test_jobs import CONFIRMATION, User, make_user
-from tests.test_scoring_runs import MODEL, add_application, make_job, query
+from tests.test_scoring_runs import MODEL, add_application, calibrate_embedding, make_job, query
 
 pytestmark = pytest.mark.usefixtures("database")
 
@@ -32,6 +32,7 @@ def objects(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
         monkeypatch.setattr(task, "delay", lambda *args: None)
     monkeypatch.setenv("LLM_REASONING_MODEL", MODEL)
     monkeypatch.setitem(pricing.PRICES, MODEL, pricing.Price(Decimal(1), Decimal(1), Decimal(1)))
+    calibrate_embedding(monkeypatch)
     return stored
 
 

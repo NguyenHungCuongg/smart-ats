@@ -8,7 +8,8 @@ from pathlib import Path
 
 from smart_ats_eval import dataset, harness
 from smart_ats_eval.baseline import Bm25Baseline
-from smart_ats_eval.scoring_v0 import ScoringV0
+from smart_ats_eval.config_d import ConfigD
+from smart_ats_scoring.embedding import embedder_from_env
 from smart_ats_scoring.llm import has_llm_key, llm_from_env, llm_provider
 from smart_ats_scoring.pricing import price
 
@@ -22,10 +23,15 @@ def configs() -> list[harness.Config]:
         for name in (model, extraction_model):
             if price(name) is None:  # before any call, so no spend goes unpriced
                 sys.exit(f"No price for model {name} in smart_ats_scoring.pricing.PRICES.")
+        try:
+            # Refuses a model with no price or no similarity threshold.
+            embedder = embedder_from_env(os.environ["EMBEDDING_MODEL"])
+        except LookupError as e:
+            sys.exit(f"{e}.")
         extraction = llm_from_env(extraction_model)
-        found.append(ScoringV0(extraction, llm_from_env(model), model))
+        found.append(ConfigD(extraction, llm_from_env(model), model, embedder))
     else:
-        print("Scoring v0 skipped: it needs the API key of LLM_PROVIDER.", file=sys.stderr)
+        print("Config D skipped: it needs the API key of LLM_PROVIDER.", file=sys.stderr)
     return found
 
 
