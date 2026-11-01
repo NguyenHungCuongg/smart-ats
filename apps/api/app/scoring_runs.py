@@ -258,8 +258,13 @@ def score_application(
                 llm_from_env(row.model),
                 _Billed(
                     embedder_from_env(row.embedding_model),
-                    lambda billed: usage.record(
-                        session, row.created_by, "EMBEDDING", billed, "score_result", row.id
+                    lambda embedding_usage: usage.record(
+                        session,
+                        row.created_by,
+                        "EMBEDDING",
+                        embedding_usage,
+                        "score_result",
+                        row.id,
                     ),
                 ),
                 # The same "nay" for every result of the run, whenever its task runs.

@@ -4,6 +4,7 @@ rubric, grounding."""
 import json
 import math
 import re
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any, Literal
@@ -195,10 +196,14 @@ def _must_have_coverage(
     must = [skill["name"] for skill in criteria["skills"] if skill["must_have"]]
 
     def lexical(name: str) -> Match | None:
-        for key, method in ((_words, "EXACT"), (_canonical, "ALIAS")):
+        steps: tuple[tuple[Callable[[str], str], Literal["EXACT", "ALIAS"]], ...] = (
+            (_words, "EXACT"),
+            (_canonical, "ALIAS"),
+        )
+        for key, method in steps:
             for option in _options(name):
                 if skill := next((s for s in skills if key(s) == key(option)), None):
-                    return Match(name, skill, method)  # type: ignore[arg-type]
+                    return Match(name, skill, method)
         return None
 
     found = {name: lexical(name) for name in must}
