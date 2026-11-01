@@ -104,6 +104,34 @@ async def test_unknown_action_is_rejected(client: AsyncClient, recruiter: User) 
     assert (await transition(client, recruiter, job_id, "delete")).status_code == 422
 
 
+async def test_published_at_set_on_first_publish_and_preserved_on_reopen(
+    client: AsyncClient, recruiter: User
+) -> None:
+    job_id = job_in(recruiter, "DRAFT")
+    [initial] = query(recruiter, "SELECT published_at FROM jobs WHERE id = :id", id=job_id)
+    assert initial["published_at"] is None
+
+    # First publish: sets published_at
+    res = await transition(client, recruiter, job_id, "publish")
+    assert res.status_code == 200
+    [published] = query(recruiter, "SELECT published_at FROM jobs WHERE id = :id", id=job_id)
+    first_published_at = published["published_at"]
+    assert first_published_at is not None
+    assert res.json()["published_at"] is not None
+
+    # Pause then resume: published_at unchanged
+    await transition(client, recruiter, job_id, "pause")
+    await transition(client, recruiter, job_id, "resume")
+    [resumed] = query(recruiter, "SELECT published_at FROM jobs WHERE id = :id", id=job_id)
+    assert resumed["published_at"] == first_published_at
+
+    # Close then reopen: published_at unchanged
+    await transition(client, recruiter, job_id, "close")
+    await transition(client, recruiter, job_id, "reopen")
+    [reopened] = query(recruiter, "SELECT published_at FROM jobs WHERE id = :id", id=job_id)
+    assert reopened["published_at"] == first_published_at
+
+
 @pytest.mark.cross_tenant
 async def test_other_tenants_job_cannot_be_moved(client: AsyncClient, recruiter: User) -> None:
     job_id = job_in(recruiter, "DRAFT")

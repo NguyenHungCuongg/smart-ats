@@ -13,7 +13,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import (
@@ -102,6 +102,7 @@ class PublicJob(BaseModel):
     apply_deadline: date | None
     location: str | None
     work_mode: WorkMode | None
+    published_at: datetime | None
     criteria: dict[str, Any] | None
     tenant_name: str
     tenant_logo_url: str | None
@@ -136,6 +137,7 @@ async def get_public_job(slug: str) -> PublicJob:
         apply_deadline=row.apply_deadline,
         location=row.location,
         work_mode=row.work_mode,
+        published_at=row.published_at,
         criteria=row.criteria,
         tenant_name=row.tenant_name,
         tenant_logo_url=row.tenant_logo_url,

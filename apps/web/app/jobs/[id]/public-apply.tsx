@@ -1,29 +1,20 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { apiFetch } from "../../auth";
 import { Badge } from "../../badge";
 import type { Job } from "../criteria";
+import { clientPublicApplyUrl, useCopied } from "./clipboard";
 
 export function PublicApplySection({ job, onSaved }: { job: Job; onSaved: (job: Job) => void }) {
   const t = useTranslations("jobPublicApply");
   const [pending, setPending] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState(false);
+  const { copied, copy } = useCopied();
 
-  useEffect(() => {
-    if (copied) {
-      const timer = setTimeout(() => setCopied(false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [copied]);
-
-  const publicUrl =
-    typeof window !== "undefined" && job.public_slug
-      ? `${window.location.origin}/apply/${job.public_slug}`
-      : "";
+  const publicUrl = clientPublicApplyUrl(job.public_slug);
 
   async function toggle() {
     setPending(true);
@@ -39,16 +30,6 @@ export function PublicApplySection({ job, onSaved }: { job: Job; onSaved: (job: 
       onSaved(await response.json());
     } else {
       setError(true);
-    }
-  }
-
-  async function copyToClipboard() {
-    if (!publicUrl) return;
-    try {
-      await navigator.clipboard.writeText(publicUrl);
-      setCopied(true);
-    } catch {
-      // Ignore clipboard write failures
     }
   }
 
@@ -84,7 +65,7 @@ export function PublicApplySection({ job, onSaved }: { job: Job; onSaved: (job: 
             />
             <button
               type="button"
-              onClick={copyToClipboard}
+              onClick={() => copy(publicUrl)}
               className="button-primary text-sm whitespace-nowrap"
             >
               {copied ? t("copied") : t("copyLink")}

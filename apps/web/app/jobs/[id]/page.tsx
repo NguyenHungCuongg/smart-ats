@@ -22,6 +22,7 @@ import { Pipeline } from "./pipeline";
 import { PublicApplySection } from "./public-apply";
 import { Reviewers } from "./reviewers";
 import { Scoring } from "./scoring";
+import { JobAdSection } from "./share";
 import { Uploads } from "./uploads";
 
 // The parse errors the catalog words (job.parseError); any other reads as a failed parse.
@@ -94,6 +95,7 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
                   <StatusActions job={job} onChanged={setJob} />
                   <MetadataForm key={job.apply_deadline} job={job} onSaved={setJob} />
                   <PublicApplySection job={job} onSaved={setJob} />
+                  <JobAdSection job={job} />
                 </>
               )}
             </header>

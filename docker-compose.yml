@@ -142,9 +142,12 @@ services:
       dockerfile: apps/web/Dockerfile
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set in .env}
+      INTERNAL_API_URL: http://api:8000
+      NEXT_PUBLIC_FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      WEB_BASE_URL: ${WEB_BASE_URL:?set in .env}
     ports:
       - 127.0.0.1:3000:3000
-    # The browser, not the web server, calls the API (ADR-0003); this only brings the API up with it.
+    # Next.js calls the API for public SSR pages; the browser calls the API directly otherwise (ADR-0003).
     depends_on:
       api:
         condition: service_healthy

@@ -163,6 +163,7 @@ async def test_upload_creates_a_draft_job_and_enqueues_its_parse(
         "weights": {"technical": 55, "soft_skills": 15, "experience": 30},
         "criteria_confirmed_at": None,
         "apply_deadline": None,
+        "published_at": None,
         "public_apply_enabled": False,
         "public_slug": None,
     }

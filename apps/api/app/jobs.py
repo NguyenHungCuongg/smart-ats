@@ -173,6 +173,7 @@ class Job(BaseModel):
     weights: Weights
     criteria_confirmed_at: datetime | None
     apply_deadline: date | None
+    published_at: datetime | None
     public_apply_enabled: bool
     public_slug: str | None
 
@@ -299,7 +300,7 @@ async def list_jobs(
 _SELECT_JOB = text("""
     SELECT id, title, level, department, location, work_mode, status, parse_status, parse_error,
       criteria, criteria_verification AS verification, criteria_confirmed_at, apply_deadline,
-      public_apply_enabled, public_slug,
+      published_at, public_apply_enabled, public_slug,
       (weight_technical * 100)::int AS technical,
       (weight_soft_skills * 100)::int AS soft_skills,
       (weight_experience * 100)::int AS experience
@@ -364,7 +365,11 @@ async def transition(job_id: uuid.UUID, body: Transition, auth: LockedJob) -> Jo
     if to is None:
         raise HTTPException(status.HTTP_409_CONFLICT, f"A {current} Job cannot {body.action}")
     await auth.db.execute(
-        text("UPDATE jobs SET status = :to, updated_at = now() WHERE id = :id"),
+        text(
+            "UPDATE jobs SET status = :to, "
+            "published_at = CASE WHEN :to = 'PUBLISHED' AND published_at IS NULL THEN now() "
+            "ELSE published_at END, updated_at = now() WHERE id = :id"
+        ),
         {"id": job_id, "to": to},
     )
     return await _job(auth.db, job_id)

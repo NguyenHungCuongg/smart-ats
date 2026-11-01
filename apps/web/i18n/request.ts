@@ -7,9 +7,8 @@ import { LOCALE_COOKIE, decideLocale } from "./locale";
 import { CATALOGS } from "./messages";
 
 export default getRequestConfig(async () => {
-  // ponytail: no page is public yet (login and accept invitation default to vi like the rest),
-  // so Accept-Language never counts; Public Apply (FR-A3.4) passes
-  // headers().get("accept-language") and true once it exists.
+  // Every page but Public Apply ignores Accept-Language and defaults to vi; Public Apply
+  // (FR-A3.4) decides its own language in app/apply/[slug]/page.tsx.
   const locale = decideLocale((await cookies()).get(LOCALE_COOKIE)?.value, null, false);
   return { locale, messages: CATALOGS[locale] };
 });

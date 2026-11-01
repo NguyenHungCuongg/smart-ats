@@ -15,6 +15,7 @@ export type PublicJob = {
   apply_deadline: string | null;
   location: string | null;
   work_mode: string | null;
+  published_at?: string | null;
   criteria: {
     skills?: { name: string; must_have: boolean }[];
     min_years_experience?: number | null;
@@ -29,12 +30,12 @@ export type PublicJob = {
 
 const MAX_CV_BYTES = 10 * 1024 * 1024; // 10 MB
 
-export function ApplyForm({ slug }: { slug: string }) {
+export function ApplyForm({ slug, initialJob }: { slug: string; initialJob?: PublicJob | null }) {
   const t = useTranslations("apply");
   const locale = useLocale();
 
-  const [job, setJob] = useState<PublicJob | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [job, setJob] = useState<PublicJob | null>(initialJob ?? null);
+  const [loading, setLoading] = useState(!initialJob);
   const [notFound, setNotFound] = useState(false);
   const [pending, setPending] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -42,6 +43,7 @@ export function ApplyForm({ slug }: { slug: string }) {
   const [apiStatus, setApiStatus] = useState<number | null>(null);
 
   useEffect(() => {
+    if (initialJob !== undefined && initialJob !== null) return;
     let active = true;
     apiFetch(`/api/apply/${slug}`).then(async (response) => {
       if (!active) return;
@@ -57,7 +59,7 @@ export function ApplyForm({ slug }: { slug: string }) {
     return () => {
       active = false;
     };
-  }, [slug]);
+  }, [slug, initialJob]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
