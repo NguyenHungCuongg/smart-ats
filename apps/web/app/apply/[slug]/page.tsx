@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 
 import { LOCALE_COOKIE, type Locale, decideLocale } from "../../../i18n/locale";
 import { CATALOGS } from "../../../i18n/messages";
 import { buildJobAd, buildJobPostingJsonLd, getJobAdExcerpt } from "../../jobs/share";
 import { ApplyForm, type PublicJob } from "./form";
 
-export async function fetchPublicJob(slug: string): Promise<PublicJob | null> {
+export const fetchPublicJob = cache(async (slug: string): Promise<PublicJob | null> => {
   const baseUrl =
     process.env.INTERNAL_API_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
@@ -19,11 +20,10 @@ export async function fetchPublicJob(slug: string): Promise<PublicJob | null> {
   } catch {
     return null;
   }
-}
+});
 
 export function getPublicApplyUrl(slug: string): string {
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_API_URL || "https://localhost";
+  const base = process.env.WEB_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "https://localhost";
   return `${base.replace(/\/api\/?$/, "")}/apply/${slug}`;
 }
 

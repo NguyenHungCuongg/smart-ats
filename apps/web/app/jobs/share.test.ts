@@ -6,6 +6,7 @@ import {
   buildJobPostingJsonLd,
   buildLinkedInShareUrl,
   buildXShareUrl,
+  formatDeadline,
   formatXTweet,
   getJobAdExcerpt,
 } from "./share";
@@ -45,7 +46,7 @@ describe("buildJobAd template", () => {
     expect(ad).toContain("- PostgreSQL");
     expect(ad).toContain("Địa điểm: Hà Nội");
     expect(ad).toContain("Hình thức làm việc: Từ xa (Remote)");
-    expect(ad).toContain("Hạn nộp hồ sơ: 2026-12-31");
+    expect(ad).toContain(`Hạn nộp hồ sơ: ${formatDeadline(mockJob.apply_deadline, "vi")}`);
     expect(ad).toContain(`Ứng tuyển tại: ${publicUrl}`);
   });
 
@@ -58,7 +59,7 @@ describe("buildJobAd template", () => {
     expect(ad).toContain("- Python");
     expect(ad).toContain("Location: Hà Nội");
     expect(ad).toContain("Work mode: Remote");
-    expect(ad).toContain("Application deadline: 2026-12-31");
+    expect(ad).toContain(`Application deadline: ${formatDeadline(mockJob.apply_deadline, "en")}`);
     expect(ad).toContain(`Apply at: ${publicUrl}`);
   });
 
@@ -106,6 +107,27 @@ describe("share intent URLs and encoding", () => {
     expect(shareUrl).toBe(
       `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`,
     );
+  });
+
+  test("buildXShareUrl does not duplicate url when text already includes it", () => {
+    const url = "https://ats.example.com/apply/job-slug";
+    const text = `Tuyển dụng: Kỹ sư phần mềm\n${url}`;
+    const shareUrl = buildXShareUrl(text, url);
+    expect(shareUrl).toBe(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`);
+    expect(shareUrl).not.toContain("&url=");
+  });
+});
+
+describe("formatDeadline helper", () => {
+  test("formats ISO YYYY-MM-DD date by locale", () => {
+    const formattedVi = formatDeadline("2026-12-31", "vi");
+    const formattedEn = formatDeadline("2026-12-31", "en");
+    expect(formattedVi).toBeTruthy();
+    expect(formattedEn).toBeTruthy();
+  });
+
+  test("falls back cleanly on invalid date string", () => {
+    expect(formatDeadline("invalid-date", "vi")).toBe("invalid-date");
   });
 });
 

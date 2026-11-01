@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import type { Locale } from "../../../i18n/locale";
 import type { Job } from "../criteria";
@@ -13,17 +13,39 @@ import {
   formatXTweet,
 } from "../share";
 
-export function JobAdSection({ job, facebookAppId }: { job: Job; facebookAppId?: string }) {
+function subscribe() {
+  return () => {};
+}
+
+function getOriginSnapshot() {
+  return window.location.origin;
+}
+
+function getServerOriginSnapshot() {
+  return "";
+}
+
+export function JobAdSection({
+  job,
+  facebookAppId,
+  publicUrl: customPublicUrl,
+}: {
+  job: Job;
+  facebookAppId?: string;
+  publicUrl?: string;
+}) {
   const t = useTranslations("jobShare");
   const locale = useLocale() as Locale;
   const [copied, setCopied] = useState(false);
+  const origin = useSyncExternalStore(subscribe, getOriginSnapshot, getServerOriginSnapshot);
 
   const publicUrl =
-    typeof window !== "undefined" && job.public_slug
-      ? `${window.location.origin}/apply/${job.public_slug}`
-      : job.public_slug
-        ? `/apply/${job.public_slug}`
-        : "";
+    customPublicUrl ??
+    (job.public_slug
+      ? origin
+        ? `${origin}/apply/${job.public_slug}`
+        : `/apply/${job.public_slug}`
+      : "");
 
   const defaultContent = buildJobAd(job, locale, publicUrl);
   const [editedContent, setEditedContent] = useState<string | null>(null);
@@ -87,9 +109,10 @@ export function JobAdSection({ job, facebookAppId }: { job: Job; facebookAppId?:
       <textarea
         rows={8}
         value={content}
+        aria-label={t("adContent")}
         disabled={!isReady}
         onChange={(e) => setEditedContent(e.target.value)}
-        className="focus:border-ink w-full rounded-md border border-hairline-cloud bg-transparent p-3 text-sm focus:outline-none disabled:opacity-50 dark:border-hairline-violet dark:focus:border-on-primary"
+        className="w-full rounded-sm border border-hairline-cool bg-surface-canvas-light p-3 text-sm text-ink-deep focus:inset-shadow-input focus:outline-none focus-visible:ring-2 focus-visible:ring-ring-focus disabled:opacity-50"
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -97,7 +120,7 @@ export function JobAdSection({ job, facebookAppId }: { job: Job; facebookAppId?:
           type="button"
           disabled={!isReady}
           onClick={copyToClipboard}
-          className="button-primary text-sm whitespace-nowrap"
+          className="button-outline text-sm whitespace-nowrap"
         >
           {copied ? t("copied") : t("copyAd")}
         </button>

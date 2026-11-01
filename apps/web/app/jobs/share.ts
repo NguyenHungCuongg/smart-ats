@@ -16,17 +16,34 @@ export type JobAdInput = {
   criteria?: JobAdCriteria | null;
 };
 
-export type JobPostingInput = {
-  title: string;
+export type JobPostingInput = JobAdInput & {
   status: string;
-  work_mode?: string | null;
-  location?: string | null;
-  apply_deadline?: string | null;
   published_at?: string | null;
   tenant_name?: string | null;
   tenant_logo_url?: string | null;
-  criteria?: JobAdCriteria | null;
 };
+
+/**
+ * Formats an apply deadline string according to locale (e.g. DD/MM/YYYY for vi, MM/DD/YYYY for en).
+ */
+export function formatDeadline(deadline: string, locale: Locale): string {
+  try {
+    const parts = deadline.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (parts) {
+      const year = Number.parseInt(parts[1], 10);
+      const month = Number.parseInt(parts[2], 10) - 1;
+      const day = Number.parseInt(parts[3], 10);
+      return new Date(year, month, day).toLocaleDateString(locale);
+    }
+    const d = new Date(deadline);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString(locale);
+    }
+  } catch {
+    // Fall back to raw string
+  }
+  return deadline;
+}
 
 /**
  * Builds a Job Ad from Job details in the chosen locale (FR-A3.5, SAD §5.6).
@@ -64,7 +81,8 @@ export function buildJobAd(job: JobAdInput, locale: Locale = "vi", publicUrl?: s
     meta.push(t.workMode.replace("{mode}", modeLabel));
   }
   if (job.apply_deadline) {
-    meta.push(t.deadline.replace("{deadline}", job.apply_deadline));
+    const deadlineFormatted = formatDeadline(job.apply_deadline, locale);
+    meta.push(t.deadline.replace("{deadline}", deadlineFormatted));
   }
   if (meta.length > 0) {
     sections.push(meta.join("\n"));
@@ -130,8 +148,12 @@ export function formatXTweet(text: string, publicUrl: string, maxLen = 280): str
 
 /**
  * Generates X intent/tweet URL with text and Public Apply link.
+ * Avoids duplicating the link if it is already embedded in the text.
  */
-export function buildXShareUrl(text: string, publicUrl: string): string {
+export function buildXShareUrl(text: string, publicUrl?: string): string {
+  if (!publicUrl || text.includes(publicUrl)) {
+    return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`;
+  }
   return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(publicUrl)}`;
 }
 
