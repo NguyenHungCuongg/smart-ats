@@ -114,7 +114,7 @@ Queues: `llm`, `default`, `agent`, `email`. Health check: `GET /api/health`; rea
 
 The end-to-end flow of Roadmap phase 1, on Docker Compose:
 
-1. In `.env`, set `OPENAI_API_KEY`, or for free testing `LLM_PROVIDER=gemini` and `GEMINI_API_KEY` with Gemini names in `LLM_EXTRACTION_MODEL` and `LLM_REASONING_MODEL` (synthetic CVs only, never in production; see `.env.example`). Each model must have a price in `smart_ats_scoring.pricing.PRICES`, or parsing and scoring refuse to call it.
+1. In `.env`, set `OPENAI_API_KEY`, or for free testing `LLM_PROVIDER=gemini` and `GEMINI_API_KEY` with Gemini names in `LLM_EXTRACTION_MODEL`, `LLM_REASONING_MODEL` and `EMBEDDING_MODEL` (synthetic CVs only, never in production; see `.env.example`). Each model must have a price in `smart_ats_scoring.pricing.PRICES`, and the embedding model a similarity threshold in `smart_ats_scoring.embedding.THRESHOLDS`, or parsing and scoring refuse to call it.
 2. Start the stack and seed: `docker compose up -d --build --wait`, then `docker compose run --rm -e SEED_PASSWORD=<password> migrate python -m app.seed`.
 3. Sign in at https://localhost/login as `recruiter@demo.local`.
 4. **Create a Job:** on the home page, open "Tạo Job từ JD", upload a JD Document or paste its text. Once the parse finishes, review the criteria (fields marked "Cần kiểm tra" were not found verbatim in the JD) and press "Xác nhận criteria".

@@ -223,7 +223,7 @@
     "noApplications": "Job chưa có Application nào.",
     "running": "Đang chấm điểm…",
     "notEligible": "Job chưa đủ điều kiện chấm điểm hoặc đang được chấm.",
-    "unpricedModel": "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
+    "unpricedModel": "Model AI chưa có trong bảng giá hoặc chưa có ngưỡng tương đồng nên chưa được gọi. Liên hệ quản trị viên.",
     "startFailed": "Không bắt đầu chấm điểm được. Thử lại.",
     "resultError": {
       "NO_TEXT": "File CV hoặc JD không có lớp văn bản.",
@@ -253,6 +253,15 @@
     "coverage": "Must-have Coverage: {percent}% ({matched}/{all})",
     "matched": "Đã khớp: {skills}",
     "missing": "Còn thiếu: {skills}",
+    "match": "{mustHave}: {cvSkill} trong CV ({method})",
+    "matchMethod": {
+      "EXACT": "khớp chính xác",
+      "ALIAS": "qua alias",
+      "SEMANTIC": "theo nghĩa, độ tương đồng {similarity}"
+    },
+    "timeline": "Timeline kinh nghiệm: tổng {years} năm",
+    "timelineEntry": "{title} · {company} ({start} – {end}): {months} tháng",
+    "timelineUnreadable": "Không tính được: {title} · {company} ({start} – {end})",
     "reasons": "Lý do chấm từng trục",
     "noEvidence": "Không có bằng chứng"
   },

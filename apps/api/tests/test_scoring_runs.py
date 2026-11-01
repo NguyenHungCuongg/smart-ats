@@ -19,13 +19,25 @@ from app import events, scoring_runs, storage
 from app.auth import _redis
 from app.db import tenant_session
 from app.main import app
-from smart_ats_scoring import pricing
+from smart_ats_scoring import embedding, pricing
+from smart_ats_scoring.embedding import EmbeddingResult
+from smart_ats_scoring.llm import Usage
 from tests.test_jobs import FakeLlm, UnusableLlm, User, make_user
 from tests.test_uploads import PROFILE, docx
 
 pytestmark = pytest.mark.usefixtures("database")
 
 MODEL = "test-reasoning"
+EMBEDDING_MODEL = "test-embedding"
+
+
+def calibrate_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EMBEDDING_MODEL names a model with a price and a similarity threshold."""
+    monkeypatch.setenv("EMBEDDING_MODEL", EMBEDDING_MODEL)
+    monkeypatch.setitem(
+        pricing.PRICES, EMBEDDING_MODEL, pricing.Price(Decimal("1"), Decimal("1"), Decimal(0))
+    )
+    monkeypatch.setitem(embedding.THRESHOLDS, EMBEDDING_MODEL, 0.9)
 
 
 @pytest.fixture(autouse=True)
@@ -39,6 +51,7 @@ def reasoning_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(
         pricing.PRICES, MODEL, pricing.Price(Decimal("2"), Decimal("0.2"), Decimal("10"))
     )
+    calibrate_embedding(monkeypatch)
 
 
 @pytest.fixture(autouse=True)
@@ -178,8 +191,9 @@ async def test_starting_a_run_freezes_the_job_and_enqueues_each_application(
         "running": True,
         "weights": {"technical": 55, "soft_skills": 15, "experience": 30},
         "model": MODEL,
-        "prompt_version": "v1",
-        "rubric_version": "v0",
+        "embedding_model": EMBEDDING_MODEL,
+        "prompt_version": "v2",
+        "rubric_version": "v1",
         "created_at": None,
         "completed_at": None,
         "results": None,
@@ -216,6 +230,35 @@ def llm(monkeypatch: pytest.MonkeyPatch) -> FakeLlm:
     return fake
 
 
+class FakeEmbedder:
+    """Embeds each pair in `same` to one vector, every other string to a vector of its own."""
+
+    model = EMBEDDING_MODEL
+
+    def __init__(self, same: dict[str, str] | None = None) -> None:
+        self.same = same or {}
+        self.calls: list[list[str]] = []
+
+    def embed(self, texts: list[str]) -> EmbeddingResult:
+        self.calls.append(texts)
+        keys = [self.same.get(text, text) for text in texts]
+        axes = sorted(set(keys))
+        return EmbeddingResult(
+            [[float(axis == key) for axis in axes] for key in keys],
+            Usage(EMBEDDING_MODEL, 30, 0, 0),
+        )
+
+
+@pytest.fixture(autouse=True)
+def embedder(monkeypatch: pytest.MonkeyPatch) -> FakeEmbedder:
+    fake = FakeEmbedder()
+    # Only the run's own embedding model, as for the LLM.
+    monkeypatch.setattr(
+        scoring_runs, "embedder_from_env", lambda model: {EMBEDDING_MODEL: fake}[model]
+    )
+    return fake
+
+
 def run_scoring(enqueued: list[tuple[str, ...]]) -> None:
     while enqueued:
         scoring_runs.score_application.apply(args=enqueued.pop(0)).get()
@@ -228,12 +271,20 @@ async def test_scoring_writes_the_axis_scores_coverage_and_fit_gap_report(
     job: str,
     application: dict[str, str],
     llm: FakeLlm,
+    embedder: FakeEmbedder,
     enqueued: list[tuple[str, ...]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     run_id = (await start(client, recruiter, job)).json()["run_id"]
-    # The task scores with the run's model, whatever the environment says by now.
+    # The task scores with the run's models, whatever the environment says by now.
     monkeypatch.setenv("LLM_REASONING_MODEL", "changed-model")
+    monkeypatch.setenv("EMBEDDING_MODEL", "changed-embedding")
+    # "nay" runs to the day the run was created, not to the day its task runs.
+    query(
+        recruiter,
+        "UPDATE scoring_runs SET created_at = '2024-06-15T09:00:00Z' WHERE id = :id RETURNING id",
+        id=run_id,
+    )
 
     run_scoring(enqueued)
 
@@ -263,9 +314,29 @@ async def test_scoring_writes_the_axis_scores_coverage_and_fit_gap_report(
         "experience_score": 50,
         "total_score": 55.5,
         "must_have_coverage": 0.5,
-        "must_have_detail": {"matched": ["Python"], "missing": ["PostgreSQL"]},
+        "must_have_detail": {
+            "matched": ["Python"],
+            "missing": ["PostgreSQL"],
+            "matches": [
+                {"must_have": "Python", "cv_skill": "Python", "method": "EXACT", "similarity": None}
+            ],
+        },
         "grounding_rate": 0.8,
         "error_code": None,
+    }
+    # PROFILE's Backend Developer at Acme, 03/2021 to "nay": to June 2024.
+    assert result["experience_detail"] == {
+        "entries": [
+            {
+                "company": "Acme",
+                "title": "Backend Developer",
+                "start": "03/2021",
+                "end": "nay",
+                "months": 40,
+            }
+        ],
+        "total_months": 40,
+        "unreadable": [],
     }
     report = result["fit_gap_report"]
     assert [
@@ -282,14 +353,75 @@ async def test_scoring_writes_the_axis_scores_coverage_and_fit_gap_report(
         "grade": 3,
         "reason": None,
     }
-    [entry] = query(recruiter, "SELECT user_id, feature, model, ref_type FROM ai_usage_entries")
-    assert entry == {
-        "user_id": recruiter.id,
-        "feature": "SCORING",
-        "model": MODEL,
-        "ref_type": "score_result",
-    }
+    # PostgreSQL was left after exact and alias matching: one embedding call, skill names only.
+    assert [sorted(sent) for sent in embedder.calls] == [["Docker", "PostgreSQL", "Python"]]
+    [result_row] = query(recruiter, "SELECT id FROM score_results")
+    entries = query(
+        recruiter, "SELECT user_id, feature, model, ref_type, ref_id FROM ai_usage_entries"
+    )
+    assert sorted(entries, key=lambda e: e["feature"]) == [
+        {
+            "user_id": recruiter.id,
+            "feature": feature,
+            "model": model,
+            "ref_type": "score_result",
+            "ref_id": result_row["id"],
+        }
+        for feature, model in (("EMBEDDING", EMBEDDING_MODEL), ("SCORING", MODEL))
+    ]
     assert run["id"] == run_id
+
+
+@pytest.mark.usefixtures("redis", "llm")
+async def test_a_must_have_matched_by_meaning_shows_the_cv_skill_and_similarity(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    application: dict[str, str],
+    enqueued: list[tuple[str, ...]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeEmbedder({"Postgres DB": "PostgreSQL"})
+    monkeypatch.setattr(scoring_runs, "embedder_from_env", lambda model: fake)
+    query(
+        recruiter,
+        "UPDATE cv_documents SET parsed_profile = jsonb_set(parsed_profile, '{skills,hard}',"
+        '  \'["Python", "Postgres DB"]\') RETURNING id',
+    )
+    await start(client, recruiter, job)
+
+    run_scoring(enqueued)
+
+    [result] = (await latest(client, recruiter, job)).json()["results"]
+    assert result["must_have_coverage"] == 1
+    assert result["must_have_detail"]["matches"][1] == {
+        "must_have": "PostgreSQL",
+        "cv_skill": "Postgres DB",
+        "method": "SEMANTIC",
+        "similarity": 1.0,
+    }
+
+
+@pytest.mark.usefixtures("redis", "application", "llm")
+async def test_no_embedding_is_billed_when_every_must_have_matched_without_it(
+    client: AsyncClient,
+    recruiter: User,
+    job: str,
+    embedder: FakeEmbedder,
+    enqueued: list[tuple[str, ...]],
+) -> None:
+    # Python alone is required, and the CV lists it.
+    query(
+        recruiter,
+        "UPDATE jobs SET criteria = jsonb_set(criteria, '{skills,1,must_have}', 'false')"
+        " RETURNING id",
+    )
+    await start(client, recruiter, job)
+
+    run_scoring(enqueued)
+
+    assert embedder.calls == []
+    assert query(recruiter, "SELECT feature FROM ai_usage_entries") == [{"feature": "SCORING"}]
 
 
 async def test_job_without_confirmed_criteria_cannot_be_scored(
@@ -349,14 +481,25 @@ async def test_concurrent_starts_create_one_run(
 
 
 @pytest.mark.usefixtures("application")
-async def test_model_without_a_price_is_refused_before_any_run_is_created(
+@pytest.mark.parametrize(
+    ("variable", "model"),
+    [
+        ("LLM_REASONING_MODEL", "unpriced-model"),
+        ("EMBEDDING_MODEL", "unpriced-embedding"),
+        # Priced, but with no similarity threshold to match must-haves on.
+        ("EMBEDDING_MODEL", MODEL),
+    ],
+)
+async def test_model_without_a_price_or_threshold_is_refused_before_any_run_is_created(
     client: AsyncClient,
     recruiter: User,
     job: str,
     enqueued: list[tuple[str, ...]],
     monkeypatch: pytest.MonkeyPatch,
+    variable: str,
+    model: str,
 ) -> None:
-    monkeypatch.setenv("LLM_REASONING_MODEL", "unpriced-model")
+    monkeypatch.setenv(variable, model)
 
     assert (await start(client, recruiter, job)).status_code == 503
     assert query(recruiter, "SELECT id FROM scoring_runs") == []
@@ -453,8 +596,8 @@ async def test_run_whose_every_result_failed_is_still_partial(
     assert [(r["status"], r["error_code"]) for r in run["results"]] == [
         ("FAILED", "SCORING_FAILED")
     ]
-    # Nothing came back to bill.
-    assert query(recruiter, "SELECT id FROM ai_usage_entries") == []
+    # The LLM billed nothing; the embedding call before it is billed all the same (FR-C1.4).
+    assert query(recruiter, "SELECT feature FROM ai_usage_entries") == [{"feature": "EMBEDDING"}]
 
 
 @pytest.mark.usefixtures("redis")
@@ -479,14 +622,16 @@ async def test_billed_response_it_cannot_use_fails_the_result_and_is_recorded_on
     ]
     [result] = query(recruiter, "SELECT id FROM score_results")
     assert query(
-        recruiter, "SELECT feature, input_tokens, ref_type, ref_id FROM ai_usage_entries"
+        recruiter,
+        "SELECT feature, input_tokens, ref_type, ref_id FROM ai_usage_entries ORDER BY feature",
     ) == [
         {
-            "feature": "SCORING",
-            "input_tokens": 1000,
+            "feature": feature,
+            "input_tokens": tokens,
             "ref_type": "score_result",
             "ref_id": result["id"],
         }
+        for feature, tokens in (("EMBEDDING", 30), ("SCORING", 1000))
     ]
 
 
@@ -505,7 +650,7 @@ async def test_redelivered_task_scores_nothing_twice(
     scoring_runs.score_application.apply(args=args).get()
 
     assert llm.calls == 1
-    assert len(query(recruiter, "SELECT id FROM ai_usage_entries")) == 1
+    assert len(query(recruiter, "SELECT id FROM ai_usage_entries")) == 2  # embedding and scoring
     assert len(query(recruiter, "SELECT id FROM score_results")) == 1
     assert (await latest(client, recruiter, job)).json()["status"] == "COMPLETED"
 
@@ -617,4 +762,7 @@ async def test_report_missing_a_fit_gap_part_fails_the_result_and_is_billed(
         "SCORING_FAILED",
         None,
     )
-    assert len(query(recruiter, "SELECT id FROM ai_usage_entries")) == 1
+    assert query(recruiter, "SELECT feature FROM ai_usage_entries ORDER BY feature") == [
+        {"feature": "EMBEDDING"},
+        {"feature": "SCORING"},
+    ]

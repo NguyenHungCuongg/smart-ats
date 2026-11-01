@@ -9,6 +9,8 @@ import json
 import logging
 import os
 import uuid
+from collections.abc import Callable
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Literal
 
@@ -20,8 +22,9 @@ from sqlalchemy.orm import Session
 from app import events, outbox, storage, usage
 from app.jobs import JobReader, LockedJob, Weights
 from app.worker import tenant_task
+from smart_ats_scoring.embedding import Embedder, EmbeddingResult, embedder_from_env, threshold
 from smart_ats_scoring.extraction import ExtractionError, extract_text
-from smart_ats_scoring.llm import UnusableResponse, llm_from_env
+from smart_ats_scoring.llm import UnusableResponse, Usage, llm_from_env
 from smart_ats_scoring.scoring import PROMPT_VERSION, RUBRIC_VERSION, score
 from smart_ats_scoring.scoring import Weights as ScoringWeights
 
@@ -51,7 +54,10 @@ class ScoreResult(BaseModel):
     experience_score: float | None
     total_score: float | None
     must_have_coverage: float | None
-    must_have_detail: dict[str, list[str]] | None
+    # `matched` and `missing`, plus from v1 `matches`: how each must-have matched.
+    must_have_detail: dict[str, Any] | None
+    # From v1: the months of each work_history entry, their total and the unreadable ones.
+    experience_detail: dict[str, Any] | None
     rubric_grades: dict[str, Any] | None
     fit_gap_report: dict[str, Any] | None
     grounding_rate: float | None
@@ -65,6 +71,8 @@ class ScoringRun(BaseModel):
     running: bool
     weights: Weights
     model: str
+    # None for a run scored by v0.
+    embedding_model: str | None
     prompt_version: str
     rubric_version: str
     created_at: datetime
@@ -99,28 +107,37 @@ async def create(job_id: uuid.UUID, auth: LockedJob) -> RunCreated:
     if checks.running:
         raise HTTPException(status.HTTP_409_CONFLICT, "The Job is already being scored")
     model = os.environ["LLM_REASONING_MODEL"]
-    if not usage.priced(model):
-        # A server configuration error.
+    embedding_model = os.environ["EMBEDDING_MODEL"]
+    # Server configuration errors.
+    if not (usage.priced(model) and usage.priced(embedding_model)):
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "The AI model has no price in the ledger"
+        )
+    if threshold(embedding_model) is None:
+        log.error("no similarity threshold for model %s in THRESHOLDS", embedding_model)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "The embedding model has no similarity threshold"
         )
 
     run_id: uuid.UUID = (
         await auth.db.execute(
             text(
                 "INSERT INTO scoring_runs (tenant_id, job_id, trigger_mode, weights,"
-                "  criteria_snapshot, model, prompt_version, rubric_version, status, created_by)"
+                "  criteria_snapshot, model, embedding_model, prompt_version, rubric_version,"
+                "  status, created_by)"
                 " SELECT tenant_id, id, 'MANUAL',"
                 "  jsonb_build_object('technical', weight_technical,"
                 "    'soft_skills', weight_soft_skills, 'experience', weight_experience),"
                 # Title and level too: the Experience rubric weighs the level.
                 "  criteria || jsonb_build_object('title', title, 'level', level),"
-                "  :model, :prompt_version, :rubric_version, 'RUNNING', :user_id"
+                "  :model, :embedding_model, :prompt_version, :rubric_version, 'RUNNING',"
+                "  :user_id"
                 " FROM jobs WHERE id = :id RETURNING id"
             ),
             {
                 "id": job_id,
                 "model": model,
+                "embedding_model": embedding_model,
                 "prompt_version": PROMPT_VERSION,
                 "rubric_version": RUBRIC_VERSION,
                 "user_id": auth.user_id,
@@ -153,7 +170,8 @@ async def latest(job_id: uuid.UUID, auth: JobReader) -> ScoringRun:
     run = (
         await auth.db.execute(
             text(
-                "SELECT r.id, r.status, r.weights, r.model, r.prompt_version, r.rubric_version,"
+                "SELECT r.id, r.status, r.weights, r.model, r.embedding_model,"
+                "  r.prompt_version, r.rubric_version,"
                 f"  r.created_at, r.completed_at, {_RUNNING} AS running"
                 " FROM scoring_runs r WHERE r.job_id = :job_id"
                 " ORDER BY r.created_at DESC, r.id DESC LIMIT 1"
@@ -168,8 +186,8 @@ async def latest(job_id: uuid.UUID, auth: JobReader) -> ScoringRun:
             "SELECT s.application_id, c.full_name, s.status, s.cv_document_id,"
             "  a.cv_document_id AS current_cv_document_id, s.technical_score,"
             "  s.soft_skills_score, s.experience_score, s.total_score, s.must_have_coverage,"
-            "  s.must_have_detail, s.rubric_grades, s.fit_gap_report, s.grounding_rate,"
-            "  s.error_code"
+            "  s.must_have_detail, s.experience_detail, s.rubric_grades, s.fit_gap_report,"
+            "  s.grounding_rate, s.error_code"
             " FROM score_results s JOIN applications a ON a.id = s.application_id"
             "  JOIN candidates c ON c.id = a.candidate_id"
             " WHERE s.scoring_run_id = :run_id ORDER BY a.created_at DESC"
@@ -184,6 +202,20 @@ async def latest(job_id: uuid.UUID, auth: JobReader) -> ScoringRun:
     )
 
 
+class _Billed:
+    """An Embedder that bills each call as it returns: the LLM call after it may fail, and the
+    embedding is billed all the same (FR-C1.4)."""
+
+    def __init__(self, embedder: Embedder, bill: Callable[[Usage], None]) -> None:
+        self.model = embedder.model
+        self.embedder, self.bill = embedder, bill
+
+    def embed(self, texts: list[str]) -> EmbeddingResult:
+        result = self.embedder.embed(texts)
+        self.bill(result.usage)
+        return result
+
+
 @tenant_task(name="scoring_runs.score_application", queue="llm")
 def score_application(
     tenant_id: uuid.UUID, session: Session, run_id: str, application_id: str
@@ -193,7 +225,8 @@ def score_application(
     # jobs.parse; split into claim / call / write transactions if connections run short.
     row = session.execute(
         text(
-            "SELECT s.id, r.job_id, r.criteria_snapshot, r.weights, r.model, r.created_by,"
+            "SELECT s.id, r.job_id, r.criteria_snapshot, r.weights, r.model,"
+            "  r.embedding_model, r.created_at AS run_created_at, r.created_by,"
             "  d.parsed_profile, d.storage_key AS cv_key, j.jd_document_key AS jd_key"
             " FROM score_results s JOIN scoring_runs r ON r.id = s.scoring_run_id"
             "  JOIN cv_documents d ON d.id = s.cv_document_id JOIN jobs j ON j.id = r.job_id"
@@ -223,6 +256,14 @@ def score_application(
                 cv_text,
                 jd_text,
                 llm_from_env(row.model),
+                _Billed(
+                    embedder_from_env(row.embedding_model),
+                    lambda billed: usage.record(
+                        session, row.created_by, "EMBEDDING", billed, "score_result", row.id
+                    ),
+                ),
+                # The same "nay" for every result of the run, whenever its task runs.
+                row.run_created_at.date(),
                 ScoringWeights(**row.weights),
             )
         except Exception as e:
@@ -242,6 +283,7 @@ def score_application(
                 "  soft_skills_score = :soft_skills, experience_score = :experience,"
                 "  total_score = :total, must_have_coverage = :coverage,"
                 "  must_have_detail = CAST(:detail AS jsonb),"
+                "  experience_detail = CAST(:timeline AS jsonb),"
                 "  rubric_grades = CAST(:rubric AS jsonb),"
                 "  fit_gap_report = CAST(:report AS jsonb), grounding_rate = :grounding"
                 " WHERE id = :id"
@@ -253,7 +295,8 @@ def score_application(
                 "experience": result.experience,
                 "total": result.total,
                 "coverage": coverage.ratio,
-                "detail": json.dumps({"matched": coverage.matched, "missing": coverage.missing}),
+                "detail": json.dumps(coverage.detail),
+                "timeline": json.dumps(asdict(result.timeline)),
                 "rubric": json.dumps(result.rubric),
                 "report": json.dumps(result.fit_gap_report),
                 "grounding": result.grounding_rate,

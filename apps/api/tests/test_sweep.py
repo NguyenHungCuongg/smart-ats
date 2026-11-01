@@ -17,7 +17,7 @@ from app.db import sync_engine, tenant_session
 from app.main import app
 from smart_ats_scoring import pricing
 from tests.test_jobs import JD, PARSED, FakeLlm, User, make_user
-from tests.test_scoring_runs import MODEL, add_application
+from tests.test_scoring_runs import MODEL, add_application, calibrate_embedding
 from tests.test_scoring_runs import make_job as make_confirmed_job
 from tests.test_tenancy import owner_engine
 from tests.test_uploads import CV
@@ -33,6 +33,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(
         pricing.PRICES, MODEL, pricing.Price(Decimal("2"), Decimal("0.2"), Decimal("10"))
     )
+    calibrate_embedding(monkeypatch)
 
 
 @pytest.fixture(autouse=True)

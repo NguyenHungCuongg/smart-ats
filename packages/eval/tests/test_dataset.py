@@ -1,10 +1,13 @@
 import json
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from smart_ats_eval import dataset
+
+DATASETS = Path(__file__).parents[1] / "datasets"
 
 
 def valid_raw() -> dict[str, Any]:
@@ -21,7 +24,14 @@ def valid_raw() -> dict[str, Any]:
         "cvs": cvs,
         "top5": {"r1": ids[:5], "r2": ids[1:]},
     }
-    return {"name": "t", "version": 1, "for_report": False, "raters": ["r1", "r2"], "jobs": [job]}
+    return {
+        "name": "t",
+        "version": 1,
+        "for_report": False,
+        "as_of": "2026-10-13",
+        "raters": ["r1", "r2"],
+        "jobs": [job],
+    }
 
 
 def write(tmp_path: Path, raw: dict[str, Any]) -> Path:
@@ -38,6 +48,25 @@ def test_load_reads_labels_and_each_raters_top5(tmp_path: Path) -> None:
     assert job.split == "dev"
     assert job.cvs[0].hr_score == 3.5
     assert job.top5["r2"] == ("cv1", "cv2", "cv3", "cv4", "cv5")
+    # The day the CVs were collected, where an open end ("nay") runs to.
+    assert job.as_of == date(2026, 10, 13)
+
+
+@pytest.mark.parametrize("as_of", [None, "13/10/2026"])
+def test_load_rejects_a_missing_or_unreadable_as_of(tmp_path: Path, as_of: str | None) -> None:
+    raw = valid_raw()
+    if as_of is None:
+        del raw["as_of"]
+    else:
+        raw["as_of"] = as_of
+
+    with pytest.raises(ValueError, match="as_of"):
+        dataset.load(write(tmp_path, raw))
+
+
+@pytest.mark.parametrize("path", sorted(DATASETS.glob("*.json")), ids=lambda path: path.name)
+def test_every_dataset_in_the_repo_loads(path: Path) -> None:
+    assert dataset.load(path).jobs
 
 
 def test_load_rejects_a_label_outside_1_to_5(tmp_path: Path) -> None:

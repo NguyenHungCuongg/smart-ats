@@ -223,7 +223,7 @@
     "noApplications": "The Job has no Applications yet.",
     "running": "Scoring…",
     "notEligible": "The Job isn't ready to be scored, or is being scored.",
-    "unpricedModel": "The AI model isn't in the price table yet, so it wasn't called. Contact your administrator.",
+    "unpricedModel": "An AI model isn't in the price table or has no similarity threshold yet, so it wasn't called. Contact your administrator.",
     "startFailed": "Couldn't start scoring. Try again.",
     "resultError": {
       "NO_TEXT": "The CV or JD file has no text layer.",
@@ -253,6 +253,15 @@
     "coverage": "Must-have Coverage: {percent}% ({matched}/{all})",
     "matched": "Matched: {skills}",
     "missing": "Missing: {skills}",
+    "match": "{mustHave}: {cvSkill} in the CV ({method})",
+    "matchMethod": {
+      "EXACT": "exact",
+      "ALIAS": "alias",
+      "SEMANTIC": "by meaning, similarity {similarity}"
+    },
+    "timeline": "Experience timeline: {years} years in total",
+    "timelineEntry": "{title} · {company} ({start} – {end}): {months, plural, one {# month} other {# months}}",
+    "timelineUnreadable": "Couldn't count: {title} · {company} ({start} – {end})",
     "reasons": "Reasons per axis",
     "noEvidence": "No Evidence"
   },

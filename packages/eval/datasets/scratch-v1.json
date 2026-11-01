@@ -2,6 +2,7 @@
   "name": "scratch",
   "version": 1,
   "for_report": false,
+  "as_of": "2026-10-13",
   "note": "Dữ liệu tạm do nhóm tự viết và tự gán nhãn để phát triển harness. Mọi CV đều hư cấu, không chứa dữ liệu cá nhân thật. KHÔNG dùng cho báo cáo.",
   "raters": ["r1", "r2"],
   "jobs": [

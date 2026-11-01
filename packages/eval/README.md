@@ -8,7 +8,7 @@ uv run python -m smart_ats_eval packages/eval/datasets/scratch-v1.json --split t
 uv run pytest packages/eval
 ```
 
-The table always has the Baseline row. The Scoring v0 row (the core of `packages/scoring`: Must-have Coverage, anchored rubric, grounding) calls the OpenAI API, so it runs only with `OPENAI_API_KEY`, `LLM_EXTRACTION_MODEL` and `LLM_REASONING_MODEL` set, for example `uv run --env-file .env python -m smart_ats_eval ...`; without a key it is skipped with a note on stderr. Each JD and CV Document is parsed once per invocation, so `--runs` repeats only the scoring. Both models must have a price in `smart_ats_scoring.pricing.PRICES`, or the run stops before any call.
+The table always has the Baseline row. The Config D row runs Scoring v1, the code the product scores with (`packages/scoring`: Must-have Coverage with semantic matching, Experience timeline, anchored rubric, grounding). It calls the provider's API, so it runs only with the API key of `LLM_PROVIDER` and with `LLM_EXTRACTION_MODEL`, `LLM_REASONING_MODEL` and `EMBEDDING_MODEL` set, for example `uv run --env-file .env python -m smart_ats_eval ...`; without a key it is skipped with a note on stderr. Each JD and CV Document is parsed once per invocation, so `--runs` repeats only the scoring. Every model must have a price in `smart_ats_scoring.pricing.PRICES`, and the embedding model a similarity threshold in `smart_ats_scoring.embedding.THRESHOLDS`, or the run stops before any call. The Scoring v0 row it replaces is reproduced by checking out the tag `scoring-v0`.
 
 The default split is `dev`. Use `test` only for the frozen run the plan describes. Stability needs `--runs 2` or more; the plan (§4) sets the run count for the report.
 
@@ -29,6 +29,7 @@ A file is named `<name>-v<version>.json`, and that name and version also go insi
   "name": "scratch",
   "version": 1,
   "for_report": false,
+  "as_of": "2026-10-13",
   "note": "free text: provenance, caveats",
   "raters": ["r1", "r2"],
   "jobs": [
@@ -51,15 +52,16 @@ A file is named `<name>-v<version>.json`, and that name and version also go insi
 }
 ```
 
-| Field          | Rule                                                                                         |
-| -------------- | -------------------------------------------------------------------------------------------- |
-| `for_report`   | `true` only for a dataset that may be cited in the report                                    |
-| `raters`       | Exactly two distinct ids, both used in every `labels` and `top5`                             |
-| `jobs[].split` | `dev` or `test`. The split is per Job, so the raters' Top 5 for a Job stays within one split |
-| `cvs[].source` | `real` (consented and anonymised before it enters the repo) or `synthetic`                   |
-| `cvs[].labels` | The 1–5 label each rater gives the (Job, CV Document) pair, as an integer                    |
-| `top5`         | Each rater's own ordered Top 5: five distinct CV ids of this Job, best first                 |
-| `cvs[].id`     | Unique within its Job                                                                        |
+| Field          | Rule                                                                                                                                                                               |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `for_report`   | `true` only for a dataset that may be cited in the report                                                                                                                          |
+| `as_of`        | The day the CVs were collected, as `YYYY-MM-DD`. Required: an open end in a work history ("nay", "present") runs to it, so the table gives the same numbers whatever day it is run |
+| `raters`       | Exactly two distinct ids, both used in every `labels` and `top5`                                                                                                                   |
+| `jobs[].split` | `dev` or `test`. The split is per Job, so the raters' Top 5 for a Job stays within one split                                                                                       |
+| `cvs[].source` | `real` (consented and anonymised before it enters the repo) or `synthetic`                                                                                                         |
+| `cvs[].labels` | The 1–5 label each rater gives the (Job, CV Document) pair, as an integer                                                                                                          |
+| `top5`         | Each rater's own ordered Top 5: five distinct CV ids of this Job, best first                                                                                                       |
+| `cvs[].id`     | Unique within its Job                                                                                                                                                              |
 
 The loader rejects a file that breaks any of these rules.
 
@@ -75,7 +77,7 @@ Each metric is computed per run and per Job, then averaged.
 | P@5          | Share of the Config's first five that are in the rater's Top 5, averaged over raters                                                                                                                                                                                                                                                        |
 | Grounding    | Share of Evidence quotes the Config made that pass the grounding rule of `smart_ats_scoring.scoring` (`is_grounded`), the rule the product applies: found as whole words in the CV Document (a Gap may also use the JD Document), ignoring case, diacritics, punctuation and spacing; empty, stopword-only and too short quotes never count |
 | Stability    | Sample standard deviation of each Application's Total across runs, averaged over Applications                                                                                                                                                                                                                                               |
-| Cost/App     | Mean `cost_usd` per Application, over the Scores that report one. Scoring v0 counts the Application's CV parse, its share of the JD parse and its scoring, priced from `smart_ats_scoring.pricing.PRICES`                                                                                                                                   |
+| Cost/App     | Mean `cost_usd` per Application, over the Scores that report one. Config D counts the Application's CV parse, its share of the JD parse, its embedding call and its scoring, priced from `smart_ats_scoring.pricing.PRICES`                                                                                                                 |
 
 With `LLM_PROVIDER=gemini` (free testing, `.env.example`) the run exits if any CV Document is `real`: Gemini's free tier trains on prompts.
 
@@ -83,4 +85,4 @@ The header also shows the weighted Cohen's Kappa (quadratic) between the two rat
 
 ## Adding a Config
 
-Implement `harness.Config` and add an instance in `configs()` in `src/smart_ats_eval/__main__.py`. `score(job)` returns exactly one `harness.ScoreResult` per CV Document, carrying `total`, a `grounded` flag per Evidence quote (from the rule of `smart_ats_scoring.scoring`, as `ScoringV0` takes them from its result; never a second rule) and `cost_usd` when it is known. Set `model`, `prompt_version` and `rubric_version` so the table records them. Neither the metrics nor the table need changes. `baseline.py` (Okapi BM25 of the JD against the Job's CVs) is the smallest example.
+Implement `harness.Config` and add an instance in `configs()` in `src/smart_ats_eval/__main__.py`. `score(job)` returns exactly one `harness.ScoreResult` per CV Document, carrying `total`, a `grounded` flag per Evidence quote (from the rule of `smart_ats_scoring.scoring`, as `ConfigD` takes them from its result; never a second rule) and `cost_usd` when it is known. Set `model`, `prompt_version` and `rubric_version` so the table records them. Neither the metrics nor the table need changes. `baseline.py` (Okapi BM25 of the JD against the Job's CVs) is the smallest example.

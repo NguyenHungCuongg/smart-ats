@@ -168,14 +168,21 @@ Các tra cứu trước khi biết tenant (đăng nhập, đăng nhập Google, 
 
 ### 5.2. Scoring Run
 
-1. `POST /jobs/{id}/scoring-runs` đóng băng trọng số, criteria, model, `prompt_version` và `rubric_version` vào `scoring_runs`, rồi enqueue `score_application(tenant_id, run_id, application_id)` cho mỗi Application.
+1. `POST /jobs/{id}/scoring-runs` đóng băng trọng số, criteria, model chấm, model embedding, `prompt_version` và `rubric_version` vào `scoring_runs`, rồi enqueue `score_application(tenant_id, run_id, application_id)` cho mỗi Application. Model chấm hoặc model embedding chưa có giá, hay model embedding chưa có ngưỡng tương đồng, thì trả 503 và không tạo dòng nào.
 2. Mỗi task:
-   1. tính Must-have Coverage tất định: chuẩn hóa kỹ năng → khớp alias → độ tương đồng embedding trên ngưỡng;
-   2. yêu cầu LLM chấm rubric có neo 1–5 kèm Evidence trích nguyên văn, với cấu hình tái lập của FR-A1.3, theo JSON Schema, chỉ trên Blind Profile;
-   3. đối chiếu Evidence với văn bản gốc và loại các quote không tìm thấy;
-   4. tính điểm từng trục và Total;
-   5. **upsert** theo `(scoring_run_id, application_id)`;
-   6. ghi một dòng `ai_usage_entries`.
+   1. tính Must-have Coverage tất định. Mỗi must-have tách thành các lựa chọn theo "or" / "hoặc"; must-have khớp khi một lựa chọn của nó khớp một kỹ năng trong CV (hard, soft, tools, languages), qua ba bước theo thứ tự:
+      1. chuẩn hóa (bỏ hoa thường, dấu, dấu câu) rồi khớp chính xác (`EXACT`);
+      2. khớp alias qua bảng viết tay (`ALIAS`);
+      3. khớp theo nghĩa (`SEMANTIC`): cosine giữa embedding của lựa chọn và của từng kỹ năng trong CV; khớp khi kỹ năng gần nhất đạt ngưỡng của model embedding đã đóng băng. Mỗi model có ngưỡng riêng, hiệu chỉnh trên tập cặp kỹ năng có nhãn (`smart_ats_scoring.embedding.THRESHOLDS`); đổi ngưỡng là nâng `rubric_version`.
+
+      Embedder được gọi tối đa một lần mỗi Application, chung cho mọi lựa chọn còn chưa khớp và mọi kỹ năng trong CV, và chỉ khi còn ít nhất một must-have chưa khớp sau hai bước đầu. Chỉ tên kỹ năng lấy từ Blind Profile được gửi đi. Vector không được lưu: các cột embedding của ERD dành cho Rediscovery (FR-A1.6);
+
+   2. tính Experience timeline tất định từ `work_history`: số tháng của mỗi mục, tổng số tháng sau khi gộp các khoảng chồng nhau, và các mục không tính được (mốc thiếu, không đọc được, hoặc kết thúc trước khi bắt đầu). Mốc mở ("nay", "present"…) tính tới ngày tạo run, nên cùng một run luôn cho cùng số tháng;
+   3. yêu cầu LLM chấm rubric có neo 1–5 kèm Evidence trích nguyên văn, với cấu hình tái lập của FR-A1.3, theo JSON Schema, chỉ trên Blind Profile. Must-have Coverage (kèm kỹ năng CV và cách khớp) và timeline được đưa vào như dữ kiện đã tính; neo của trục Experience dựa trên số tháng đã tính, LLM chỉ chọn mục nào liên quan;
+   4. đối chiếu Evidence với văn bản gốc và loại các quote không tìm thấy;
+   5. tính điểm từng trục và Total;
+   6. **upsert** theo `(scoring_run_id, application_id)`;
+   7. ghi một dòng `ai_usage_entries` cho lời gọi chấm, và một dòng `EMBEDDING` cho lời gọi Embedder nếu có, ghi ngay khi lời gọi trả về nên vẫn còn khi lời gọi chấm sau đó lỗi (FR-C1.4).
 3. Task bị retry hoặc giao lại sẽ ghi đè dòng của chính nó, không bao giờ tạo bản trùng.
 
 ### 5.3. Campaign với Checkpoint bền vững (ADR-0004)
