@@ -24,6 +24,9 @@ PRICES: dict[str, Price] = {
     # other Gemini model, whose free tier may not exist, stays unpriced and is refused.
     "gemini-3.5-flash": Price(Decimal(0), Decimal(0), Decimal(0)),
     "gemini-3.5-flash-lite": Price(Decimal(0), Decimal(0), Decimal(0)),
+    "gemini-embedding-2": Price(Decimal(0), Decimal(0), Decimal(0)),
+    # OpenAI Standard tier, as of 2026-11-01; an embedding bills input tokens only.
+    "text-embedding-3-large": Price(Decimal("0.13"), Decimal("0.13"), Decimal(0)),
     # OpenAI Standard tier, short context (<= 272K input tokens), as of 2026-10-16.
     # ponytail: cache writes ($2.50 / $0.125) are billed here as plain input, since Usage does
     # not count them apart; split them out if the ledger drifts from the invoice.
@@ -34,9 +37,14 @@ PRICES: dict[str, Price] = {
 _PER_TOKENS = 1_000_000
 
 
+def by_model[T](table: dict[str, T], model: str) -> T | None:
+    """The entry for model's name, matched like PRICES: a dated snapshot takes its model's."""
+    name = next((p for p in table if re.fullmatch(rf"{re.escape(p)}(-\d.*)?", model)), None)
+    return None if name is None else table[name]
+
+
 def price(model: str) -> Price | None:
-    name = next((p for p in PRICES if re.fullmatch(rf"{re.escape(p)}(-\d.*)?", model)), None)
-    return None if name is None else PRICES[name]
+    return by_model(PRICES, model)
 
 
 def cost(usage: Usage) -> Decimal:
