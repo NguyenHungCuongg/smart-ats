@@ -1,46 +1,10 @@
 import type { Metadata } from "next";
-import { cache } from "react";
+import { getLocale, getTranslations } from "next-intl/server";
 
-import { LOCALE_COOKIE, type Locale, decideLocale } from "../../../i18n/locale";
-import { CATALOGS } from "../../../i18n/messages";
+import type { Locale } from "../../../i18n/locale";
 import { buildJobAd, buildJobPostingJsonLd, getJobAdExcerpt } from "../../jobs/share";
-import { ApplyForm, type PublicJob } from "./form";
-
-export const fetchPublicJob = cache(async (slug: string): Promise<PublicJob | null> => {
-  const baseUrl =
-    process.env.INTERNAL_API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    (typeof window === "undefined" ? "http://127.0.0.1:8000" : "");
-  try {
-    const res = await fetch(`${baseUrl}/api/apply/${slug}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-});
-
-export function getPublicApplyUrl(slug: string): string {
-  const base = process.env.WEB_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "https://localhost";
-  return `${base.replace(/\/api\/?$/, "")}/apply/${slug}`;
-}
-
-export async function getPageLocale(): Promise<Locale> {
-  try {
-    const { cookies, headers } = await import("next/headers");
-    const cookieStore = await cookies();
-    const headerStore = await headers();
-    return decideLocale(
-      cookieStore.get(LOCALE_COOKIE)?.value,
-      headerStore.get("accept-language"),
-      true,
-    );
-  } catch {
-    return "vi";
-  }
-}
+import { ApplyForm } from "./form";
+import { fetchPublicJob, getPublicApplyUrl } from "./public-job";
 
 export async function generateMetadata({
   params,
@@ -49,17 +13,18 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const job = await fetchPublicJob(slug);
-  const locale = await getPageLocale();
-  const t = CATALOGS[locale].apply;
+  const t = await getTranslations("apply");
+  const tJobAd = await getTranslations("jobAd");
+  const locale = (await getLocale()) as Locale;
 
   if (!job) {
     return {
-      title: t.metaTitle,
+      title: t("metaTitle"),
     };
   }
 
   const publicUrl = getPublicApplyUrl(slug);
-  const jobAd = buildJobAd(job, locale, publicUrl);
+  const jobAd = buildJobAd(job, tJobAd, locale, publicUrl);
   const excerpt = getJobAdExcerpt(jobAd);
 
   return {
@@ -77,17 +42,18 @@ export async function generateMetadata({
 export default async function PublicApplyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const job = await fetchPublicJob(slug);
-  const locale = await getPageLocale();
+  const tJobAd = await getTranslations("jobAd");
+  const locale = (await getLocale()) as Locale;
   const publicUrl = getPublicApplyUrl(slug);
 
-  const jsonLd = job ? buildJobPostingJsonLd(job, publicUrl, locale) : null;
+  const jsonLd = job ? buildJobPostingJsonLd(job, publicUrl, tJobAd, locale) : null;
 
   return (
     <>
       {jsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
         />
       )}
       <ApplyForm slug={slug} initialJob={job} />

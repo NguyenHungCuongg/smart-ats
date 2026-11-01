@@ -1,4 +1,4 @@
-import { NextIntlClientProvider } from "next-intl";
+import { NextIntlClientProvider, createTranslator } from "next-intl";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -6,6 +6,20 @@ import type { Locale } from "../../../i18n/locale";
 import { CATALOGS } from "../../../i18n/messages";
 import { ApplyForm, type PublicJob } from "./form";
 import PublicApplyPage, { generateMetadata } from "./page";
+import { fetchPublicJob, getPublicApplyUrl } from "./public-job";
+
+let currentLocale: Locale = "en";
+
+vi.mock("next-intl/server", () => ({
+  getLocale: vi.fn(async () => currentLocale),
+  getTranslations: vi.fn(async (namespace: string) => {
+    return createTranslator({
+      locale: currentLocale,
+      messages: CATALOGS[currentLocale],
+      namespace: namespace as keyof (typeof CATALOGS)[typeof currentLocale],
+    });
+  }),
+}));
 
 const render = (locale: Locale) =>
   renderToStaticMarkup(
@@ -30,6 +44,7 @@ describe("PublicApplyPage server rendering and metadata", () => {
     title: "DevOps Engineer",
     status: "PUBLISHED",
     public_apply_enabled: true,
+    published_at: "2026-11-01T10:00:00Z",
     apply_deadline: "2026-12-31",
     location: "Hà Nội",
     work_mode: "REMOTE",
@@ -47,6 +62,7 @@ describe("PublicApplyPage server rendering and metadata", () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
+    currentLocale = "en";
   });
 
   test("renders JobPosting JSON-LD when Job is PUBLISHED", async () => {
@@ -70,6 +86,36 @@ describe("PublicApplyPage server rendering and metadata", () => {
     expect(html).toContain('"jobLocationType":"TELECOMMUTE"');
     expect(html).toContain('"title":"DevOps Engineer"');
     expect(html).not.toContain("baseSalary");
+  });
+
+  test("escapes script tags to prevent XSS in JSON-LD", async () => {
+    const xssJob: PublicJob = {
+      ...publishedJob,
+      title: 'DevOps Engineer </script><script>alert("xss")</script>',
+      criteria: {
+        skills: [{ name: "Kubernetes", must_have: true }],
+        responsibilities: ['Exploit </script><script>alert("xss")</script>'],
+      },
+    };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => xssJob,
+    });
+
+    const page = await PublicApplyPage({
+      params: Promise.resolve({ slug: "devops-engineer" }),
+    });
+
+    const html = renderToStaticMarkup(
+      <NextIntlClientProvider locale="en" messages={CATALOGS.en}>
+        {page}
+      </NextIntlClientProvider>,
+    );
+
+    // Verify <script> tag closure is safely escaped as \u003c/script
+    expect(html).toContain("\\u003c/script");
+    expect(html).not.toContain('</script><script>alert("xss")</script>');
   });
 
   test("does not render JSON-LD when Job is not PUBLISHED", async () => {
@@ -106,5 +152,28 @@ describe("PublicApplyPage server rendering and metadata", () => {
     expect(meta.openGraph?.title).toBe("DevOps Engineer");
     expect(meta.openGraph?.description).toBe(meta.description);
     expect(meta.openGraph?.images).toEqual([{ url: "https://example.com/logo.png" }]);
+  });
+});
+
+describe("public-job helpers", () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  test("getPublicApplyUrl builds URL from slug and base URL", () => {
+    const url = getPublicApplyUrl("senior-dev");
+    expect(url).toContain("/apply/senior-dev");
+  });
+
+  test("fetchPublicJob catches fetch errors, logs to console.error, and returns null", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    global.fetch = vi.fn().mockRejectedValue(new Error("Network failed"));
+
+    const res = await fetchPublicJob("failed-slug");
+    expect(res).toBeNull();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 });

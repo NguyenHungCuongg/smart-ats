@@ -102,7 +102,7 @@ class PublicJob(BaseModel):
     apply_deadline: date | None
     location: str | None
     work_mode: WorkMode | None
-    published_at: datetime | None = None
+    published_at: datetime | None
     criteria: dict[str, Any] | None
     tenant_name: str
     tenant_logo_url: str | None

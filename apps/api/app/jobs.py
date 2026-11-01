@@ -173,7 +173,7 @@ class Job(BaseModel):
     weights: Weights
     criteria_confirmed_at: datetime | None
     apply_deadline: date | None
-    published_at: datetime | None = None
+    published_at: datetime | None
     public_apply_enabled: bool
     public_slug: str | None
 

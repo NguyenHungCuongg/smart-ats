@@ -1,5 +1,5 @@
 import type { Locale } from "../../i18n/locale";
-import { CATALOGS } from "../../i18n/messages";
+import type { Translator } from "../../i18n/messages";
 
 export type JobAdCriteria = {
   skills?: { name: string; must_have?: boolean }[] | null;
@@ -11,13 +11,12 @@ export type JobAdInput = {
   location?: string | null;
   work_mode?: string | null;
   apply_deadline?: string | null;
-  status?: string | null;
-  public_slug?: string | null;
   criteria?: JobAdCriteria | null;
 };
 
 export type JobPostingInput = JobAdInput & {
   status: string;
+  public_apply_enabled?: boolean | null;
   published_at?: string | null;
   tenant_name?: string | null;
   tenant_logo_url?: string | null;
@@ -27,39 +26,39 @@ export type JobPostingInput = JobAdInput & {
  * Formats an apply deadline string according to locale (e.g. DD/MM/YYYY for vi, MM/DD/YYYY for en).
  */
 export function formatDeadline(deadline: string, locale: Locale): string {
-  try {
-    const parts = deadline.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (parts) {
-      const year = Number.parseInt(parts[1], 10);
-      const month = Number.parseInt(parts[2], 10) - 1;
-      const day = Number.parseInt(parts[3], 10);
-      return new Date(year, month, day).toLocaleDateString(locale);
-    }
-    const d = new Date(deadline);
-    if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleDateString(locale);
-    }
-  } catch {
-    // Fall back to raw string
+  const parts = deadline.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (parts) {
+    const year = Number.parseInt(parts[1], 10);
+    const month = Number.parseInt(parts[2], 10) - 1;
+    const day = Number.parseInt(parts[3], 10);
+    return new Date(year, month, day).toLocaleDateString(locale);
+  }
+  const d = new Date(deadline);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleDateString(locale);
   }
   return deadline;
 }
 
 /**
  * Builds a Job Ad from Job details in the chosen locale (FR-A3.5, SAD §5.6).
- * Pure function of Job and locale.
+ * Pure function of Job, translator, locale and public URL.
  */
-export function buildJobAd(job: JobAdInput, locale: Locale = "vi", publicUrl?: string): string {
-  const t = CATALOGS[locale].jobAd;
+export function buildJobAd(
+  job: JobAdInput,
+  t: Translator<"jobAd">,
+  locale: Locale,
+  publicUrl?: string,
+): string {
   const sections: string[] = [];
 
   // Title
-  sections.push(t.title.replace("{title}", job.title));
+  sections.push(t("title", { title: job.title }));
 
   // Responsibilities
   if (job.criteria?.responsibilities && job.criteria.responsibilities.length > 0) {
     const items = job.criteria.responsibilities.map((r) => `- ${r}`).join("\n");
-    sections.push(`${t.responsibilities}\n${items}`);
+    sections.push(`${t("responsibilities")}\n${items}`);
   }
 
   // Key skills (prioritizing must_have if present)
@@ -67,22 +66,25 @@ export function buildJobAd(job: JobAdInput, locale: Locale = "vi", publicUrl?: s
     const mustHave = job.criteria.skills.filter((s) => s.must_have);
     const keySkills = mustHave.length > 0 ? mustHave : job.criteria.skills;
     const items = keySkills.map((s) => `- ${s.name}`).join("\n");
-    sections.push(`${t.skills}\n${items}`);
+    sections.push(`${t("skills")}\n${items}`);
   }
 
   // Metadata: location, work mode, deadline
   const meta: string[] = [];
   if (job.location) {
-    meta.push(t.location.replace("{location}", job.location));
+    meta.push(t("location", { location: job.location }));
   }
   if (job.work_mode) {
-    const modeKey = job.work_mode as keyof typeof t.workModes;
-    const modeLabel = t.workModes[modeKey] ?? job.work_mode;
-    meta.push(t.workMode.replace("{mode}", modeLabel));
+    const modeKey = job.work_mode as "REMOTE" | "HYBRID" | "ONSITE";
+    const modeLabel =
+      modeKey === "REMOTE" || modeKey === "HYBRID" || modeKey === "ONSITE"
+        ? t(`workModes.${modeKey}`)
+        : job.work_mode;
+    meta.push(t("workMode", { mode: modeLabel }));
   }
   if (job.apply_deadline) {
     const deadlineFormatted = formatDeadline(job.apply_deadline, locale);
-    meta.push(t.deadline.replace("{deadline}", deadlineFormatted));
+    meta.push(t("deadline", { deadline: deadlineFormatted }));
   }
   if (meta.length > 0) {
     sections.push(meta.join("\n"));
@@ -90,7 +92,7 @@ export function buildJobAd(job: JobAdInput, locale: Locale = "vi", publicUrl?: s
 
   // Apply Link
   if (publicUrl) {
-    sections.push(t.applyLink.replace("{url}", publicUrl));
+    sections.push(t("applyLink", { url: publicUrl }));
   }
 
   return sections.join("\n\n");
@@ -122,27 +124,57 @@ export function buildFacebookShareUrl(appId: string, publicUrl: string): string 
 }
 
 /**
- * Formats a tweet for X within character limits (default 280), strictly preserving the link.
+ * Trọng số theo twitter-text v3: URL = 23; code point ngoài các khoảng dưới đây = 2.
  */
-export function formatXTweet(text: string, publicUrl: string, maxLen = 280): string {
+export function xWeight(text: string): number {
+  let n = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    const light =
+      c <= 0x10ff ||
+      (c >= 0x2000 && c <= 0x200d) ||
+      (c >= 0x2010 && c <= 0x201f) ||
+      (c >= 0x2032 && c <= 0x2037);
+    n += light ? 1 : 2;
+  }
+  return n;
+}
+
+/** Truncates a string so that its xWeight does not exceed maxW. */
+function truncateToXWeight(str: string, maxW: number): string {
+  let w = 0;
+  let acc = "";
+  for (const ch of str) {
+    const charWeight = xWeight(ch);
+    if (w + charWeight > maxW) break;
+    w += charWeight;
+    acc += ch;
+  }
+  return acc.trim();
+}
+
+/**
+ * Formats a tweet for X within character weights (default 280), strictly preserving the link.
+ */
+export function formatXTweet(text: string, publicUrl: string, maxWeight = 280): string {
   if (text.includes(publicUrl)) {
-    if (text.length <= maxLen) return text;
-    // Truncate non-url part
+    const nonUrl = text.replace(publicUrl, "");
+    if (xWeight(nonUrl) + 23 <= maxWeight) return text;
+
     const beforeUrl = text.slice(0, text.indexOf(publicUrl)).trim();
-    const availableForText = maxLen - publicUrl.length - 2; // for newline and ellipsis
-    if (availableForText <= 0) return publicUrl;
-    const truncated = beforeUrl.slice(0, availableForText).trim();
+    const availableWeight = maxWeight - 23 - xWeight("…\n");
+    if (availableWeight <= 0) return publicUrl;
+    const truncated = truncateToXWeight(beforeUrl, availableWeight);
     return `${truncated}…\n${publicUrl}`;
   }
 
   // Need to append publicUrl
-  const reserve = publicUrl.length + 2; // space + ellipsis
-  if (text.length + publicUrl.length + 1 <= maxLen) {
+  if (xWeight(text) + 1 + 23 <= maxWeight) {
     return `${text} ${publicUrl}`;
   }
-  const availableForText = maxLen - reserve;
-  if (availableForText <= 0) return publicUrl;
-  const truncated = text.slice(0, availableForText).trim();
+  const availableWeight = maxWeight - 23 - xWeight("… ");
+  if (availableWeight <= 0) return publicUrl;
+  const truncated = truncateToXWeight(text, availableWeight);
   return `${truncated}… ${publicUrl}`;
 }
 
@@ -159,25 +191,51 @@ export function buildXShareUrl(text: string, publicUrl?: string): string {
 
 /**
  * Builds schema.org JobPosting structured data (FR-A3.5).
- * Returns null if Job is not in PUBLISHED status.
+ * Returns null if Job is not PUBLISHED, public apply is disabled, published_at is missing,
+ * or location is missing for a non-remote job.
  */
 export function buildJobPostingJsonLd(
   job: JobPostingInput,
   publicUrl: string,
-  locale: Locale = "vi",
+  t: Translator<"jobAd">,
+  locale: Locale,
 ): Record<string, unknown> | null {
-  if (job.status !== "PUBLISHED") {
+  if (job.status !== "PUBLISHED" || !job.public_apply_enabled || !job.published_at) {
     return null;
   }
 
-  const description = buildJobAd(job, locale, publicUrl);
+  let jobLocation: Record<string, unknown> | undefined;
+  let jobLocationType: string | undefined;
+  let applicantLocationRequirements: Record<string, unknown> | undefined;
+
+  if (job.work_mode === "REMOTE") {
+    jobLocationType = "TELECOMMUTE";
+    applicantLocationRequirements = {
+      "@type": "Country",
+      name: "Việt Nam",
+    };
+  } else if (job.location) {
+    jobLocation = {
+      "@type": "Place",
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: job.location,
+        addressCountry: "VN",
+      },
+    };
+  } else {
+    // Non-remote job without location cannot produce valid JobPosting
+    return null;
+  }
+
+  const description = buildJobAd(job, t, locale, publicUrl);
 
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: job.title,
     description,
-    datePosted: job.published_at ?? new Date().toISOString(),
+    datePosted: job.published_at,
     hiringOrganization: {
       "@type": "Organization",
       name: job.tenant_name || "",
@@ -185,21 +243,14 @@ export function buildJobPostingJsonLd(
     },
   };
 
-  if (job.work_mode === "REMOTE") {
-    jsonLd.jobLocationType = "TELECOMMUTE";
-    jsonLd.applicantLocationRequirements = {
-      "@type": "Country",
-      name: "Việt Nam",
-    };
-  } else if (job.work_mode === "HYBRID" || job.work_mode === "ONSITE") {
-    jsonLd.jobLocation = {
-      "@type": "Place",
-      address: {
-        "@type": "PostalAddress",
-        addressLocality: job.location || "Việt Nam",
-        addressCountry: "VN",
-      },
-    };
+  if (jobLocationType) {
+    jsonLd.jobLocationType = jobLocationType;
+  }
+  if (applicantLocationRequirements) {
+    jsonLd.applicantLocationRequirements = applicantLocationRequirements;
+  }
+  if (jobLocation) {
+    jsonLd.jobLocation = jobLocation;
   }
 
   if (job.apply_deadline) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 
 import type { Locale } from "../../../i18n/locale";
 import type { Job } from "../criteria";
@@ -12,51 +12,19 @@ import {
   buildXShareUrl,
   formatXTweet,
 } from "../share";
+import { clientPublicApplyUrl, useCopied } from "./clipboard";
 
-function subscribe() {
-  return () => {};
-}
-
-function getOriginSnapshot() {
-  return window.location.origin;
-}
-
-function getServerOriginSnapshot() {
-  return "";
-}
-
-export function JobAdSection({
-  job,
-  facebookAppId,
-  publicUrl: customPublicUrl,
-}: {
-  job: Job;
-  facebookAppId?: string;
-  publicUrl?: string;
-}) {
+export function JobAdSection({ job, facebookAppId }: { job: Job; facebookAppId?: string }) {
   const t = useTranslations("jobShare");
+  const tJobAd = useTranslations("jobAd");
   const locale = useLocale() as Locale;
-  const [copied, setCopied] = useState(false);
-  const origin = useSyncExternalStore(subscribe, getOriginSnapshot, getServerOriginSnapshot);
+  const { copied, copy } = useCopied();
 
-  const publicUrl =
-    customPublicUrl ??
-    (job.public_slug
-      ? origin
-        ? `${origin}/apply/${job.public_slug}`
-        : `/apply/${job.public_slug}`
-      : "");
+  const publicUrl = clientPublicApplyUrl(job.public_slug);
 
-  const defaultContent = buildJobAd(job, locale, publicUrl);
+  const defaultContent = buildJobAd(job, tJobAd, locale, publicUrl);
   const [editedContent, setEditedContent] = useState<string | null>(null);
   const content = editedContent ?? defaultContent;
-
-  useEffect(() => {
-    if (copied) {
-      const timer = setTimeout(() => setCopied(false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [copied]);
 
   const isPublished = job.status === "PUBLISHED";
   const isLinkEnabled = job.public_apply_enabled;
@@ -70,16 +38,6 @@ export function JobAdSection({
 
   const appId =
     facebookAppId !== undefined ? facebookAppId : process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
-
-  async function copyToClipboard() {
-    if (!content) return;
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-    } catch {
-      // Ignore clipboard write failures
-    }
-  }
 
   function shareLinkedIn() {
     if (!publicUrl) return;
@@ -112,14 +70,14 @@ export function JobAdSection({
         aria-label={t("adContent")}
         disabled={!isReady}
         onChange={(e) => setEditedContent(e.target.value)}
-        className="w-full rounded-sm border border-hairline-cool bg-surface-canvas-light p-3 text-sm text-ink-deep focus:inset-shadow-input focus:outline-none focus-visible:ring-2 focus-visible:ring-ring-focus disabled:opacity-50"
+        className="w-full text-input"
       />
 
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           disabled={!isReady}
-          onClick={copyToClipboard}
+          onClick={() => copy(content)}
           className="button-outline text-sm whitespace-nowrap"
         >
           {copied ? t("copied") : t("copyAd")}
