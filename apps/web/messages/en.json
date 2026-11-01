@@ -357,5 +357,31 @@
     "copied": "Copied!",
     "toggleFailed": "Failed to update Public Apply Link status.",
     "closedWarning": "Job must be in Published status to accept applications."
+  },
+  "jobAd": {
+    "title": "Hiring: {title}",
+    "responsibilities": "Key responsibilities:",
+    "skills": "Key skills:",
+    "location": "Location: {location}",
+    "workMode": "Work mode: {mode}",
+    "workModes": {
+      "REMOTE": "Remote",
+      "HYBRID": "Hybrid",
+      "ONSITE": "Onsite"
+    },
+    "deadline": "Application deadline: {deadline}",
+    "applyLink": "Apply at: {url}"
+  },
+  "jobShare": {
+    "title": "Share Job Ad",
+    "description": "Pre-generated job ad from the job details. You can edit it before copying or sharing to channels.",
+    "adContent": "Job ad content",
+    "copyAd": "Copy Ad",
+    "copied": "Copied!",
+    "shareLinkedIn": "Share to LinkedIn",
+    "shareFacebook": "Share to Facebook",
+    "shareX": "Share to X",
+    "disabledNotPublished": "Job must be in Published status to share.",
+    "disabledPublicApplyOff": "Public Apply Link is disabled. Enable it to share."
   }
 }

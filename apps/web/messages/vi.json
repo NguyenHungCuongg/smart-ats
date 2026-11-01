@@ -357,5 +357,31 @@
     "copied": "Đã chép!",
     "toggleFailed": "Không cập nhật được trạng thái Public Apply Link.",
     "closedWarning": "Job cần ở trạng thái Đang tuyển để nhận hồ sơ."
+  },
+  "jobAd": {
+    "title": "Tuyển dụng: {title}",
+    "responsibilities": "Trách nhiệm chính:",
+    "skills": "Kỹ năng chính:",
+    "location": "Địa điểm: {location}",
+    "workMode": "Hình thức làm việc: {mode}",
+    "workModes": {
+      "REMOTE": "Từ xa (Remote)",
+      "HYBRID": "Kết hợp (Hybrid)",
+      "ONSITE": "Tại văn phòng (Onsite)"
+    },
+    "deadline": "Hạn nộp hồ sơ: {deadline}",
+    "applyLink": "Ứng tuyển tại: {url}"
+  },
+  "jobShare": {
+    "title": "Đăng tin",
+    "description": "Nội dung tin tuyển dụng soạn sẵn từ Job. Bạn có thể chỉnh sửa trước khi sao chép hoặc chia sẻ lên các kênh.",
+    "adContent": "Nội dung tin tuyển dụng",
+    "copyAd": "Chép tin",
+    "copied": "Đã chép!",
+    "shareLinkedIn": "Chia sẻ LinkedIn",
+    "shareFacebook": "Chia sẻ Facebook",
+    "shareX": "Chia sẻ X",
+    "disabledNotPublished": "Job cần ở trạng thái Đang tuyển để đăng và chia sẻ tin.",
+    "disabledPublicApplyOff": "Public Apply Link đang tắt. Vui lòng bật link để đăng và chia sẻ tin."
   }
 }

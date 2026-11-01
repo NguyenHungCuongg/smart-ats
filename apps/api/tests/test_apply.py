@@ -75,6 +75,8 @@ def make_published_job(
     apply_deadline: date | None = None,
     status: str = "PUBLISHED",
     criteria: dict[str, Any] | None = None,
+    location: str | None = "Hà Nội",
+    work_mode: str | None = "HYBRID",
 ) -> tuple[str, str]:
     """Create a Job and set public_slug, returning (job_id, public_slug)."""
     slug = f"job-{uuid.uuid4().hex[:12]}"
@@ -83,10 +85,12 @@ def make_published_job(
             text(
                 "INSERT INTO jobs (tenant_id, title, level, status, parse_status, created_by,"
                 "  weight_technical, weight_soft_skills, weight_experience,"
-                "  public_apply_enabled, public_slug, apply_deadline, criteria)"
+                "  public_apply_enabled, public_slug, apply_deadline, criteria,"
+                "  location, work_mode, published_at)"
                 " VALUES (:tenant_id, 'Senior Python Dev', 'SENIOR', :status, 'SUCCEEDED',"
                 "  :user_id, 0.50, 0.25, 0.25, :enabled, :slug, :deadline,"
-                "  CAST(:criteria AS jsonb))"
+                "  CAST(:criteria AS jsonb), :location, :work_mode,"
+                "  CASE WHEN :status = 'PUBLISHED' THEN now() ELSE NULL END)"
                 " RETURNING id"
             ),
             {
@@ -96,6 +100,8 @@ def make_published_job(
                 "enabled": public_apply_enabled,
                 "slug": slug,
                 "deadline": apply_deadline,
+                "location": location,
+                "work_mode": work_mode,
                 "criteria": (
                     json_str(criteria)
                     if criteria is not None
@@ -129,6 +135,9 @@ async def test_get_public_job(client: AsyncClient, recruiter: User) -> None:
     assert data["public_apply_enabled"] is True
     assert data["is_closed"] is False
     assert data["tenant_name"] is not None
+    assert data["location"] == "Hà Nội"
+    assert data["work_mode"] == "HYBRID"
+    assert data["published_at"] is not None
     # Criteria must NOT contain salary_range (ERD §8)
     assert data["criteria"] is not None
     assert "salary_range" not in data["criteria"]
