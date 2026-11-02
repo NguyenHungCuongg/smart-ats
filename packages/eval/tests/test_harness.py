@@ -124,6 +124,21 @@ def test_cli_refuses_a_dataset_with_real_cvs_when_the_provider_is_gemini(
         main([str(path)])
 
 
+def test_cli_runs_real_cvs_on_gemini_when_their_owners_consented_to_its_free_tier(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw = json.loads(SCRATCH.read_text(encoding="utf-8"))
+    raw["jobs"][0]["cvs"][0] |= {"source": "real", "free_tier_consent": True}
+    path = tmp_path / "with-consented-real-cv.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)  # Baseline only, no call
+
+    main([str(path)])
+
+    assert "(1 real, 5 synthetic)" in capsys.readouterr().out
+
+
 def test_cli_runs_a_synthetic_dataset_when_the_provider_is_gemini(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

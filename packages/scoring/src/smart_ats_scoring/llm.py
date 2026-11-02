@@ -98,6 +98,10 @@ class OpenAiLlm:
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+# The free tier allows a few requests a minute, so a 429 waits the minute out: the SDK backs
+# off 0.5s doubling to 8s, about 70s over 12 retries.
+# ponytail: covers a per-minute limit only; a spent daily limit still fails after the retries.
+GEMINI_MAX_RETRIES = 12
 
 
 class GeminiLlm:
@@ -109,7 +113,9 @@ class GeminiLlm:
 
     def __init__(self, model: str, api_key: str) -> None:
         self.model = model
-        self.client = OpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
+        self.client = OpenAI(
+            api_key=api_key, base_url=GEMINI_BASE_URL, max_retries=GEMINI_MAX_RETRIES
+        )
 
     def structured(
         self,

@@ -57,11 +57,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.runs < 1:
         parser.error("--runs must be at least 1")
     data = dataset.load(args.dataset)
-    # Gemini's free tier trains on prompts (FR-C1.5): refuse before any call, key or not.
+    # Gemini's free tier trains on prompts (FR-C1.5): refuse before any call, key or not, a
+    # real CV whose owner has not agreed to that.
     if llm_provider() == "gemini" and any(
-        cv.source != "synthetic" for job in data.jobs for cv in job.cvs
+        cv.source != "synthetic" and not cv.free_tier_consent for job in data.jobs for cv in job.cvs
     ):
-        sys.exit("LLM_PROVIDER=gemini takes synthetic CVs only; this dataset has real ones.")
+        sys.exit(
+            "LLM_PROVIDER=gemini takes synthetic CVs, or real ones with free_tier_consent;"
+            " this dataset has a real one without it."
+        )
     print(harness.compare(data, configs(), args.split, args.runs))
 
 

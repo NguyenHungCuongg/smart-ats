@@ -63,16 +63,17 @@ A file is named `<name>-v<version>.json`, and that name and version also go insi
 }
 ```
 
-| Field          | Rule                                                                                                                                                                               |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `for_report`   | `true` only for a dataset that may be cited in the report                                                                                                                          |
-| `as_of`        | The day the CVs were collected, as `YYYY-MM-DD`. Required: an open end in a work history ("nay", "present") runs to it, so the table gives the same numbers whatever day it is run |
-| `raters`       | Exactly two distinct ids, both used in every `labels` and `top5`                                                                                                                   |
-| `jobs[].split` | `dev` or `test`. The split is per Job, so the raters' Top 5 for a Job stays within one split                                                                                       |
-| `cvs[].source` | `real` (consented and anonymised before it enters the repo) or `synthetic`                                                                                                         |
-| `cvs[].labels` | The 1–5 label each rater gives the (Job, CV Document) pair, as an integer                                                                                                          |
-| `top5`         | Each rater's own ordered Top 5: five distinct CV ids of this Job, best first                                                                                                       |
-| `cvs[].id`     | Unique within its Job                                                                                                                                                              |
+| Field                     | Rule                                                                                                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `for_report`              | `true` only for a dataset that may be cited in the report                                                                                                                                       |
+| `as_of`                   | The day the CVs were collected, as `YYYY-MM-DD`. Required: an open end in a work history ("nay", "present") runs to it, so the table gives the same numbers whatever day it is run              |
+| `raters`                  | Exactly two distinct ids, both used in every `labels` and `top5`                                                                                                                                |
+| `jobs[].split`            | `dev` or `test`. The split is per Job, so the raters' Top 5 for a Job stays within one split                                                                                                    |
+| `cvs[].source`            | `real` (consented and anonymised before it enters the repo) or `synthetic`                                                                                                                      |
+| `cvs[].free_tier_consent` | Optional, `false` by default. `true` only when a `real` CV's owner agreed in writing to be sent to a free tier that trains on prompts (Gemini, FR-C1.5); the agreement is kept outside the repo |
+| `cvs[].labels`            | The 1–5 label each rater gives the (Job, CV Document) pair, as an integer                                                                                                                       |
+| `top5`                    | Each rater's own ordered Top 5: five distinct CV ids of this Job, best first                                                                                                                    |
+| `cvs[].id`                | Unique within its Job                                                                                                                                                                           |
 
 The loader rejects a file that breaks any of these rules.
 
@@ -90,7 +91,7 @@ Each metric is computed per run and per Job, then averaged.
 | Stability    | Sample standard deviation of each Application's Total across runs, averaged over Applications                                                                                                                                                                                                                                               |
 | Cost/App     | Mean `cost_usd` per Application, over the Scores that report one. Configs B-D count the Application's CV parse, its share of the JD parse, its scoring and, when made, its embedding call; Config A its share of the Job's one embedding call. All are priced from `smart_ats_scoring.pricing.PRICES`                                       |
 
-With `LLM_PROVIDER=gemini` (free testing, `.env.example`) the run exits if any CV Document is `real`: Gemini's free tier trains on prompts.
+With `LLM_PROVIDER=gemini` (free testing, `.env.example`) the run exits if any CV Document is `real` without `free_tier_consent`: Gemini's free tier trains on prompts. A 429 from Gemini is retried for about a minute, which rides out its per-minute limit but not a spent daily one.
 
 The header also shows the weighted Cohen's Kappa (quadratic) between the two raters over the split, and the split's real/synthetic count. A Config's ranking orders CV Documents by Total and breaks ties by a hash of the id, so ids that follow quality give no advantage. Targets are in the plan, not here.
 
