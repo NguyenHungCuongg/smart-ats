@@ -6,7 +6,7 @@
 
 ## Quy tắc ghi
 
-- Mỗi lần chạy `python -m smart_ats_eval` có gọi API của provider là một mục. Lần chạy chỉ có Baseline (không có key) thì không ghi.
+- Mỗi lần chạy `python -m smart_ats_eval` có gọi API của provider là một mục. Lần chạy chỉ có Baseline (không có key) thì không ghi. Một lần chạy nối qua nhiều ngày bằng `--cache` là một mục, ghi khi bảng in ra, kèm ngày bắt đầu và ngày xong.
 - Mục mới thêm vào cuối file. Mục cũ giữ nguyên; sai sót được đính chính bằng một mục mới dẫn ngày của mục cũ.
 - Output của lệnh được dán nguyên văn. Mọi con số trong mục, kể cả trong Nhận xét, lấy từ output đó.
 - Chạy trên worktree sạch, để commit ghi trong mục đúng là code đã chạy. Worktree có thay đổi chưa commit thì ghi rõ thay đổi đó.
