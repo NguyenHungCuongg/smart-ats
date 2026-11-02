@@ -410,6 +410,30 @@ def test_the_prompt_takes_how_each_must_have_matched_as_given() -> None:
     }
 
 
+def test_without_must_have_coverage_technical_fit_is_the_rubric_alone_and_never_embeds() -> None:
+    # Config C of the ablation: Kubernetes is missing, yet Technical Fit is the rubric alone
+    # (grade 4 -> 75), not 0.6 * 66.67 + 0.4 * 75.
+    llm = FakeLlm(_answer(technical=4))
+    embedder = FakeEmbedder(SEMANTIC)
+
+    result = score(
+        _criteria("Python", "PostgreSQL", "Kubernetes"),
+        _profile("Python", "Postgres"),
+        CV,
+        JD,
+        llm,
+        embedder,
+        AS_OF,
+        must_have_coverage=False,
+    )
+
+    assert result.technical == 75
+    assert embedder.calls == []
+    assert result.embedding_usage is None
+    assert "must_have_coverage" not in _document(llm.calls[0]["user"])
+    assert "Must-have Coverage" not in llm.calls[0]["system"]
+
+
 # Experience timeline: computed from work_history, never added up by the LLM (FR-A1.3).
 
 

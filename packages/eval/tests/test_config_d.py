@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from test_harness import row
 
 from smart_ats_eval import dataset, harness
 from smart_ats_eval.__main__ import configs
-from smart_ats_eval.config_d import ConfigD
+from smart_ats_eval.config_d import ConfigD, Parser
 from smart_ats_scoring import embedding, pricing
 from smart_ats_scoring.embedding import EmbeddingResult
 from smart_ats_scoring.llm import LlmResult, Usage
@@ -128,10 +129,10 @@ def test_config_d_row_reports_versions_grounding_by_the_library_rule_and_cost() 
         ),
     )
 
-    table = harness.compare(data, [ConfigD(llm, llm, "fake-model", embedder)], split="dev", runs=2)
+    config = ConfigD(Parser(llm), llm, "fake-model", embedder)
+    table = harness.compare(data, [config], split="dev", runs=2)
 
-    row = next(line for line in table.splitlines() if line.startswith("| Config D "))
-    cells = [cell.strip() for cell in row.strip("|").split("|")]
+    cells = row(table, "Config D")
     assert cells[1:4] == ["fake-model", "v2", "v1"]
     # Every quote the LLM made counts, dropped ones included: only "Python" of the 3 per axis
     # is evidence; "and" is a stopword and the third is invented.
@@ -150,6 +151,22 @@ def test_config_d_row_reports_versions_grounding_by_the_library_rule_and_cost() 
     } == {10}
 
 
+@pytest.mark.usefixtures("fake_model_price")
+def test_config_c_scores_without_must_have_coverage_so_it_never_embeds() -> None:
+    llm = FakeLlm()
+    embedder = FakeEmbedder()
+    config = ConfigD(Parser(llm), llm, "fake-model", embedder, "Config C", must_have_coverage=False)
+
+    table = harness.compare(dataset.load(SCRATCH), [config], split="dev", runs=1)
+
+    cells = row(table, "Config C")
+    assert cells[1:4] == ["fake-model", "v2", "v1"]
+    assert embedder.calls == 0
+    assert all("must_have_coverage" not in _document(p) for p in llm.scoring_prompts)
+    # 0.007 x (1 + 1/6 + 1): the CV parse, its share of the JD parse and the scoring.
+    assert cells[10] == "0.0152"
+
+
 @pytest.fixture
 def calibrated_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-large")
@@ -157,7 +174,9 @@ def calibrated_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.usefixtures("calibrated_embedding")
-def test_config_d_is_compared_only_with_an_llm_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_ablation_configs_are_compared_only_with_an_llm_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert [config.name for config in configs()] == ["Baseline (BM25)"]
@@ -168,8 +187,16 @@ def test_config_d_is_compared_only_with_an_llm_key(monkeypatch: pytest.MonkeyPat
     found = configs()
     assert [(config.name, config.model) for config in found] == [
         ("Baseline (BM25)", None),
+        ("Config A", "text-embedding-3-large"),
+        ("Config B", "gpt-6-sol"),
+        ("Config C", "gpt-6-sol"),
         ("Config D", "gpt-6-sol"),
+        ("Config D-luna", "gpt-6-luna"),
     ]
+    # D-luna scores with the extraction model, not only names it.
+    luna = found[-1]
+    assert isinstance(luna, ConfigD)
+    assert getattr(luna.reasoning, "model", None) == "gpt-6-luna"
 
 
 @pytest.mark.usefixtures("calibrated_embedding")
