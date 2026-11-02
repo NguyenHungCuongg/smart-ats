@@ -17,6 +17,8 @@ class CvDocument:
     source: str
     text: str
     labels: dict[str, int]
+    free_tier_consent: bool = False
+    """A real CV's owner agreed in writing to a free tier that trains on prompts (FR-C1.5)."""
 
     @property
     def hr_score(self) -> float:
@@ -62,11 +64,20 @@ def load(path: Path) -> Dataset:
 def _job(raw: dict[str, Any], raters: tuple[str, ...], as_of: date) -> Job:
     where = f"Job {raw['id']}"
     _check(raw["split"] in SPLITS, f"{where}: split must be one of {SPLITS}")
-    cvs = tuple(CvDocument(c["id"], c["source"], c["text"], dict(c["labels"])) for c in raw["cvs"])
+    cvs = tuple(
+        CvDocument(
+            c["id"], c["source"], c["text"], dict(c["labels"]), c.get("free_tier_consent", False)
+        )
+        for c in raw["cvs"]
+    )
     ids = {cv.id for cv in cvs}
     _check(len(ids) == len(cvs), f"{where}: duplicate CV id")
     for cv in cvs:
         _check(cv.source in SOURCES, f"{where}, CV {cv.id}: source must be one of {SOURCES}")
+        _check(
+            type(cv.free_tier_consent) is bool,
+            f"{where}, CV {cv.id}: free_tier_consent must be true or false",
+        )
         _check(set(cv.labels) == set(raters), f"{where}, CV {cv.id}: needs one label per rater")
         _check(
             all(type(label) is int and 1 <= label <= 5 for label in cv.labels.values()),

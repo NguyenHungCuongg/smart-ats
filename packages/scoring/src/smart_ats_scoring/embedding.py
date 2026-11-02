@@ -7,7 +7,7 @@ from typing import Protocol
 from openai import OpenAI
 from openai.types import CreateEmbeddingResponse
 
-from smart_ats_scoring.llm import GEMINI_BASE_URL, Usage, llm_provider
+from smart_ats_scoring.llm import GEMINI_BASE_URL, GEMINI_MAX_RETRIES, Usage, llm_provider
 from smart_ats_scoring.pricing import by_model, price
 
 # ADR-0005: the vector(1536) columns, and an HNSW index caps at 2,000 dimensions.
@@ -72,7 +72,9 @@ class GeminiEmbedder:
 
     def __init__(self, model: str, api_key: str) -> None:
         self.model = model
-        self.client = OpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
+        self.client = OpenAI(
+            api_key=api_key, base_url=GEMINI_BASE_URL, max_retries=GEMINI_MAX_RETRIES
+        )
 
     def embed(self, texts: list[str]) -> EmbeddingResult:
         # Gemini Embedding 2 has no task_type: the task goes in the text, and THRESHOLDS is

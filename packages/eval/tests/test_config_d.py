@@ -10,6 +10,9 @@ from test_harness import row
 
 from smart_ats_eval import dataset, harness
 from smart_ats_eval.__main__ import configs
+from smart_ats_eval.cache import CachedEmbedder, CachedLlm
+from smart_ats_eval.config_a import ConfigA
+from smart_ats_eval.config_b import ConfigB
 from smart_ats_eval.config_d import ConfigD, Parser
 from smart_ats_scoring import embedding, pricing
 from smart_ats_scoring.embedding import EmbeddingResult
@@ -197,6 +200,24 @@ def test_the_ablation_configs_are_compared_only_with_an_llm_key(
     luna = found[-1]
     assert isinstance(luna, ConfigD)
     assert getattr(luna.reasoning, "model", None) == "gpt-6-luna"
+
+
+@pytest.mark.usefixtures("calibrated_embedding")
+def test_with_a_cache_every_provider_call_goes_through_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("LLM_EXTRACTION_MODEL", "gpt-6-luna")
+    monkeypatch.setenv("LLM_REASONING_MODEL", "gpt-6-sol")
+
+    _, config_a, config_b, _, config_d, luna = configs(tmp_path)
+
+    assert isinstance(config_a, ConfigA) and isinstance(config_a.embedder, CachedEmbedder)
+    assert isinstance(config_b, ConfigB) and isinstance(config_b.parser.extraction, CachedLlm)
+    assert isinstance(config_d, ConfigD) and isinstance(config_d.reasoning, CachedLlm)
+    assert isinstance(config_d.embedder, CachedEmbedder)
+    assert isinstance(luna, ConfigD) and isinstance(luna.reasoning, CachedLlm)
+    assert (config_d.reasoning.model, luna.reasoning.model) == ("gpt-6-sol", "gpt-6-luna")
 
 
 @pytest.mark.usefixtures("calibrated_embedding")

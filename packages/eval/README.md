@@ -23,6 +23,8 @@ Configs A-D call the provider's API, so they run only with the API key of `LLM_P
 
 The default split is `dev`. Use `test` only for the frozen run the plan describes. Stability needs `--runs 2` or more; the plan (§4) sets the run count for the report.
 
+A run longer than the provider's daily limit (Gemini's free tier: 20 requests a day for `gemini-3.6-flash`) takes `--cache packages/eval/.cache/<dataset>`. Every provider call is saved there as it returns, so running the same command again the next day replays the saved calls and makes only the missing ones; repeat it until the table prints. Run 2 of `--runs 2` makes its own calls rather than replaying run 1. A call is keyed by its model name and full request, so a changed prompt or parse makes new calls; a provider swapping the model behind a name does not, so start a new directory for a run meant to measure the new model. It holds CV text, so `packages/eval/.cache/` is gitignored.
+
 ## Datasets
 
 `datasets/scratch-v1.json` is placeholder data: 2 Jobs × 6 fictional CV Documents, labelled by the team. It contains no real personal data and has `"for_report": false`, so the table carries a `NOT FOR REPORT` line. Each Job includes a keyword-stuffed CV and a CV that has the right skills in different words, which a lexical Baseline should misrank.
@@ -63,16 +65,17 @@ A file is named `<name>-v<version>.json`, and that name and version also go insi
 }
 ```
 
-| Field          | Rule                                                                                                                                                                               |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `for_report`   | `true` only for a dataset that may be cited in the report                                                                                                                          |
-| `as_of`        | The day the CVs were collected, as `YYYY-MM-DD`. Required: an open end in a work history ("nay", "present") runs to it, so the table gives the same numbers whatever day it is run |
-| `raters`       | Exactly two distinct ids, both used in every `labels` and `top5`                                                                                                                   |
-| `jobs[].split` | `dev` or `test`. The split is per Job, so the raters' Top 5 for a Job stays within one split                                                                                       |
-| `cvs[].source` | `real` (consented and anonymised before it enters the repo) or `synthetic`                                                                                                         |
-| `cvs[].labels` | The 1–5 label each rater gives the (Job, CV Document) pair, as an integer                                                                                                          |
-| `top5`         | Each rater's own ordered Top 5: five distinct CV ids of this Job, best first                                                                                                       |
-| `cvs[].id`     | Unique within its Job                                                                                                                                                              |
+| Field                     | Rule                                                                                                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `for_report`              | `true` only for a dataset that may be cited in the report                                                                                                                                       |
+| `as_of`                   | The day the CVs were collected, as `YYYY-MM-DD`. Required: an open end in a work history ("nay", "present") runs to it, so the table gives the same numbers whatever day it is run              |
+| `raters`                  | Exactly two distinct ids, both used in every `labels` and `top5`                                                                                                                                |
+| `jobs[].split`            | `dev` or `test`. The split is per Job, so the raters' Top 5 for a Job stays within one split                                                                                                    |
+| `cvs[].source`            | `real` (consented and anonymised before it enters the repo) or `synthetic`                                                                                                                      |
+| `cvs[].free_tier_consent` | Optional, `false` by default. `true` only when a `real` CV's owner agreed in writing to be sent to a free tier that trains on prompts (Gemini, FR-C1.5); the agreement is kept outside the repo |
+| `cvs[].labels`            | The 1–5 label each rater gives the (Job, CV Document) pair, as an integer                                                                                                                       |
+| `top5`                    | Each rater's own ordered Top 5: five distinct CV ids of this Job, best first                                                                                                                    |
+| `cvs[].id`                | Unique within its Job                                                                                                                                                                           |
 
 The loader rejects a file that breaks any of these rules.
 
@@ -90,7 +93,7 @@ Each metric is computed per run and per Job, then averaged.
 | Stability    | Sample standard deviation of each Application's Total across runs, averaged over Applications                                                                                                                                                                                                                                               |
 | Cost/App     | Mean `cost_usd` per Application, over the Scores that report one. Configs B-D count the Application's CV parse, its share of the JD parse, its scoring and, when made, its embedding call; Config A its share of the Job's one embedding call. All are priced from `smart_ats_scoring.pricing.PRICES`                                       |
 
-With `LLM_PROVIDER=gemini` (free testing, `.env.example`) the run exits if any CV Document is `real`: Gemini's free tier trains on prompts.
+With `LLM_PROVIDER=gemini` (free testing, `.env.example`) the run exits if any CV Document is `real` without `free_tier_consent`: Gemini's free tier trains on prompts. A 429 from Gemini is retried for about a minute, which rides out its per-minute limit but not a spent daily one.
 
 The header also shows the weighted Cohen's Kappa (quadratic) between the two raters over the split, and the split's real/synthetic count. A Config's ranking orders CV Documents by Total and breaks ties by a hash of the id, so ids that follow quality give no advantage. Targets are in the plan, not here.
 
