@@ -28,7 +28,7 @@ class ExtractionError(Exception):
 def document_type(data: bytes) -> Literal["pdf", "docx", "txt"] | None:
     """pdf, docx or txt, told by magic bytes as extract_text does (NFR-SEC-07), never by the
     file name or Content-Type."""
-    if data.startswith(b"%PDF"):
+    if _is_pdf(data):
         return "pdf"
     if data.startswith(b"PK\x03\x04"):
         # Any ZIP starts so (XLSX, JAR…): a DOCX is one holding a Word document.
@@ -56,7 +56,7 @@ def extract_text(data: bytes) -> str:
 
 def _read(data: bytes) -> str:
     try:
-        if data.startswith(b"%PDF"):
+        if _is_pdf(data):
             return _pdf(data)
         if data.startswith(b"PK\x03\x04"):
             return _docx(data)
@@ -70,6 +70,12 @@ def _read(data: bytes) -> str:
     except Exception as e:
         # Parsers raise many exception types on malformed input; all mean the same to the caller.
         raise ExtractionError("UNREADABLE", f"the file is damaged ({type(e).__name__})") from e
+
+
+def _is_pdf(data: bytes) -> bool:
+    # Some writers put a newline before the header, and readers open such a file; any other
+    # byte there means it is not a PDF.
+    return data.lstrip().startswith(b"%PDF")
 
 
 def _pdf(data: bytes) -> str:

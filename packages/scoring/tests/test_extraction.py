@@ -9,7 +9,12 @@ from docx.oxml.ns import nsdecls
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
-from smart_ats_scoring.extraction import MAX_DOCX_UNZIPPED_BYTES, ExtractionError, extract_text
+from smart_ats_scoring.extraction import (
+    MAX_DOCX_UNZIPPED_BYTES,
+    ExtractionError,
+    document_type,
+    extract_text,
+)
 
 
 def _pdf(*lines: str, password: str | None = None, owner_password: str | None = None) -> bytes:
@@ -43,6 +48,23 @@ def test_pdf_with_text_layer() -> None:
 
     assert "Backend Developer" in text
     assert "Python, PostgreSQL" in text
+
+
+def test_pdf_with_whitespace_before_the_header() -> None:
+    # A real CV starts with "\n%PDF-1.7"; PDF readers open it all the same.
+    data = b"\r\n \t" + _pdf("Backend Developer")
+
+    assert document_type(data) == "pdf"
+    assert "Backend Developer" in extract_text(data)
+
+
+def test_pdf_with_other_bytes_before_the_header_is_unsupported() -> None:
+    data = b"x\n" + _pdf("Backend Developer")
+
+    assert document_type(data) is None
+    with pytest.raises(ExtractionError) as error:
+        extract_text(data)
+    assert error.value.code == "UNSUPPORTED_FORMAT"
 
 
 def test_docx_paragraphs_and_tables() -> None:
