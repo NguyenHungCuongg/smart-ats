@@ -8,7 +8,9 @@ from pathlib import Path
 
 from smart_ats_eval import dataset, harness
 from smart_ats_eval.baseline import Bm25Baseline
-from smart_ats_eval.config_d import ConfigD
+from smart_ats_eval.config_a import ConfigA
+from smart_ats_eval.config_b import ConfigB
+from smart_ats_eval.config_d import ConfigD, Parser
 from smart_ats_scoring.embedding import embedder_from_env
 from smart_ats_scoring.llm import has_llm_key, llm_from_env, llm_provider
 from smart_ats_scoring.pricing import price
@@ -29,9 +31,18 @@ def configs() -> list[harness.Config]:
         except LookupError as e:
             sys.exit(f"{e}.")
         extraction = llm_from_env(extraction_model)
-        found.append(ConfigD(extraction, llm_from_env(model), model, embedder))
+        reasoning = llm_from_env(model)
+        # One parse per document for every Config, so they differ only in how they score.
+        parser = Parser(extraction)
+        found += [
+            ConfigA(embedder),
+            ConfigB(parser, reasoning, model),
+            ConfigD(parser, reasoning, model, embedder, "Config C", must_have_coverage=False),
+            ConfigD(parser, reasoning, model, embedder),
+            ConfigD(parser, extraction, extraction_model, embedder, "Config D-luna"),
+        ]
     else:
-        print("Config D skipped: it needs the API key of LLM_PROVIDER.", file=sys.stderr)
+        print("Configs A-D skipped: they need the API key of LLM_PROVIDER.", file=sys.stderr)
     return found
 
 
