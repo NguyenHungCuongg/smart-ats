@@ -22,6 +22,8 @@ class Price(NamedTuple):
 PRICES: dict[str, Price] = {
     # Free tier, synthetic data only (LLM_PROVIDER=gemini, .env.example). Listed one by one: any
     # other Gemini model, whose free tier may not exist, stays unpriced and is refused.
+    "gemini-3.6-flash": Price(Decimal(0), Decimal(0), Decimal(0)),
+    # Now served by gemini-3.6-flash; kept for runs and ledger entries recorded under it.
     "gemini-3.5-flash": Price(Decimal(0), Decimal(0), Decimal(0)),
     "gemini-3.5-flash-lite": Price(Decimal(0), Decimal(0), Decimal(0)),
     "gemini-embedding-2": Price(Decimal(0), Decimal(0), Decimal(0)),

@@ -26,7 +26,7 @@ def test_a_dated_snapshot_takes_its_models_price() -> None:
     assert pricing.cost(Usage("test-model-2026-08-01", 1_000_000, 0, 0)) == Decimal("2.000000")
 
 
-@pytest.mark.parametrize("model", ["gemini-3.5-flash", "gemini-3.5-flash-lite"])
+@pytest.mark.parametrize("model", ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"])
 def test_the_listed_free_tier_models_are_free(model: str) -> None:
     assert pricing.cost(Usage(model, 1000, 500, 0)) == 0
 
