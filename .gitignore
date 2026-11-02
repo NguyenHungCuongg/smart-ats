@@ -13,6 +13,8 @@ __pycache__/
 .mypy_cache/
 .coverage
 htmlcov/
+# Eval provider calls (smart_ats_eval --cache): they hold CV text
+packages/eval/.cache/
 build/
 dist/
 

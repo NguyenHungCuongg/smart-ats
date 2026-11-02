@@ -8,6 +8,7 @@ from pathlib import Path
 
 from smart_ats_eval import dataset, harness
 from smart_ats_eval.baseline import Bm25Baseline
+from smart_ats_eval.cache import CachedEmbedder, CachedLlm
 from smart_ats_eval.config_a import ConfigA
 from smart_ats_eval.config_b import ConfigB
 from smart_ats_eval.config_d import ConfigD, Parser
@@ -16,8 +17,12 @@ from smart_ats_scoring.llm import has_llm_key, llm_from_env, llm_provider
 from smart_ats_scoring.pricing import price
 
 
-def configs() -> list[harness.Config]:
-    """Every Config compared on each run. A new one only needs adding here."""
+def configs(cache: Path | None = None) -> list[harness.Config]:
+    """Every Config compared on each run. A new one only needs adding here.
+
+    With `cache`, every provider call is replayed from that directory when an earlier
+    invocation made it, so a run stopped by a daily limit carries on another day.
+    """
     found: list[harness.Config] = [Bm25Baseline()]
     if has_llm_key():
         model = os.environ["LLM_REASONING_MODEL"]
@@ -32,6 +37,10 @@ def configs() -> list[harness.Config]:
             sys.exit(f"{e}.")
         extraction = llm_from_env(extraction_model)
         reasoning = llm_from_env(model)
+        if cache:
+            extraction = CachedLlm(extraction, cache, extraction_model)
+            reasoning = CachedLlm(reasoning, cache, model)
+            embedder = CachedEmbedder(embedder, cache)
         # One parse per document for every Config, so they differ only in how they score.
         parser = Parser(extraction)
         found += [
@@ -53,6 +62,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--runs", type=int, default=1, help="runs per Config; stability needs 2 or more"
     )
+    parser.add_argument(
+        "--cache",
+        type=Path,
+        help="directory that saves every provider call, so a stopped run carries on later;"
+        " it holds CV text, so keep it out of the repo",
+    )
     args = parser.parse_args(argv)
     if args.runs < 1:
         parser.error("--runs must be at least 1")
@@ -66,7 +81,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             "LLM_PROVIDER=gemini takes synthetic CVs, or real ones with free_tier_consent;"
             " this dataset has a real one without it."
         )
-    print(harness.compare(data, configs(), args.split, args.runs))
+    print(harness.compare(data, configs(args.cache), args.split, args.runs))
 
 
 if __name__ == "__main__":

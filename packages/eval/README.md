@@ -23,6 +23,8 @@ Configs A-D call the provider's API, so they run only with the API key of `LLM_P
 
 The default split is `dev`. Use `test` only for the frozen run the plan describes. Stability needs `--runs 2` or more; the plan (§4) sets the run count for the report.
 
+A run longer than the provider's daily limit (Gemini's free tier: 20 requests a day for `gemini-3.6-flash`) takes `--cache packages/eval/.cache/<dataset>`. Every provider call is saved there as it returns, so running the same command again the next day replays the saved calls and makes only the missing ones; repeat it until the table prints. Run 2 of `--runs 2` makes its own calls rather than replaying run 1. A call is keyed by its model name and full request, so a changed prompt or parse makes new calls; a provider swapping the model behind a name does not, so start a new directory for a run meant to measure the new model. It holds CV text, so `packages/eval/.cache/` is gitignored.
+
 ## Datasets
 
 `datasets/scratch-v1.json` is placeholder data: 2 Jobs × 6 fictional CV Documents, labelled by the team. It contains no real personal data and has `"for_report": false`, so the table carries a `NOT FOR REPORT` line. Each Job includes a keyword-stuffed CV and a CV that has the right skills in different words, which a lexical Baseline should misrank.

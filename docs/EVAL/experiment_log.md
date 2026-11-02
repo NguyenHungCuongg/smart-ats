@@ -32,4 +32,18 @@
 
 ## Các lần chạy
 
-_Chưa có lần chạy nào._
+### 2026-11-02: hr-v1, split dev
+
+- **Commit:** `d632835`, nhánh `chore/gemini-consented-real-cvs`
+- **Lệnh:** `uv run --env-file .env python -m smart_ats_eval packages/eval/datasets/hr-v1.json --split dev --runs 1`
+- **Provider:** `LLM_PROVIDER=gemini`; `LLM_REASONING_MODEL=gemini-3.6-flash`, `LLM_EXTRACTION_MODEL=gemini-3.5-flash-lite`, `EMBEDDING_MODEL=gemini-embedding-2`
+- **Lý do chạy:** bảng ablation sáu dòng đầu tiên trên tập dev (#110)
+
+Lệnh dừng giữa Config B, không in bảng. Dòng cuối của output:
+
+```text
+openai.RateLimitError: Error code: 429 - [...] Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash, description: Generate content requests per day limit exceeded on Free Tier. [...] 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' [...] 'quotaValue': '20'
+```
+
+- **Nhận xét:** free tier của `gemini-3.6-flash` cho 20 request mỗi ngày. Một lần chạy trên hr-v1 cần khoảng 72 request của model chấm (Config B, C, D, mỗi Config 24 CV).
+- **Thay đổi rút ra:** chưa có; chờ chọn model chấm hoặc cách chạy khác.
