@@ -49,7 +49,7 @@
 
 ## 2. Nguyên tắc Chung
 
-- Mọi thực nghiệm chạy qua một **eval harness** trong repo (script + dataset có version), chạy lại được mỗi khi đổi prompt/model. Kết quả ghi kèm model, prompt version, rubric version và chi phí.
+- Mọi thực nghiệm chạy qua một **eval harness** trong repo (script + dataset có version), chạy lại được mỗi khi đổi prompt/model. Kết quả ghi vào [Nhật ký Thực nghiệm](experiment_log.md), kèm model, prompt version, rubric version và chi phí.
 - Ngưỡng mục tiêu là kỳ vọng, không phải điều kiện "đạt". Kết quả thấp hơn vẫn được báo cáo và phân tích.
 - **Không tinh chỉnh trên tập test.** Trước lượt chạy chính thức, model, prompt version và rubric version được đóng băng bằng một git tag; báo cáo ghi tag đó. Đổi bất kỳ thứ gì sau khi đóng băng thì phải chạy lại toàn bộ.
 

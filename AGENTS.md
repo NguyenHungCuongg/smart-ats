@@ -53,6 +53,8 @@ Single-context layout (`CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.
 
 Each kind of question has one owning document; the map is in `CONTRIBUTING.md` (section "Bản đồ tài liệu"). Requirements (FR/NFR IDs, acceptance criteria) live only in `docs/SRS/software_requirements_specification.md`. Project docs are written in Vietnamese with English technical terms; when editing them, follow `CONTRIBUTING.md` (section "Viết tài liệu"): every number lives in one document and is referenced by ID elsewhere, and SAD/ERD section numbers are cited from code, so never renumber them.
 
+**Eval runs** that call a provider API cost money: start one only when the user asks, then append it to `docs/EVAL/experiment_log.md` by that file's rules (output pasted verbatim, every number taken from it).
+
 ### References
 
 Bài báo khoa học toàn văn trong `docs/references/` (~1 MB, không đọc hết). Chỉ dùng khi việc đang làm liên quan ADR/FR/Experiment hoặc báo cáo:

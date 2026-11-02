@@ -15,6 +15,7 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 | Bảng, cột, ràng buộc, index                                   | [ERD](docs/ERD/entity_relationship_diagram.md)         |
 | Thuật ngữ                                                     | [CONTEXT.md](CONTEXT.md)                               |
 | Đóng góp học thuật, dataset, thực nghiệm                      | [Kế hoạch Thực nghiệm](docs/EVAL/experiment_plan.md)   |
+| Kết quả từng lần chạy eval và thay đổi rút ra                 | [Nhật ký Thực nghiệm](docs/EVAL/experiment_log.md)     |
 | Giai đoạn, tiêu chí hoàn thành, rủi ro                        | [Roadmap](docs/PLAN/roadmap.md)                        |
 | Việc cụ thể và trạng thái                                     | GitHub issues                                          |
 | Cài đặt, chạy, lệnh                                           | [README.md](README.md)                                 |
