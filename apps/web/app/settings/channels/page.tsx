@@ -237,11 +237,7 @@ export default function ChannelsPage() {
                 >
                   {t("reconnect")}
                 </button>
-                <button
-                  type="button"
-                  className="font-medium text-accent-pink hover:underline"
-                  onClick={disconnect}
-                >
+                <button type="button" className={LINK_BUTTON} onClick={disconnect}>
                   {t("disconnect")}
                 </button>
               </div>
