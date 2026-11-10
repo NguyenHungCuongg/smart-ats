@@ -498,6 +498,8 @@
     "selectPageSubmit": "Xác nhận kết nối",
     "selectPageCancel": "Hủy",
     "loading": "Đang tải thông tin kết nối...",
+    "configMissing": "Chức năng Facebook chưa được cấu hình trên hệ thống.",
+    "badge": "Facebook Page",
     "forbidden": "Chỉ Company Admin mới có quyền quản lý kết nối Facebook Page.",
     "cancelled": "Đăng nhập Facebook đã bị hủy.",
     "noRole": "Tài khoản Facebook của bạn không có vai trò (Admin, Developer, Tester) trên Meta App ở chế độ Development. Vui lòng thêm tài khoản vào Meta App.",

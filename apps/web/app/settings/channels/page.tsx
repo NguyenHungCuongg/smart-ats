@@ -42,6 +42,28 @@ export default function ChannelsPage() {
 
   useEffect(() => {
     let active = true;
+    apiFetch("/api/auth/me").then(async (response) => {
+      if (!active) return;
+      if (response.status === 401) {
+        window.location.replace("/login");
+        return;
+      }
+      if (response.ok) {
+        const me = await response.json();
+        if (me.role !== "COMPANY_ADMIN") {
+          setForbidden(true);
+        }
+      } else {
+        setForbidden(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     apiFetch("/api/channels/facebook").then(async (response) => {
       if (!active) return;
       if (response.status === 401) {
@@ -99,7 +121,7 @@ export default function ChannelsPage() {
       return;
     }
     if (res.status === 503) {
-      setErrorMsg(t("oauthFailed"));
+      setErrorMsg(t("configMissing"));
       setConnecting(false);
       return;
     }
@@ -132,6 +154,10 @@ export default function ChannelsPage() {
   async function disconnect() {
     if (!window.confirm(t("confirmDisconnect"))) return;
     const res = await apiFetch("/api/channels/facebook", { method: "DELETE" });
+    if (res.status === 403) {
+      setForbidden(true);
+      return;
+    }
     if (res.ok) {
       setConnection(null);
       reload();
@@ -226,7 +252,7 @@ export default function ChannelsPage() {
             <div className="flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-xl font-semibold">
                 {connection.name}
-                <Badge>Facebook Page</Badge>
+                <Badge>{t("badge")}</Badge>
               </h2>
               <div className="flex items-center gap-4">
                 <button

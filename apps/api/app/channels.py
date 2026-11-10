@@ -292,6 +292,58 @@ def decrypt_selection(token_str: str, token_key: str) -> dict[str, Any]:
     return payload
 
 
+async def _upsert_connection(
+    session: Any,
+    tenant_id: uuid.UUID,
+    external_id: str,
+    name: str,
+    token_ciphertext: bytes,
+    connected_by: uuid.UUID,
+) -> tuple[uuid.UUID, datetime]:
+    row = (
+        await session.execute(
+            text("""
+                INSERT INTO channel_connections (
+                  id, tenant_id, channel, external_id, name,
+                  token_ciphertext, connected_by, created_at
+                ) VALUES (
+                  uuidv7(), :tenant_id, 'FACEBOOK_PAGE', :external_id, :name,
+                  :token_ciphertext, :connected_by, now()
+                )
+                ON CONFLICT (tenant_id, channel) DO UPDATE SET
+                  external_id = EXCLUDED.external_id,
+                  name = EXCLUDED.name,
+                  token_ciphertext = EXCLUDED.token_ciphertext,
+                  connected_by = EXCLUDED.connected_by,
+                  created_at = EXCLUDED.created_at
+                RETURNING id, created_at
+            """),
+            {
+                "tenant_id": tenant_id,
+                "external_id": external_id,
+                "name": name,
+                "token_ciphertext": token_ciphertext,
+                "connected_by": connected_by,
+            },
+        )
+    ).one()
+    return row.id, row.created_at
+
+
+def _verify_page_selection(
+    raw: str | None,
+    token_key: str,
+    user_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+) -> dict[str, Any]:
+    if not raw:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No page selection in progress")
+    payload = decrypt_selection(raw, token_key)
+    if uuid.UUID(payload["sub"]) != user_id or uuid.UUID(payload["tid"]) != tenant_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Page selection belongs to another user")
+    return payload
+
+
 # --- Dependencies & Pydantic Models ---
 
 
@@ -474,29 +526,13 @@ async def facebook_callback(
         page = pages[0]
         ciphertext = encrypt_token(page.access_token, config["token_key"])
         async with async_tenant_session(state_tenant_id) as session:
-            await session.execute(
-                text("""
-                    INSERT INTO channel_connections (
-                      id, tenant_id, channel, external_id, name,
-                      token_ciphertext, connected_by, created_at
-                    ) VALUES (
-                      uuidv7(), :tenant_id, 'FACEBOOK_PAGE', :external_id, :name,
-                      :token_ciphertext, :connected_by, now()
-                    )
-                    ON CONFLICT (tenant_id, channel) DO UPDATE SET
-                      external_id = EXCLUDED.external_id,
-                      name = EXCLUDED.name,
-                      token_ciphertext = EXCLUDED.token_ciphertext,
-                      connected_by = EXCLUDED.connected_by,
-                      created_at = EXCLUDED.created_at
-                """),
-                {
-                    "tenant_id": state_tenant_id,
-                    "external_id": page.id,
-                    "name": page.name,
-                    "token_ciphertext": ciphertext,
-                    "connected_by": state_user_id,
-                },
+            await _upsert_connection(
+                session,
+                state_tenant_id,
+                page.id,
+                page.name,
+                ciphertext,
+                state_user_id,
             )
         redirect = RedirectResponse(f"{web_base}/settings/channels?connected=1", status_code=302)
         redirect.delete_cookie("fb_oauth_state", path="/")
@@ -522,16 +558,12 @@ async def facebook_callback(
 @router.get("/pages")
 async def list_candidate_pages(
     admin: CompanyAdmin,
-    request: Request,
     fb_page_selection: Annotated[str | None, Cookie()] = None,
 ) -> list[FacebookPageCandidate]:
     config = check_facebook_config()
-    raw = fb_page_selection or request.headers.get("X-FB-Page-Selection")
-    if not raw:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No page selection in progress")
-    payload = decrypt_selection(raw, config["token_key"])
-    if uuid.UUID(payload["sub"]) != admin.user_id or uuid.UUID(payload["tid"]) != admin.tenant_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Page selection belongs to another user")
+    payload = _verify_page_selection(
+        fb_page_selection, config["token_key"], admin.user_id, admin.tenant_id
+    )
     return [FacebookPageCandidate(id=p["id"], name=p["name"]) for p in payload["pages"]]
 
 
@@ -539,50 +571,27 @@ async def list_candidate_pages(
 async def select_page(
     body: SelectPageRequest,
     admin: CompanyAdmin,
-    request: Request,
     response: Response,
     fb_page_selection: Annotated[str | None, Cookie()] = None,
 ) -> FacebookConnectionResponse:
     config = check_facebook_config()
-    raw = fb_page_selection or request.headers.get("X-FB-Page-Selection")
-    if not raw:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No page selection in progress")
-    payload = decrypt_selection(raw, config["token_key"])
-    if uuid.UUID(payload["sub"]) != admin.user_id or uuid.UUID(payload["tid"]) != admin.tenant_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Page selection belongs to another user")
+    payload = _verify_page_selection(
+        fb_page_selection, config["token_key"], admin.user_id, admin.tenant_id
+    )
 
     matched = next((p for p in payload["pages"] if p["id"] == body.page_id), None)
     if not matched:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Selected page not found in candidates")
 
     ciphertext = encrypt_token(matched["access_token"], config["token_key"])
-    conn_id = (
-        await admin.db.execute(
-            text("""
-                INSERT INTO channel_connections (
-                  id, tenant_id, channel, external_id, name,
-                  token_ciphertext, connected_by, created_at
-                ) VALUES (
-                  uuidv7(), :tenant_id, 'FACEBOOK_PAGE', :external_id, :name,
-                  :token_ciphertext, :connected_by, now()
-                )
-                ON CONFLICT (tenant_id, channel) DO UPDATE SET
-                  external_id = EXCLUDED.external_id,
-                  name = EXCLUDED.name,
-                  token_ciphertext = EXCLUDED.token_ciphertext,
-                  connected_by = EXCLUDED.connected_by,
-                  created_at = EXCLUDED.created_at
-                RETURNING id, created_at
-            """),
-            {
-                "tenant_id": admin.tenant_id,
-                "external_id": matched["id"],
-                "name": matched["name"],
-                "token_ciphertext": ciphertext,
-                "connected_by": admin.user_id,
-            },
-        )
-    ).one()
+    conn_id, created_at = await _upsert_connection(
+        admin.db,
+        admin.tenant_id,
+        matched["id"],
+        matched["name"],
+        ciphertext,
+        admin.user_id,
+    )
 
     user_name = (
         await admin.db.execute(
@@ -593,13 +602,13 @@ async def select_page(
 
     response.delete_cookie(PAGE_SELECTION_COOKIE, path="/")
     return FacebookConnectionResponse(
-        id=conn_id.id,
+        id=conn_id,
         channel="FACEBOOK_PAGE",
         external_id=matched["id"],
         name=matched["name"],
         connected_by=admin.user_id,
         connected_by_name=user_name,
-        connected_at=conn_id.created_at,
+        connected_at=created_at,
     )
 
 

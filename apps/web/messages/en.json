@@ -498,6 +498,8 @@
     "selectPageSubmit": "Confirm connection",
     "selectPageCancel": "Cancel",
     "loading": "Loading Facebook Page connection...",
+    "configMissing": "Facebook integration is not configured on the system.",
+    "badge": "Facebook Page",
     "forbidden": "Only Company Admins can manage the Facebook Page connection.",
     "cancelled": "Facebook login was cancelled.",
     "noRole": "Your Facebook account does not have a role (Admin, Developer, Tester) on the Meta App in Development mode. Please add your account to the Meta App.",
