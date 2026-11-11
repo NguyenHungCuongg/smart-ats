@@ -206,7 +206,8 @@ services:
     restart: unless-stopped
 
   flower:
-    image: mher/flower:2.2.0
+    build:
+      context: ./infra/flower
     environment:
       CELERY_BROKER_URL: ${REDIS_URL:?set in .env}
       # Served under /flower behind Caddy (Infra 06); auth because the demo VPS runs this file.
@@ -217,6 +218,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 5555), 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   seaweedfs:
@@ -264,7 +271,7 @@ services:
       web:
         condition: service_healthy
       flower:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       # A plain TCP connect: the admin API logs every request at info level.
       test: ["CMD", "nc", "-z", "127.0.0.1", "443"]
