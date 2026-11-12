@@ -410,10 +410,13 @@ async def test_circuit_breaker_degraded_mode_reschedules_and_recovers_on_probe(
     # Non-AI features continue functioning normally while degraded.
     assert (await client.get("/api/jobs", headers=user.headers)).status_code == 200
 
-    # Expire open_until in Redis so next task becomes half-open probe; succeeding closes breaker.
+    # Expire open_until in Redis: status no longer reports degraded before probe runs, yet
+    # open_key remains so the next task becomes the half-open probe; succeeding closes breaker.
     _, open_key, _ = ai.breaker_keys()
     sync_r = redis_lib.Redis.from_url(os.environ["REDIS_URL"])
     sync_r.set(open_key, str(time.time() - 1.0))
+    status_expired = await client.get("/api/ai/status", headers=user.headers)
+    assert status_expired.json() == {"degraded": False}
     jobs.parse.apply(args=rescheduled.pop(0)["args"]).get()
     assert recovered_llm.calls == 1
     assert (await client.get(f"/api/jobs/{j3}", headers=user.headers)).json()[

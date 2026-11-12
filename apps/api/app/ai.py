@@ -94,6 +94,16 @@ redis.call("DEL", KEYS[1])
 return 1
 """
 
+# Clears the consecutive transient failure streak on a deterministic (non-transient) error
+# and releases any half-open probe lease when ARGV[1] == "1".
+_RECORD_NON_TRANSIENT_LUA = """
+redis.call("DEL", KEYS[1])
+if ARGV[1] == "1" then
+    redis.call("DEL", KEYS[2])
+end
+return 1
+"""
+
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 
@@ -166,6 +176,13 @@ def _release_probe(provider: str | None = None) -> None:
     usage._sync_redis().eval(_RELEASE_PROBE_LUA, 1, probe_key)
 
 
+def _record_non_transient(provider: str | None = None, *, release_probe: bool) -> None:
+    failures_key, _, probe_key = breaker_keys(provider)
+    usage._sync_redis().eval(
+        _RECORD_NON_TRANSIENT_LUA, 2, failures_key, probe_key, "1" if release_probe else "0"
+    )
+
+
 @contextmanager
 def llm_call(session: Any, tenant_id: uuid.UUID) -> Iterator[None]:
     """Guard an LLM call with the global circuit breaker and per-tenant concurrency slot.
@@ -198,8 +215,8 @@ def llm_call(session: Any, tenant_id: uuid.UUID) -> Iterator[None]:
         if is_transient_error(exc):
             if _record_failure(provider):
                 log.error("LLM circuit breaker opened for provider %s", provider)
-        elif mode == "PROBE":
-            _release_probe(provider)
+        else:
+            _record_non_transient(provider, release_probe=(mode == "PROBE"))
         raise
     else:
         _record_success(provider)
@@ -224,10 +241,17 @@ async def _async_redis() -> redis.asyncio.Redis:
     return cast(redis.asyncio.Redis, redis.asyncio.Redis.from_url(os.environ["REDIS_URL"]))
 
 
+def _is_open_until(raw: bytes | str | None) -> bool:
+    if raw is None:
+        return False
+    raw_str = raw.decode() if isinstance(raw, bytes) else str(raw)
+    return float(raw_str) > time.time()
+
+
 def is_degraded() -> bool:
     """Sync check for whether the configured LLM provider's circuit breaker is open."""
     _, open_key, _ = breaker_keys()
-    return usage._sync_redis().get(open_key) is not None
+    return _is_open_until(cast(bytes | str | None, usage._sync_redis().get(open_key)))
 
 
 async def is_degraded_async() -> bool:
@@ -235,7 +259,7 @@ async def is_degraded_async() -> bool:
     _, open_key, _ = breaker_keys()
     client = await _async_redis()
     try:
-        return (await client.get(open_key)) is not None
+        return _is_open_until(await client.get(open_key))
     finally:
         await client.aclose()
 

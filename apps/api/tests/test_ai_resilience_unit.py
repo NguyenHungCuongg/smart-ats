@@ -103,6 +103,13 @@ class FakeBreakerRedis:
             self.strings.pop(probe_key, None)
             return 1
 
+        if script is ai._RECORD_NON_TRANSIENT_LUA:
+            failures_key, probe_key = keys
+            self.zsets.pop(failures_key, None)
+            if args[0] == "1":
+                self.strings.pop(probe_key, None)
+            return 1
+
         raise AssertionError("Unexpected Lua script")
 
 
@@ -162,6 +169,24 @@ def test_breaker_opens_on_five_consecutive_transient_errors_and_recovers_via_pro
         pass
     assert not ai.is_degraded()
 
+    # Four transient errors followed by a deterministic error also resets the consecutive count,
+    # so one more transient error afterwards stays closed instead of opening at 5.
+    for _ in range(4):
+        now[0] += 1.0
+        with pytest.raises(openai.APIStatusError), ai.llm_call(object(), tenant_id):
+            raise _transient_exc(503)
+    now[0] += 1.0
+    with pytest.raises(ValueError), ai.llm_call(object(), tenant_id):
+        raise ValueError("schema error")
+    now[0] += 1.0
+    with pytest.raises(openai.APIStatusError), ai.llm_call(object(), tenant_id):
+        raise _transient_exc(503)
+    assert not ai.is_degraded()
+
+    # Reset streak before testing window expiry cleanly.
+    with ai.llm_call(object(), tenant_id):
+        pass
+
     # Old errors beyond 60s slide out of the window.
     for _ in range(3):
         now[0] += 1.0
@@ -195,8 +220,10 @@ def test_breaker_opens_on_five_consecutive_transient_errors_and_recovers_via_pro
     assert len(rescheduled) == 1
     assert 110.0 <= rescheduled[0] <= 120.0
 
-    # After 120s, the first call is a half-open probe; a failure immediately re-opens for 120s.
+    # After 120s, degraded status ends before any probe runs, while open_key stays for probe
+    # coordination; if the half-open probe fails, it immediately re-opens for 120s.
     now[0] += 121.0
+    assert not ai.is_degraded()
     with pytest.raises(openai.APIStatusError), ai.llm_call(object(), tenant_id):
         raise _transient_exc(503)
     assert ai.is_degraded()
@@ -303,6 +330,13 @@ async def test_ai_status_endpoint_auth_and_degraded_flag(
             opened = await client.get("/api/ai/status")
             assert opened.status_code == 200
             assert opened.json() == {"degraded": True}
+
+            # Once the 2-minute open window has elapsed, status stops reporting degraded even
+            # before a probe clears open_key.
+            fake_sync.strings[open_key] = ("1", 9999999999)
+            expired = await client.get("/api/ai/status")
+            assert expired.status_code == 200
+            assert expired.json() == {"degraded": False}
         finally:
             app.dependency_overrides.clear()
 
