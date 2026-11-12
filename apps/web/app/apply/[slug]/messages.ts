@@ -8,6 +8,8 @@ export function applyError(t: Translator<"apply">, status: number): string | nul
       return null;
     case 400:
       return t("failed");
+    case 402:
+      return t("budgetExceeded");
     case 404:
       return t("notFoundMessage");
     case 409:

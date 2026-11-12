@@ -238,7 +238,7 @@ MATRIX: list[tuple[str, dict[str, str], list[Probe] | str]] = [
             call("POST", "/api/invitations", json={"email": "a@example.com", "role": "REVIEWER"}),
         ],
     ),
-    ("Xem AI Usage của tenant", {"REVIEWER": DENIED}, "FR-C1.4"),
+    ("Xem AI Usage của tenant", {"REVIEWER": DENIED}, [call("GET", "/api/usage")]),
     (
         "Xử lý yêu cầu xóa dữ liệu ứng viên, cấu hình Retention",
         {"RECRUITER": DENIED, "REVIEWER": DENIED},

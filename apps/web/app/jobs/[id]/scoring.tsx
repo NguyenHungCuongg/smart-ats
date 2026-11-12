@@ -16,7 +16,8 @@ import {
   scoreBlocker,
 } from "../scoring";
 
-const START_ERRORS: Record<number, "notEligible" | "unpricedModel"> = {
+const START_ERRORS: Record<number, "budgetExceeded" | "notEligible" | "unpricedModel"> = {
+  402: "budgetExceeded",
   409: "notEligible",
   503: "unpricedModel",
 };

@@ -2,8 +2,8 @@
 
 ## Smart ATS — Kế hoạch theo Giai đoạn
 
-**Phiên bản:** 3.4
-**Ngày:** 2026-10-21
+**Phiên bản:** 3.5
+**Ngày:** 2026-11-12
 **Đối tượng đọc:** Nhóm phát triển, GVHD
 
 > Roadmap là nguồn sự thật cho **giai đoạn, tiêu chí hoàn thành và rủi ro dự án**. Việc cụ thể và trạng thái từng việc nằm trong GitHub issues; file này chỉ ghi trạng thái ở mức giai đoạn. Yêu cầu được dẫn bằng mã SRS (FR-…, NFR-…), thực nghiệm bằng tên (Experiment 1…6, xem [Kế hoạch Thực nghiệm](../EVAL/experiment_plan.md)).
@@ -24,15 +24,15 @@
 
 ## 2. Tổng quan Giai đoạn
 
-| Giai đoạn                              | Trạng thái            |
-| -------------------------------------- | --------------------- |
-| **0. Nền tảng dự án**                  | ✅ trừ dữ liệu (§3.0) |
-| **1. Vertical Slice**                  | ⬜                    |
-| **2. Chất lượng chấm điểm & ATS lõi**  | ⬜                    |
-| **3. Hoàn thiện ATS**                  | ⬜                    |
-| **4. Agent**                           | ⬜                    |
-| **5. Thực nghiệm chính thức & gia cố** | ⬜                    |
-| **6. Hoàn thiện & bảo vệ**             | ⬜                    |
+| Giai đoạn                              | Trạng thái                                    |
+| -------------------------------------- | --------------------------------------------- |
+| **0. Nền tảng dự án**                  | ✅                                            |
+| **1. Vertical Slice**                  | ✅ phần kỹ thuật & tập dev (còn báo cáo §3.1) |
+| **2. Chất lượng chấm điểm & ATS lõi**  | 🔄 đang thực hiện (§3.2)                      |
+| **3. Hoàn thiện ATS**                  | ⬜ (đã làm trước FR-A3.4 và một phần FR-A3.5) |
+| **4. Agent**                           | ⬜                                            |
+| **5. Thực nghiệm chính thức & gia cố** | ⬜                                            |
+| **6. Hoàn thiện & bảo vệ**             | ⬜                                            |
 
 Mỗi giai đoạn chia thành ba workstream: **Nền tảng** (backend, bảo mật, pipeline ATS), **AI & Thực nghiệm** (extract, chấm điểm, agent, eval harness), **Dữ liệu & Báo cáo**.
 
@@ -48,44 +48,41 @@ Mỗi giai đoạn chia thành ba workstream: **Nền tảng** (backend, bảo m
 - Monorepo, biến môi trường, skeleton web/API/Celery và test runner (#7, #18); branch `develop` (#6).
 - Hạ tầng Docker Compose: PostgreSQL 18 + pgvector với hai role (#8), Redis + Flower (#9), SeaweedFS + Mailpit (#10), container ứng dụng và topology queue (#11), Caddy với SSE (#12), smoke test hạ tầng (#13).
 - Formatter, linter, type check, git hook và CI (#15).
+- Kế hoạch dataset (#43 chọn 6 Job, #44 hướng dẫn chấm) và xác nhận 2 người chấm HR (#42).
 
-Còn lại:
-
-- ⬜ Kế hoạch dataset và xác nhận 2 người chấm HR (chưa ghi nhận trong repo).
-
-**Tiêu chí hoàn thành:** CI xanh ✅; kế hoạch dataset + 2 người chấm xác nhận ⬜.
+**Tiêu chí hoàn thành:** CI xanh ✅; kế hoạch dataset + 2 người chấm xác nhận ✅.
 
 ### 3.1. GĐ 1 — Vertical Slice
 
 **Nền tảng**
 
-- CI chạy unit test (pytest, Vitest); hiện CI mới chạy format, lint, type check và smoke test.
-- Alembic chạy bằng `ats_owner`; schema tối thiểu cho lát cắt (`tenants`, `users`, `refresh_tokens`, `jobs`, `candidates`, `cv_documents`, `applications`, `scoring_runs`, `score_results`, `ai_usage_entries`).
-- Forced RLS, `tenant_session` (async cho API, sync cho worker), `@tenant_task` và bước CI kiểm tra task (ADR-0001, ADR-0002).
-- Bộ test RLS xuyên tenant trên PostgreSQL thật (testcontainers) chạy trong CI.
-- Đăng nhập bằng mật khẩu, access/refresh token (FR-C1.1, chưa cần Google); tenant và user tạo bằng lệnh seed.
-- Readiness check cho `api` (NFR-REL-05).
-- SSE ticket và event tiến độ thật (ADR-0003).
+- ✅ CI chạy unit test (pytest, Vitest) song song với format, lint, type check và smoke test (#30).
+- ✅ Alembic chạy bằng `ats_owner`; schema tối thiểu cho lát cắt (`tenants`, `users`, `refresh_tokens`, `jobs`, `candidates`, `cv_documents`, `applications`, `scoring_runs`, `score_results`, `ai_usage_entries`).
+- ✅ Forced RLS, `tenant_session` (async cho API, sync cho worker), `@tenant_task` và bước CI kiểm tra task (ADR-0001, ADR-0002; #31, #34, #63, #68).
+- ✅ Bộ test RLS xuyên tenant trên PostgreSQL thật (testcontainers) chạy trong CI (#61).
+- ✅ Đăng nhập bằng mật khẩu, access/refresh token (FR-C1.1, chưa cần Google; #32, #66); tenant và user tạo bằng lệnh seed.
+- ✅ Readiness check cho `api` (NFR-REL-05, #33).
+- ✅ SSE ticket và event tiến độ thật (ADR-0003; #35, #67).
 
 **AI & Thực nghiệm**
 
-- Extract PDF/DOCX và JSON Schema cho JD/CV (FR-C2.1); parse Job và form xác nhận criteria (FR-A1.1).
-- Upload 1 CV → parse → Blind Profile v0 → chấm 1 Application (rubric v0 + Must-have Coverage khớp chính xác/alias) → màn hình Fit-Gap.
-- Scoring core gọi được trực tiếp từ eval harness, không cần API hay Celery.
-- Eval harness v0 trong `packages/eval`: đọc dataset, tính Spearman ρ, NDCG@5, Precision@5, grounding rate, stability; cấu hình Baseline.
+- ✅ Extract PDF/DOCX và JSON Schema cho JD/CV (FR-C2.1, #37); parse Job và form xác nhận criteria (FR-A1.1, #39).
+- ✅ Upload 1 CV → parse → Blind Profile v0 → chấm 1 Application (rubric v0 + Must-have Coverage khớp chính xác/alias) → màn hình Fit-Gap (#38, #40, #41, #64).
+- ✅ Scoring core gọi được trực tiếp từ eval harness, không cần API hay Celery.
+- ✅ Eval harness v0 trong `packages/eval`: đọc dataset, tính Spearman ρ, NDCG@5, Precision@5, grounding rate, stability; cấu hình Baseline (#36, #65).
 
 **Dữ liệu & Báo cáo**
 
-- Hướng dẫn chấm cho HR; thu thập 6 Job và CV; HR chấm xong **tập dev**.
-- Đối chiếu nguồn cho các nhận định ở PRD §1.1, hoặc lên kế hoạch khảo sát SME.
-- Báo cáo: chương Cơ sở lý thuyết (từ danh sách tài liệu tham khảo).
+- ✅ Hướng dẫn chấm cho HR (#44); thu thập 6 Job (#43) và CV; HR chấm xong **tập dev** `hr-v1` (#45, `for_report: false` dùng để tinh chỉnh).
+- ⬜ Đối chiếu nguồn cho các nhận định ở PRD §1.1, hoặc lên kế hoạch khảo sát SME (#46).
+- ⬜ Báo cáo: chương Cơ sở lý thuyết (từ danh sách tài liệu tham khảo, #47).
 
 **Tiêu chí hoàn thành:**
 
-- Flow Job → CV → Score → Fit-Gap chạy end-to-end trên Docker Compose.
-- ≥ 15 test RLS xuyên tenant pass trong CI.
-- Eval harness in bảng so sánh Baseline với scoring v0 trên tập dev.
-- Nhãn tập dev hoàn tất.
+- ✅ Flow Job → CV → Score → Fit-Gap chạy end-to-end trên Docker Compose.
+- ✅ ≥ 15 test RLS xuyên tenant pass trong CI (`tests/test_tenancy.py`).
+- ✅ Eval harness in bảng so sánh Baseline với scoring v0 trên tập dev.
+- ✅ Nhãn tập dev hoàn tất (#45).
 
 ### 3.2. GĐ 2 — Chất lượng chấm điểm & ATS lõi
 
@@ -93,38 +90,38 @@ Phần không cần nhãn (workstream Nền tảng, cùng retry, idempotency và
 
 **AI & Thực nghiệm**
 
-- Scoring v1 đủ FR-A1.3: chuẩn hóa kỹ năng, alias, khớp embedding, rubric có neo, grounding.
-- Blind Profile đầy đủ (FR-C2.4); phòng thủ prompt injection (FR-C2.2) và bộ CV tấn công của Experiment 2.
-- Đủ các cấu hình ablation của Experiment 1 trong harness; tinh chỉnh prompt theo từng vòng trên tập dev.
-- Retry, idempotency, chế độ degraded (FR-C2.3).
+- ✅ Scoring v1 đủ FR-A1.3: chuẩn hóa kỹ năng, alias, khớp embedding, Experience timeline tất định, rubric có neo, grounding (#107–#109).
+- 🔄 Blind Profile & an toàn AI: đã che định danh cơ bản trong `blind_profile` (FR-C2.4) và cô lập `<untrusted_document>` (#62); ⬜ phát hiện heuristic (FR-C2.2), bộ CV tấn công Experiment 2 và OCR fallback (FR-C2.1).
+- 🔄 Đủ 6 cấu hình ablation của Experiment 1 trong harness (#110) và đã chạy sơ bộ trên `hr-v1` split `dev` (#119); ⬜ tinh chỉnh prompt/rubric trên tập dev để cải thiện Grounding và Spearman ρ, cùng lượt chạy đo Stability (`--runs >= 2`).
+- ⬜ Retry, idempotency, chế độ degraded (FR-C2.3, #88).
 
 **Nền tảng**
 
-- Upload Batch với cô lập lỗi (FR-A1.2).
-- Vòng đời Job (FR-A3.1); pipeline Application, Kanban, lịch sử Stage, optimistic locking (FR-A3.2).
-- Workspace, Member, lời mời (FR-C1.2) và email outbox gửi qua Mailpit (cần cho lời mời).
-- Reviewer Assignment và test cho mọi ô ❌/Assigned của ma trận RBAC (SRS §2.2).
-- AI Usage Ledger, AI Budget, giới hạn đồng thời (FR-C1.4).
-- Giao diện song ngữ Vi/En (NFR-USE-03): dựng `next-intl`, chuyển các trang đã có sang file ngôn ngữ, email theo ngôn ngữ người thao tác.
+- ✅ Upload Batch với cô lập lỗi (FR-A1.2, #82).
+- ✅ Vòng đời Job (FR-A3.1, #85); pipeline Application, Kanban, lịch sử Stage, optimistic locking (FR-A3.2, #86).
+- ✅ Workspace, Member, lời mời (FR-C1.2, #83) và email outbox gửi qua Mailpit.
+- ✅ Reviewer Assignment và test cho mọi ô ❌/Assigned của ma trận RBAC đã hiện thực (SRS §2.2, #84).
+- 🔄 AI Usage Ledger (`app/usage.py`), ⬜ AI Budget và giới hạn đồng thời (FR-C1.4, #87).
+- ✅ Giao diện song ngữ Vi/En (NFR-USE-03, #93): dựng `next-intl`, chuyển các trang đã có sang file ngôn ngữ, email theo ngôn ngữ người thao tác.
 
 **Dữ liệu & Báo cáo**
 
-- Thu CV cho **tập test**, song song với lúc HR chấm tập dev; HR chấm xong tập test.
-- Xác nhận với GVHD các nghĩa vụ theo Nghị định 13/2023/NĐ-CP và Luật Bảo vệ dữ liệu cá nhân (FR-C1.5), trước khi làm phần bảo vệ dữ liệu ở GĐ 3.
-- Báo cáo: chương Phân tích yêu cầu (từ PRD, SRS).
+- 🔄 Thu CV cho **tập test** và thu nhãn HR (#81).
+- ⬜ Xác nhận với GVHD các nghĩa vụ theo Nghị định 13/2023/NĐ-CP và Luật Bảo vệ dữ liệu cá nhân (FR-C1.5), trước khi làm phần bảo vệ dữ liệu ở GĐ 3.
+- ⬜ Báo cáo: chương Phân tích yêu cầu (từ PRD, SRS).
 
 **Tiêu chí hoàn thành:**
 
-- Experiment 1 và 2 sơ bộ trên tập dev, có đủ các cấu hình ablation.
-- Test ma trận RBAC pass.
-- Nhãn tập test hoàn tất.
+- 🔄 Experiment 1 sơ bộ trên tập dev đã chạy (#119); Experiment 2 sơ bộ trên tập dev ⬜.
+- ✅ Test ma trận RBAC pass (các ô của tính năng chưa làm còn đánh dấu skip theo FR).
+- ⬜ Nhãn tập test hoàn tất (#81).
 
 ### 3.3. GĐ 3 — Hoàn thiện ATS
 
 **Nền tảng**
 
-- Public Apply Link (FR-A3.4).
-- Đăng tin Đa kênh (FR-A3.5), sau Public Apply Link: kết nối và đăng lên Facebook Page, share intent, Open Graph và `JobPosting` trên trang Public Apply Link.
+- ✅ Public Apply Link (FR-A3.4, #96).
+- 🔄 Đăng tin Đa kênh (FR-A3.5, #94): đã xong Meta app/Page (#95) và soạn Job Ad / share intent / Open Graph / `JobPosting` (#97); ⬜ kết nối và đăng lên Facebook Page (#98, #99).
 - Activity Timeline & Audit Log (FR-A3.3).
 - Comment, @mention, notification, Interview Score (FR-A2.2).
 - Bảo vệ dữ liệu: consent, job retention, xóa dữ liệu (FR-C1.5).

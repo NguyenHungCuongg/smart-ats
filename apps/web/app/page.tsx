@@ -18,6 +18,9 @@ export default function Home() {
       <Link href="/settings/members" className="underline">
         {t("members")}
       </Link>
+      <Link href="/settings/usage" className="underline">
+        {t("usage")}
+      </Link>
     </main>
   );
 }

@@ -43,6 +43,12 @@ test("other failures fall back to a message per status", () => {
   expect(uploadError(t("vi"), 422, [{ msg: "Field required" }])).toBe(
     "Cần xác nhận cơ sở xử lý dữ liệu và chọn ít nhất một file CV.",
   );
+  expect(uploadError(t("vi"), 402, undefined)).toBe(
+    "Đã vượt ngân sách AI hàng tháng. Hãy liên hệ Company Admin để kiểm tra mức sử dụng.",
+  );
+  expect(uploadError(t("en"), 402, undefined)).toBe(
+    "Monthly AI budget exceeded. Ask a Company Admin to review AI usage.",
+  );
   expect(uploadError(t("vi"), 500, undefined)).toBe("Không tải lên được CV. Thử lại.");
   expect(uploadError(t("en"), 500, undefined)).toBe("Couldn't upload the CVs. Try again.");
 });

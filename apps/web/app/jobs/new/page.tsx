@@ -6,7 +6,11 @@ import { type FormEvent, useState } from "react";
 
 import { apiFetch } from "../../auth";
 
-const ERRORS: Record<number, "forbidden" | "tooLarge" | "unsupported" | "fileOrText"> = {
+const ERRORS: Record<
+  number,
+  "budgetExceeded" | "forbidden" | "tooLarge" | "unsupported" | "fileOrText"
+> = {
+  402: "budgetExceeded",
   403: "forbidden",
   413: "tooLarge",
   415: "unsupported",
