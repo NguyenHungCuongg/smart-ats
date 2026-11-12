@@ -5,7 +5,8 @@
   "home": {
     "jobs": "Danh sách Job",
     "newJob": "Tạo Job từ JD",
-    "members": "Thành viên Workspace"
+    "members": "Thành viên Workspace",
+    "usage": "Mức sử dụng AI & Ngân sách"
   },
   "session": {
     "offline": "Không kết nối được máy chủ. Tải lại trang để thử lại.",
@@ -108,7 +109,40 @@
     "applications": "Application",
     "created": "Tạo lúc"
   },
+  "usage": {
+    "title": "Mức sử dụng AI & Ngân sách",
+    "back": "Trang chủ",
+    "month": "Tháng (UTC)",
+    "scopeTenant": "Toàn bộ Workspace (Company Admin)",
+    "scopeUser": "Mức sử dụng AI của bạn (Recruiter)",
+    "warningTitle": "Cảnh báo ngân sách AI hàng tháng",
+    "warningBody": "Chi tiêu của Workspace đã đạt {percent} ngân sách hàng tháng {budget} (đã dùng {spent}).",
+    "viewDetails": "Xem mức sử dụng AI",
+    "spentLabel": "Chi tiêu tháng",
+    "budgetLabel": "Ngân sách tháng",
+    "callsLabel": "Số lượt gọi AI",
+    "usageRateLabel": "Tỷ lệ đã dùng",
+    "feature": "Tính năng",
+    "calls": "Lượt gọi",
+    "cost": "Chi phí (USD)",
+    "empty": "Chưa có lượt sử dụng AI nào trong tháng này.",
+    "loading": "Đang tải dữ liệu sử dụng AI...",
+    "forbidden": "Chỉ Company Admin và Recruiter mới được xem mức sử dụng AI.",
+    "invalidMonth": "Chọn tháng hợp lệ theo định dạng YYYY-MM.",
+    "failed": "Không tải được dữ liệu sử dụng AI. Vui lòng thử lại.",
+    "features": {
+      "JOB_PARSE": "Phân tích JD",
+      "CV_PARSE": "Phân tích CV",
+      "OCR": "Nhận dạng chữ (OCR)",
+      "SCORING": "Chấm điểm ứng viên",
+      "INTERVIEW_Q": "Câu hỏi phỏng vấn",
+      "EMAIL": "Soạn email",
+      "AGENT": "Trợ lý AI",
+      "EMBEDDING": "Vector kỹ năng"
+    }
+  },
   "newJob": {
+    "budgetExceeded": "Đã vượt ngân sách AI hàng tháng. Hãy liên hệ Company Admin để kiểm tra mức sử dụng.",
     "forbidden": "Chỉ Recruiter được tạo Job.",
     "tooLarge": "File JD vượt quá 10 MB.",
     "unsupported": "JD phải là file PDF, DOCX hoặc văn bản thuần.",
@@ -219,6 +253,7 @@
     "cancel": "Hủy"
   },
   "scoring": {
+    "budgetExceeded": "Đã vượt ngân sách AI hàng tháng. Hãy liên hệ Company Admin để kiểm tra mức sử dụng.",
     "notConfirmed": "Xác nhận criteria trước khi chấm điểm.",
     "noApplications": "Job chưa có Application nào.",
     "running": "Đang chấm điểm…",
@@ -266,6 +301,7 @@
     "noEvidence": "Không có bằng chứng"
   },
   "uploads": {
+    "budgetExceeded": "Đã vượt ngân sách AI hàng tháng. Hãy liên hệ Company Admin để kiểm tra mức sử dụng.",
     "reason": {
       "TOO_LARGE": "vượt quá 10 MB",
       "UNSUPPORTED_TYPE": "không phải PDF hoặc DOCX"
@@ -315,6 +351,7 @@
     "fixAndRetry": "Sửa file rồi tải lại."
   },
   "apply": {
+    "budgetExceeded": "Vị trí này tạm ngưng tiếp nhận hồ sơ do đã hết hạn mức xử lý AI. Vui lòng thử lại sau.",
     "metaTitle": "Ứng tuyển · Smart ATS",
     "title": "Ứng tuyển: {jobTitle}",
     "fullName": "Họ và tên",

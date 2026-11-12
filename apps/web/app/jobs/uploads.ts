@@ -22,7 +22,11 @@ export type Batch = {
   items: Item[];
 };
 
-const STATUS_ERRORS: Record<number, "limits" | "unsupported" | "consentAndFiles"> = {
+const STATUS_ERRORS: Record<
+  number,
+  "budgetExceeded" | "limits" | "unsupported" | "consentAndFiles"
+> = {
+  402: "budgetExceeded",
   413: "limits",
   415: "unsupported",
   422: "consentAndFiles",

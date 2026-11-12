@@ -5,7 +5,8 @@
   "home": {
     "jobs": "Jobs",
     "newJob": "Create a Job from a JD",
-    "members": "Workspace Members"
+    "members": "Workspace Members",
+    "usage": "AI Usage & Budget"
   },
   "session": {
     "offline": "Can't reach the server. Reload the page to try again.",
@@ -108,7 +109,40 @@
     "applications": "Applications",
     "created": "Created"
   },
+  "usage": {
+    "title": "AI Usage & Budget",
+    "back": "Home",
+    "month": "Month (UTC)",
+    "scopeTenant": "Workspace total (Company Admin)",
+    "scopeUser": "Your AI usage (Recruiter)",
+    "warningTitle": "Monthly AI budget warning",
+    "warningBody": "Workspace spend has reached {percent} of the {budget} monthly budget ({spent} used).",
+    "viewDetails": "View AI usage",
+    "spentLabel": "Monthly spend",
+    "budgetLabel": "Monthly budget",
+    "callsLabel": "AI calls",
+    "usageRateLabel": "Budget used",
+    "feature": "Feature",
+    "calls": "Calls",
+    "cost": "Cost (USD)",
+    "empty": "No AI usage recorded for this month.",
+    "loading": "Loading AI usage...",
+    "forbidden": "Only Company Admins and Recruiters can view AI usage.",
+    "invalidMonth": "Choose a valid month in YYYY-MM format.",
+    "failed": "Couldn't load AI usage. Please try again.",
+    "features": {
+      "JOB_PARSE": "JD parsing",
+      "CV_PARSE": "CV parsing",
+      "OCR": "Document OCR",
+      "SCORING": "Candidate scoring",
+      "INTERVIEW_Q": "Interview questions",
+      "EMAIL": "Email drafting",
+      "AGENT": "AI assistant",
+      "EMBEDDING": "Skill embeddings"
+    }
+  },
   "newJob": {
+    "budgetExceeded": "Monthly AI budget exceeded. Ask a Company Admin to review AI usage.",
     "forbidden": "Only Recruiters can create Jobs.",
     "tooLarge": "The JD file is over 10 MB.",
     "unsupported": "The JD must be a PDF, DOCX or plain-text file.",
@@ -219,6 +253,7 @@
     "cancel": "Cancel"
   },
   "scoring": {
+    "budgetExceeded": "Monthly AI budget exceeded. Ask a Company Admin to review AI usage.",
     "notConfirmed": "Confirm the criteria before scoring.",
     "noApplications": "The Job has no Applications yet.",
     "running": "Scoring…",
@@ -266,6 +301,7 @@
     "noEvidence": "No Evidence"
   },
   "uploads": {
+    "budgetExceeded": "Monthly AI budget exceeded. Ask a Company Admin to review AI usage.",
     "reason": {
       "TOO_LARGE": "over 10 MB",
       "UNSUPPORTED_TYPE": "not a PDF or DOCX"
@@ -315,6 +351,7 @@
     "fixAndRetry": "Fix the file, then upload it again."
   },
   "apply": {
+    "budgetExceeded": "Applications for this position are temporarily paused. Please try again later.",
     "metaTitle": "Apply · Smart ATS",
     "title": "Apply for: {jobTitle}",
     "fullName": "Full name",

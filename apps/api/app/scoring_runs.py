@@ -14,6 +14,7 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Literal
 
+from celery.exceptions import TaskPredicate
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -93,7 +94,7 @@ async def create(job_id: uuid.UUID, auth: LockedJob) -> RunCreated:
     checks = (
         await auth.db.execute(
             text(
-                "SELECT EXISTS (SELECT 1 FROM applications WHERE job_id = :id) AS has_applications,"
+                "SELECT (SELECT count(*) FROM applications WHERE job_id = :id) AS applications,"
                 f"  EXISTS (SELECT 1 FROM scoring_runs r WHERE job_id = :id AND {_RUNNING})"
                 "    AS running"
             ),
@@ -102,7 +103,7 @@ async def create(job_id: uuid.UUID, auth: LockedJob) -> RunCreated:
     ).one()
     if not confirmed:
         raise HTTPException(status.HTTP_409_CONFLICT, "Confirm the Job's criteria first")
-    if not checks.has_applications:
+    if not checks.applications:
         raise HTTPException(status.HTTP_409_CONFLICT, "The Job has no Applications to score")
     if checks.running:
         raise HTTPException(status.HTTP_409_CONFLICT, "The Job is already being scored")
@@ -118,6 +119,9 @@ async def create(job_id: uuid.UUID, auth: LockedJob) -> RunCreated:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "The embedding model has no similarity threshold"
         )
+    await usage.check_budget(
+        auth.db, {"SCORING": checks.applications, "EMBEDDING": checks.applications}
+    )
 
     run_id: uuid.UUID = (
         await auth.db.execute(
@@ -250,27 +254,30 @@ def score_application(
         error = "READ_FAILED"
     if error is None:
         try:
-            result = score(
-                row.criteria_snapshot,
-                row.parsed_profile,
-                cv_text,
-                jd_text,
-                llm_from_env(row.model),
-                _Billed(
-                    embedder_from_env(row.embedding_model),
-                    lambda embedding_usage: usage.record(
-                        session,
-                        row.created_by,
-                        "EMBEDDING",
-                        embedding_usage,
-                        "score_result",
-                        row.id,
+            with usage.llm_slot(session, tenant_id):
+                result = score(
+                    row.criteria_snapshot,
+                    row.parsed_profile,
+                    cv_text,
+                    jd_text,
+                    llm_from_env(row.model),
+                    _Billed(
+                        embedder_from_env(row.embedding_model),
+                        lambda embedding_usage: usage.record(
+                            session,
+                            row.created_by,
+                            "EMBEDDING",
+                            embedding_usage,
+                            "score_result",
+                            row.id,
+                        ),
                     ),
-                ),
-                # The same "nay" for every result of the run, whenever its task runs.
-                row.run_created_at.date(),
-                ScoringWeights(**row.weights),
-            )
+                    # The same "nay" for every result of the run, whenever its task runs.
+                    row.run_created_at.date(),
+                    ScoringWeights(**row.weights),
+                )
+        except TaskPredicate:
+            raise
         except Exception as e:
             # The traceback may hold provider details: it goes to the log, the row gets a code.
             log.exception("scoring score result %s failed", row.id)

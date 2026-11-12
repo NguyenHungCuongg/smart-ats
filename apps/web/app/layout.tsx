@@ -5,6 +5,7 @@ import { getLocale } from "next-intl/server";
 import type { ReactNode } from "react";
 
 import "./globals.css";
+import { BudgetBanner } from "./budget-banner";
 import { LocaleSwitch } from "./locale-switch";
 
 // DESIGN.md: Archivo for display (wdth gives Semi-Condensed), Be Vietnam Pro for every UI role,
@@ -41,6 +42,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <header className="flex justify-end px-6 pt-4">
             <LocaleSwitch />
           </header>
+          <BudgetBanner />
           {children}
         </NextIntlClientProvider>
       </body>

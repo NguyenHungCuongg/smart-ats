@@ -16,6 +16,7 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
+from celery.exceptions import TaskPredicate
 from fastapi import (
     APIRouter,
     Cookie,
@@ -225,6 +226,17 @@ async def submit_application(
                 # AC 6: do not create second application, return same confirmation message
                 return ApplyResult(status="ok", message="Application received")
 
+        # Check CV deduplication and AI Budget before creating records or storing objects
+        existing_cv = (
+            await db.execute(
+                text("SELECT id, parse_status FROM cv_documents WHERE sha256 = :sha256"),
+                {"sha256": sha256},
+            )
+        ).one_or_none()
+        needs_parse = existing_cv is None or existing_cv.parse_status == "PENDING"
+        if needs_parse:
+            await usage.check_budget(db, {"CV_PARSE": 1})
+
         # Create or update candidate with consent details (FR-C1.5)
         candidate_id: uuid.UUID = (
             await db.execute(
@@ -250,19 +262,8 @@ async def submit_application(
             )
         ).scalar_one()
 
-        # Deduplicate CV document by sha256 (FR-A1.2)
-        existing_cv = (
-            await db.execute(
-                text("SELECT id, parse_status FROM cv_documents WHERE sha256 = :sha256"),
-                {"sha256": sha256},
-            )
-        ).one_or_none()
-
-        needs_parse = False
         if existing_cv is not None:
             cv_document_id = existing_cv.id
-            if existing_cv.parse_status == "PENDING":
-                needs_parse = True
         else:
             storage_key = f"t/{job.tenant_id}/cv/{uuid.uuid4()}.{ext}"
             await asyncio.to_thread(storage.put, storage_key, data)
@@ -284,7 +285,6 @@ async def submit_application(
                     },
                 )
             ).scalar_one()
-            needs_parse = True
 
         # Create application with source = PUBLIC_APPLY at stage APPLIED
         application_id: uuid.UUID = (
@@ -371,7 +371,8 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, cv_document_id: str) -> Non
                 {"id": cv_document_id},
             )
             return
-        parsed = parsing.parse_cv(cv_text, llm_from_env(model))
+        with usage.llm_slot(session, tenant_id):
+            parsed = parsing.parse_cv(cv_text, llm_from_env(model))
         blind = parsing.blind_profile(parsed.data)
         session.execute(
             text(
@@ -391,6 +392,8 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, cv_document_id: str) -> Non
             },
         )
         usage.record(session, None, "CV_PARSE", parsed.usage, "cv_document", doc.id)
+    except TaskPredicate:
+        raise
     except Exception:
         log.exception("parsing public apply CV document %s failed", cv_document_id)
         session.execute(

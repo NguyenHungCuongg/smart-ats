@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal, NoReturn
 
+from celery.exceptions import TaskPredicate
 from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -130,6 +131,7 @@ async def create(
             f"Each CV must be a PDF or DOCX of at most {MAX_DOCUMENT_BYTES // 2**20} MB",
             rejected,
         )
+    await usage.check_budget(auth.db, {"CV_PARSE": len(files)})
 
     batch_id: uuid.UUID = (
         await auth.db.execute(
@@ -262,7 +264,7 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
     ).one_or_none()
 
     if cv is None:
-        parsed = _parse(session, item, data)
+        parsed = _parse(tenant_id, session, item, data)
         if isinstance(parsed, tuple):
             finish_item(session, item, "FAILED", error=parsed)
             return
@@ -357,7 +359,9 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
     finish_item(session, item, "SUCCEEDED", cv_id=cv_id, dedupe=dedupe)
 
 
-def _parse(session: Session, item: Any, data: bytes) -> parsing.Parsed | tuple[str, str]:
+def _parse(
+    tenant_id: uuid.UUID, session: Session, item: Any, data: bytes
+) -> parsing.Parsed | tuple[str, str]:
     """The parsed CV, or the item's (error_code, error_message)."""
     try:
         cv_text = extract_text(data)
@@ -367,7 +371,10 @@ def _parse(session: Session, item: Any, data: bytes) -> parsing.Parsed | tuple[s
     if not usage.priced(model):
         return "UNPRICED_MODEL", "the AI model has no price in the AI Usage Ledger"
     try:
-        return parsing.parse_cv(cv_text, llm_from_env(model))
+        with usage.llm_slot(session, tenant_id):
+            return parsing.parse_cv(cv_text, llm_from_env(model))
+    except TaskPredicate:
+        raise
     except Exception as e:
         # The traceback may hold provider details: it goes to the log, the item gets a code.
         log.exception("parsing CV upload item failed")

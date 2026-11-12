@@ -20,6 +20,7 @@ from decimal import Decimal
 from pathlib import PurePath
 from typing import Annotated, Any, Literal, Self
 
+from celery.exceptions import TaskPredicate
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
@@ -255,6 +256,7 @@ async def create(
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "The JD Document must be PDF, DOCX or text"
         )
+    await usage.check_budget(auth.db, {"JOB_PARSE": 1})
 
     # Pasted text is stored too, so the task reads every JD the same way.
     # ponytail: an object stays behind if the insert below fails; a sweep can collect those.
@@ -516,10 +518,14 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
         error = "UNPRICED_MODEL"
     else:
         try:
-            parsed = parse_job(extract_text(storage.get(key)), llm_from_env(model))
+            jd_text = extract_text(storage.get(key))
+            with usage.llm_slot(session, tenant_id):
+                parsed = parse_job(jd_text, llm_from_env(model))
             usage.record(
                 session, uuid.UUID(user_id), "JOB_PARSE", parsed.usage, "job", uuid.UUID(job_id)
             )
+        except TaskPredicate:
+            raise
         except ExtractionError as e:
             error = e.code
         except Exception as e:
