@@ -20,12 +20,12 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import events, outbox, storage, usage
+from app import ai, events, outbox, storage, usage
 from app.jobs import JobReader, LockedJob, Weights
 from app.worker import tenant_task
 from smart_ats_scoring.embedding import Embedder, EmbeddingResult, embedder_from_env, threshold
 from smart_ats_scoring.extraction import ExtractionError, extract_text
-from smart_ats_scoring.llm import UnusableResponse, Usage, llm_from_env
+from smart_ats_scoring.llm import UnusableResponse, Usage, is_transient_error, llm_from_env
 from smart_ats_scoring.scoring import PROMPT_VERSION, RUBRIC_VERSION, score
 from smart_ats_scoring.scoring import Weights as ScoringWeights
 
@@ -168,6 +168,75 @@ async def create(job_id: uuid.UUID, auth: LockedJob) -> RunCreated:
     return RunCreated(run_id=run_id)
 
 
+@router.post(
+    "/{job_id}/scoring-runs/{run_id}/results/{application_id}/retry",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_result(
+    job_id: uuid.UUID, run_id: uuid.UUID, application_id: uuid.UUID, auth: LockedJob
+) -> ScoreResult:
+    """Re-enqueue one failed score result whose failure was a transient AI outage."""
+    row = (
+        await auth.db.execute(
+            text(
+                "SELECT s.id, s.status, s.error_code"
+                " FROM score_results s JOIN scoring_runs r ON r.id = s.scoring_run_id"
+                " WHERE s.scoring_run_id = :run_id AND s.application_id = :application_id"
+                "  AND r.job_id = :job_id FOR UPDATE OF s"
+            ),
+            {"run_id": run_id, "application_id": application_id, "job_id": job_id},
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Score result not found")
+    other_running = await auth.db.scalar(
+        text(
+            f"SELECT EXISTS (SELECT 1 FROM scoring_runs r"
+            f" WHERE r.job_id = :job_id AND r.id <> :run_id AND {_RUNNING})"
+        ),
+        {"job_id": job_id, "run_id": run_id},
+    )
+    if other_running:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Another Scoring Run is already running for this Job"
+        )
+    if row.status != "FAILED" or row.error_code not in ai.RETRYABLE_ERRORS:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The score result cannot be retried")
+    await usage.check_budget(auth.db, {"SCORING": 1, "EMBEDDING": 1})
+    await auth.db.execute(
+        text(
+            "UPDATE score_results SET status = 'PENDING', error_code = NULL,"
+            "  attempts = 1, enqueued_at = now() WHERE id = :id"
+        ),
+        {"id": row.id},
+    )
+    await auth.db.execute(
+        text("UPDATE scoring_runs SET status = 'RUNNING', completed_at = NULL WHERE id = :id"),
+        {"id": run_id},
+    )
+    outbox.enqueue_after_commit(
+        auth.db,
+        score_application,
+        (str(auth.tenant_id), str(run_id), str(application_id)),
+    )
+    refreshed = (
+        await auth.db.execute(
+            text(
+                "SELECT s.application_id, c.full_name, s.status, s.cv_document_id,"
+                "  a.cv_document_id AS current_cv_document_id, s.technical_score,"
+                "  s.soft_skills_score, s.experience_score, s.total_score,"
+                "  s.must_have_coverage, s.must_have_detail, s.experience_detail,"
+                "  s.rubric_grades, s.fit_gap_report, s.grounding_rate, s.error_code"
+                " FROM score_results s JOIN applications a ON a.id = s.application_id"
+                "  JOIN candidates c ON c.id = a.candidate_id"
+                " WHERE s.id = :id"
+            ),
+            {"id": row.id},
+        )
+    ).one()
+    return ScoreResult(**refreshed._mapping)
+
+
 @router.get("/{job_id}/scoring-runs/latest")
 async def latest(job_id: uuid.UUID, auth: JobReader) -> ScoringRun:
     """The Job's newest run with its results; 404 for a Job never scored."""
@@ -220,7 +289,11 @@ class _Billed:
         return result
 
 
-@tenant_task(name="scoring_runs.score_application", queue="llm")
+@tenant_task(
+    name="scoring_runs.score_application",
+    queue="llm",
+    max_retries=len(ai.RETRY_BACKOFF_SECONDS),
+)
 def score_application(
     tenant_id: uuid.UUID, session: Session, run_id: str, application_id: str
 ) -> None:
@@ -254,15 +327,17 @@ def score_application(
         error = "READ_FAILED"
     if error is None:
         try:
-            with usage.llm_slot(session, tenant_id):
+            llm = llm_from_env(row.model, max_retries=0)
+            embedder = embedder_from_env(row.embedding_model, max_retries=0)
+            with ai.llm_call(session, tenant_id):
                 result = score(
                     row.criteria_snapshot,
                     row.parsed_profile,
                     cv_text,
                     jd_text,
-                    llm_from_env(row.model),
+                    llm,
                     _Billed(
-                        embedder_from_env(row.embedding_model),
+                        embedder,
                         lambda embedding_usage: usage.record(
                             session,
                             row.created_by,
@@ -279,12 +354,18 @@ def score_application(
         except TaskPredicate:
             raise
         except Exception as e:
-            # The traceback may hold provider details: it goes to the log, the row gets a code.
-            log.exception("scoring score result %s failed", row.id)
-            error = "SCORING_FAILED"
-            if isinstance(e, UnusableResponse):
-                # Billed all the same (FR-C1.4).
-                usage.record(session, row.created_by, "SCORING", e.usage, "score_result", row.id)
+            if is_transient_error(e):
+                log.warning("transient error scoring score result %s: %s", row.id, type(e).__name__)
+                error = ai.retry_transient_error(e)
+            else:
+                # The traceback may hold provider details: it goes to the log, the row gets a code.
+                log.exception("scoring score result %s failed", row.id)
+                error = "SCORING_FAILED"
+                if isinstance(e, UnusableResponse):
+                    # Billed all the same (FR-C1.4).
+                    usage.record(
+                        session, row.created_by, "SCORING", e.usage, "score_result", row.id
+                    )
 
     if error is None:
         usage.record(session, row.created_by, "SCORING", result.usage, "score_result", row.id)
@@ -297,7 +378,8 @@ def score_application(
                 "  must_have_detail = CAST(:detail AS jsonb),"
                 "  experience_detail = CAST(:timeline AS jsonb),"
                 "  rubric_grades = CAST(:rubric AS jsonb),"
-                "  fit_gap_report = CAST(:report AS jsonb), grounding_rate = :grounding"
+                "  fit_gap_report = CAST(:report AS jsonb), grounding_rate = :grounding,"
+                "  error_code = NULL"
                 " WHERE id = :id"
             ),
             {

@@ -295,7 +295,7 @@ class UnusableLlm(FakeLlm):
 def llm(monkeypatch: pytest.MonkeyPatch) -> FakeLlm:
     fake = FakeLlm(PARSED)
     monkeypatch.setenv("LLM_EXTRACTION_MODEL", "test-model")
-    monkeypatch.setattr(jobs, "llm_from_env", lambda model: fake)
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model, **_: fake)
     monkeypatch.setitem(
         pricing.PRICES, "test-model", pricing.Price(Decimal("2"), Decimal("0.5"), Decimal("8"))
     )
@@ -466,7 +466,7 @@ async def test_billed_response_it_cannot_use_fails_the_parse_and_is_recorded_onc
     enqueued: list[tuple[str, ...]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(jobs, "llm_from_env", lambda model: UnusableLlm({}))
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model, **_: UnusableLlm({}))
     job_id = (await paste(client, recruiter, JD)).json()["id"]
 
     run_parse(enqueued)
@@ -500,7 +500,7 @@ async def test_cv_upload_into_a_job_being_parsed_does_not_wait_for_the_parse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     llm = BlockingLlm(PARSED)
-    monkeypatch.setattr(jobs, "llm_from_env", lambda model: llm)
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model, **_: llm)
     monkeypatch.setattr(uploads.parse_cv, "delay", lambda *args: None)
     job_id = (await paste(client, recruiter, JD)).json()["id"]
     parse = asyncio.create_task(asyncio.to_thread(run_parse, enqueued))

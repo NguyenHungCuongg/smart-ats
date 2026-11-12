@@ -226,7 +226,7 @@ SCORED: dict[str, Any] = {
 def llm(monkeypatch: pytest.MonkeyPatch) -> FakeLlm:
     fake = FakeLlm(SCORED, MODEL)
     # Only the run's own model: a task reading the environment again fails with KeyError.
-    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model: {MODEL: fake}[model])
+    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model, **_: {MODEL: fake}[model])
     return fake
 
 
@@ -254,7 +254,7 @@ def embedder(monkeypatch: pytest.MonkeyPatch) -> FakeEmbedder:
     fake = FakeEmbedder()
     # Only the run's own embedding model, as for the LLM.
     monkeypatch.setattr(
-        scoring_runs, "embedder_from_env", lambda model: {EMBEDDING_MODEL: fake}[model]
+        scoring_runs, "embedder_from_env", lambda model, **_: {EMBEDDING_MODEL: fake}[model]
     )
     return fake
 
@@ -382,7 +382,7 @@ async def test_a_must_have_matched_by_meaning_shows_the_cv_skill_and_similarity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = FakeEmbedder({"Postgres DB": "PostgreSQL"})
-    monkeypatch.setattr(scoring_runs, "embedder_from_env", lambda model: fake)
+    monkeypatch.setattr(scoring_runs, "embedder_from_env", lambda model, **_: fake)
     query(
         recruiter,
         "UPDATE cv_documents SET parsed_profile = jsonb_set(parsed_profile, '{skills,hard}',"
@@ -586,7 +586,7 @@ async def test_run_whose_every_result_failed_is_still_partial(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     llm = FailingLlm(SCORED, MODEL)
-    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model: llm)
+    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model, **_: llm)
     await start(client, recruiter, job)
 
     run_scoring(enqueued)
@@ -609,7 +609,7 @@ async def test_billed_response_it_cannot_use_fails_the_result_and_is_recorded_on
     enqueued: list[tuple[str, ...]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model: UnusableLlm({}, MODEL))
+    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model, **_: UnusableLlm({}, MODEL))
     await start(client, recruiter, job)
     [args] = enqueued
     run_scoring(enqueued)
@@ -751,7 +751,7 @@ async def test_report_missing_a_fit_gap_part_fails_the_result_and_is_billed(
 ) -> None:
     # FR-A1.3: every Score Result has all three parts of the Fit-Gap Report.
     fake = FakeLlm(SCORED | {part: []}, MODEL)
-    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model: fake)
+    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model, **_: fake)
     await start(client, recruiter, job)
 
     run_scoring(enqueued)

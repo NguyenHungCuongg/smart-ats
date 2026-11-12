@@ -98,3 +98,50 @@ test("a v0 Score Result still shows its matched and missing names, without a tim
   expect(html).not.toContain("Experience timeline");
   expect(html).not.toContain("in the CV");
 });
+
+test("shows Retry scoring button only on editable FAILED results with LLM_UNAVAILABLE", () => {
+  const failedRetryable: ScoreResult = {
+    ...v1,
+    status: "FAILED",
+    technical_score: null,
+    soft_skills_score: null,
+    experience_score: null,
+    total_score: null,
+    must_have_coverage: null,
+    must_have_detail: null,
+    experience_detail: null,
+    rubric_grades: null,
+    fit_gap_report: null,
+    error_code: "LLM_UNAVAILABLE",
+  };
+  const withRetry = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" messages={CATALOGS.en}>
+      <Result result={failedRetryable} onRetry={() => {}} />
+    </NextIntlClientProvider>,
+  );
+  expect(withRetry).toContain("The AI service was temporarily unavailable.");
+  expect(withRetry).toContain("Retry scoring");
+
+  const readOnly = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" messages={CATALOGS.en}>
+      <Result result={failedRetryable} />
+    </NextIntlClientProvider>,
+  );
+  expect(readOnly).toContain("The AI service was temporarily unavailable.");
+  expect(readOnly).not.toContain("Retry scoring");
+
+  const nonRetryable = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" messages={CATALOGS.en}>
+      <Result result={{ ...failedRetryable, error_code: "SCORING_FAILED" }} onRetry={() => {}} />
+    </NextIntlClientProvider>,
+  );
+  expect(nonRetryable).toContain("The AI call failed.");
+  expect(nonRetryable).not.toContain("Retry scoring");
+
+  const scoredHtml = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" messages={CATALOGS.en}>
+      <Result result={v1} onRetry={() => {}} />
+    </NextIntlClientProvider>,
+  );
+  expect(scoredHtml).not.toContain("Retry scoring");
+});

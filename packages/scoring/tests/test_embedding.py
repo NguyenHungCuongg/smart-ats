@@ -8,7 +8,7 @@ import pytest
 
 from smart_ats_scoring import embedding, pricing
 from smart_ats_scoring.embedding import GeminiEmbedder, OpenAiEmbedder, embedder_from_env
-from smart_ats_scoring.llm import Usage
+from smart_ats_scoring.llm import GEMINI_MAX_RETRIES, Usage
 
 
 def _stub(embedder: Any, response: SimpleNamespace, sent: dict[str, Any]) -> None:
@@ -132,3 +132,28 @@ def test_a_model_without_a_price_is_refused(monkeypatch: pytest.MonkeyPatch) -> 
 def test_a_dated_snapshot_takes_its_models_threshold() -> None:
     assert embedding.threshold("test-embedding-2026-08-01") == 0.8
     assert embedding.threshold("test-embedding-large") is None
+
+
+@pytest.mark.usefixtures("calibrated")
+def test_embedder_from_env_preserves_defaults_and_accepts_max_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("GEMINI_API_KEY", "g-test")
+
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    assert embedder_from_env("test-embedding").client.max_retries == 2  # type: ignore[attr-defined]
+    assert (
+        embedder_from_env("test-embedding", max_retries=0).client.max_retries  # type: ignore[attr-defined]
+        == 0
+    )
+
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    assert (
+        embedder_from_env("test-embedding").client.max_retries  # type: ignore[attr-defined]
+        == GEMINI_MAX_RETRIES
+    )
+    assert (
+        embedder_from_env("test-embedding", max_retries=0).client.max_retries  # type: ignore[attr-defined]
+        == 0
+    )

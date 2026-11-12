@@ -21,12 +21,12 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import events, outbox, storage, usage
+from app import ai, events, outbox, storage, usage
 from app.jobs import MANAGERS, MAX_DOCUMENT_BYTES, JobManager, JobReader, JobWriter
 from app.worker import tenant_task
 from smart_ats_scoring import parsing
 from smart_ats_scoring.extraction import ExtractionError, document_type, extract_text
-from smart_ats_scoring.llm import UnusableResponse, llm_from_env
+from smart_ats_scoring.llm import UnusableResponse, is_transient_error, llm_from_env
 
 log = logging.getLogger(__name__)
 
@@ -188,6 +188,46 @@ def _reject(code: int, message: str, files: list[tuple[UploadFile, RejectReason]
     )
 
 
+@router.post("/{job_id}/uploads/items/{item_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+async def retry_item(job_id: uuid.UUID, item_id: uuid.UUID, auth: JobWriter) -> UploadItem:
+    """Re-enqueue one failed upload item whose failure was a transient AI outage."""
+    item = (
+        await auth.db.execute(
+            text(
+                "SELECT i.id, i.batch_id, i.status, i.error_code"
+                " FROM upload_batch_items i JOIN upload_batches b ON b.id = i.batch_id"
+                " WHERE i.id = :item_id AND b.job_id = :job_id FOR UPDATE OF i"
+            ),
+            {"item_id": item_id, "job_id": job_id},
+        )
+    ).one_or_none()
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Upload item not found")
+    if item.status != "FAILED" or item.error_code not in ai.RETRYABLE_ERRORS:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The upload item cannot be retried")
+    await usage.check_budget(auth.db, {"CV_PARSE": 1})
+    updated = (
+        await auth.db.execute(
+            text(
+                "UPDATE upload_batch_items SET status = 'PENDING', error_code = NULL,"
+                "  error_message = NULL, attempts = 1, enqueued_at = now()"
+                " WHERE id = :id"
+                " RETURNING id, file_name, status, dedupe, error_code, error_message"
+            ),
+            {"id": item_id},
+        )
+    ).one()
+    await auth.db.execute(
+        text(
+            "UPDATE upload_batches SET status = 'PROCESSING', completed_at = NULL"
+            " WHERE id = :batch_id"
+        ),
+        {"batch_id": item.batch_id},
+    )
+    outbox.enqueue_after_commit(auth.db, parse_cv, (str(auth.tenant_id), str(item_id)))
+    return UploadItem(**updated._mapping)
+
+
 @router.get("/{job_id}/uploads")
 async def list_batches(job_id: uuid.UUID, auth: JobManager) -> list[UploadBatch]:
     """The Job's Upload Batches, newest first, with their progress and their items in the order
@@ -231,7 +271,7 @@ async def list_applications(
     return [Application(**row._mapping) for row in rows]
 
 
-@tenant_task(name="uploads.parse_cv", queue="llm")
+@tenant_task(name="uploads.parse_cv", queue="llm", max_retries=len(ai.RETRY_BACKOFF_SECONDS))
 def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
     """Dedupe and parse one uploaded CV into a Candidate, CV Document and Application."""
     # ponytail: the locks and the transaction stay open through the LLM call, as in jobs.parse.
@@ -371,11 +411,15 @@ def _parse(
     if not usage.priced(model):
         return "UNPRICED_MODEL", "the AI model has no price in the AI Usage Ledger"
     try:
-        with usage.llm_slot(session, tenant_id):
-            return parsing.parse_cv(cv_text, llm_from_env(model))
+        llm = llm_from_env(model, max_retries=0)
+        with ai.llm_call(session, tenant_id):
+            return parsing.parse_cv(cv_text, llm)
     except TaskPredicate:
         raise
     except Exception as e:
+        if is_transient_error(e):
+            log.warning("transient error parsing CV upload item %s: %s", item.id, type(e).__name__)
+            return ai.retry_transient_error(e), "the AI service is temporarily unavailable"
         # The traceback may hold provider details: it goes to the log, the item gets a code.
         log.exception("parsing CV upload item failed")
         if isinstance(e, UnusableResponse):

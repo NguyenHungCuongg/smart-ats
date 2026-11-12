@@ -34,6 +34,7 @@ const PARSE_ERRORS = [
   "UNSUPPORTED_FORMAT",
   "UNPRICED_MODEL",
   "STUCK",
+  "LLM_UNAVAILABLE",
 ] as const;
 
 // Secondary actions read as link-on-light: one filled button per page (DESIGN.md).
@@ -187,10 +188,24 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
   // The refused status, worded at render in the language shown.
   const [refused, setRefused] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
+  const [retryPending, setRetryPending] = useState(false);
+  const [retryError, setRetryError] = useState<number | null>(null);
   const total = weightTotal(form.weights);
   const parseError = PARSE_ERRORS.find((code) => code === job.parse_error);
   const review = (field: string) => job.verification?.[field] === "NEEDS_REVIEW";
   const set = (changes: Partial<Form>) => setForm({ ...form, ...changes });
+
+  async function onRetryParse() {
+    setRetryPending(true);
+    const response = await apiFetch(`/api/jobs/${job.id}/parse/retry`, { method: "POST" });
+    setRetryPending(false);
+    if (response.status === 401) return window.location.replace("/login");
+    if (response.ok) {
+      setRetryError(null);
+      return onSaved(await response.json());
+    }
+    setRetryError(response.status);
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -209,9 +224,26 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <h2 className="heading-display text-2xl font-semibold">{t("confirmTitle")}</h2>
       {job.parse_status === "FAILED" && (
-        <p role="alert">
-          {parseError ? t(`parseError.${parseError}`) : t("parseFailed")} {t("enterByHand")}
-        </p>
+        <div role="alert" className="flex flex-wrap items-center gap-3">
+          <p>
+            {parseError ? t(`parseError.${parseError}`) : t("parseFailed")} {t("enterByHand")}
+          </p>
+          {job.parse_error === "LLM_UNAVAILABLE" && (
+            <button
+              type="button"
+              onClick={onRetryParse}
+              disabled={retryPending}
+              className="button-outline"
+            >
+              {t("retryParse")}
+            </button>
+          )}
+          {retryError !== null && (
+            <p className="w-full text-sm">
+              {retryError === 402 ? t("budgetExceeded") : t("retryParseFailed")}
+            </p>
+          )}
+        </div>
       )}
       {job.criteria_confirmed_at && (
         <p role="status">

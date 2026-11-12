@@ -162,7 +162,7 @@ async def test_redelivered_parse_runs_once_in_its_tenant(
 ) -> None:
     fake = FakeLlm(PARSED)
     monkeypatch.setenv("LLM_EXTRACTION_MODEL", "test-model")
-    monkeypatch.setattr(jobs, "llm_from_env", lambda model: fake)
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model, **_: fake)
     monkeypatch.setitem(
         pricing.PRICES, "test-model", pricing.Price(Decimal("2"), Decimal("0.5"), Decimal("8"))
     )

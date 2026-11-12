@@ -2,6 +2,10 @@
   "locale": {
     "label": "Ngôn ngữ"
   },
+  "ai": {
+    "degradedTitle": "Xử lý AI đang tạm hoãn",
+    "degradedBody": "Nhà cung cấp AI đang gặp lỗi tạm thời. Các công việc, ứng viên và quy trình hiện có vẫn hoạt động bình thường; các tác vụ AI mới sẽ tự động thử lại sau khoảng 2 phút."
+  },
   "home": {
     "jobs": "Danh sách Job",
     "newJob": "Tạo Job từ JD",
@@ -161,10 +165,14 @@
       "UNREADABLE": "File JD bị hỏng, không đọc được.",
       "UNSUPPORTED_FORMAT": "Định dạng file JD không được hỗ trợ.",
       "UNPRICED_MODEL": "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
-      "STUCK": "Hệ thống chưa phân tích được JD sau nhiều lần thử."
+      "STUCK": "Hệ thống chưa phân tích được JD sau nhiều lần thử.",
+      "LLM_UNAVAILABLE": "Dịch vụ AI tạm thời không khả dụng."
     },
     "parseFailed": "Không phân tích được JD.",
     "enterByHand": "Hãy nhập criteria thủ công.",
+    "retryParse": "Thử phân tích lại",
+    "retryParseFailed": "Không thể thử lại bước phân tích JD. Thử lại hoặc nhập criteria thủ công.",
+    "budgetExceeded": "Đã hết ngân sách AI tháng này nên chưa thể chạy lại.",
     "notFound": "Không tìm thấy Job.",
     "loading": "Đang tải Job",
     "reviewerReadOnly": "Bạn xem Job này với vai trò Reviewer: chỉ đọc.",
@@ -268,9 +276,13 @@
       "UNSUPPORTED_FORMAT": "Định dạng file CV hoặc JD không được hỗ trợ.",
       "READ_FAILED": "Không đọc được file CV hoặc JD.",
       "SCORING_FAILED": "Lời gọi AI bị lỗi.",
-      "STUCK": "Hệ thống chưa chấm được Application này sau nhiều lần thử."
+      "STUCK": "Hệ thống chưa chấm được Application này sau nhiều lần thử.",
+      "LLM_UNAVAILABLE": "Dịch vụ AI tạm thời không khả dụng."
     },
     "resultFailed": "Không chấm được Application này.",
+    "retryResult": "Chấm lại",
+    "retryResultCandidate": "Chấm lại cho {name}",
+    "retryResultFailed": "Không thể thử lại bước chấm điểm này.",
     "runStatus": {
       "RUNNING": "Đang chạy",
       "COMPLETED": "Hoàn tất",
@@ -319,9 +331,13 @@
       "UNSUPPORTED_FORMAT": "Định dạng file không được hỗ trợ.",
       "UNPRICED_MODEL": "Model AI chưa có trong bảng giá nên chưa được gọi. Liên hệ quản trị viên.",
       "PARSE_FAILED": "Không phân tích được CV.",
-      "STUCK": "Hệ thống chưa xử lý được CV sau nhiều lần thử."
+      "STUCK": "Hệ thống chưa xử lý được CV sau nhiều lần thử.",
+      "LLM_UNAVAILABLE": "Dịch vụ AI tạm thời không khả dụng."
     },
     "itemFailed": "Không xử lý được CV.",
+    "retryFailed": "Thử lại",
+    "retryFailedFile": "Thử lại {file}",
+    "retryItemFailed": "Không thể thử lại mục này.",
     "itemStatus": {
       "PENDING": "Đang xử lý…",
       "SUCCEEDED": "Thành công",

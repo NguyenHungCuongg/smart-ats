@@ -1,16 +1,20 @@
 """The LLM seam on billed responses it cannot use: the provider client is stubbed."""
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
+import httpx
+import openai
 import pytest
 
 from smart_ats_scoring.llm import (
+    GEMINI_MAX_RETRIES,
     GeminiLlm,
     OpenAiLlm,
     UnusableResponse,
     Usage,
     has_llm_key,
+    is_transient_error,
     llm_from_env,
 )
 
@@ -116,3 +120,51 @@ def test_an_unknown_provider_is_an_error(monkeypatch: pytest.MonkeyPatch) -> Non
 
     with pytest.raises(ValueError, match="gemni"):
         llm_from_env("gemini-3.5-flash")
+
+
+def _status_error(cls: type[openai.APIStatusError], status_code: int) -> openai.APIStatusError:
+    req = httpx.Request("POST", "https://api.example/v1/responses")
+    resp = httpx.Response(status_code, request=req)
+    return cls(f"HTTP {status_code}", response=cast(Any, resp), body=None)
+
+
+def test_transient_error_classification() -> None:
+    req = httpx.Request("POST", "https://api.example/v1/responses")
+    assert is_transient_error(openai.APITimeoutError(request=cast(Any, req)))
+    assert is_transient_error(openai.APIConnectionError(request=cast(Any, req)))
+    assert is_transient_error(TimeoutError("timed out"))
+    assert is_transient_error(httpx.ReadTimeout("timed out", request=req))
+    assert is_transient_error(_status_error(openai.RateLimitError, 429))
+    assert is_transient_error(_status_error(openai.InternalServerError, 502))
+    assert is_transient_error(_status_error(openai.APIStatusError, 503))
+
+    assert not is_transient_error(_status_error(openai.BadRequestError, 400))
+    assert not is_transient_error(_status_error(openai.AuthenticationError, 401))
+    assert not is_transient_error(_status_error(openai.PermissionDeniedError, 403))
+    assert not is_transient_error(_status_error(openai.NotFoundError, 404))
+    assert not is_transient_error(_status_error(openai.UnprocessableEntityError, 422))
+    assert not is_transient_error(UnusableResponse("cut off", Usage("m", 1, 1, 0)))
+    assert not is_transient_error(ValueError("bad schema"))
+    assert not is_transient_error(LookupError("unpriced"))
+
+
+def test_llm_from_env_preserves_defaults_and_accepts_max_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("GEMINI_API_KEY", "g-test")
+
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    assert llm_from_env("gpt-6-luna").client.max_retries == 2  # type: ignore[attr-defined]
+    assert (
+        llm_from_env("gpt-6-luna", max_retries=0).client.max_retries == 0  # type: ignore[attr-defined]
+    )
+
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    assert (
+        llm_from_env("gemini-3.5-flash").client.max_retries  # type: ignore[attr-defined]
+        == GEMINI_MAX_RETRIES
+    )
+    assert (
+        llm_from_env("gemini-3.5-flash", max_retries=0).client.max_retries == 0  # type: ignore[attr-defined]
+    )

@@ -2,6 +2,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.responses import JSONResponse
 
 from app import (
+    ai,
     apply,
     auth,
     events,
@@ -33,6 +34,7 @@ async def ready() -> JSONResponse:
 
 app = FastAPI(title="Smart ATS API")
 app.include_router(router)
+app.include_router(ai.router)
 app.include_router(auth.router)
 app.include_router(events.router)
 app.include_router(jobs.router)

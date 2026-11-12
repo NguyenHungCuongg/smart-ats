@@ -19,6 +19,7 @@ const ITEM_ERRORS = [
   "UNPRICED_MODEL",
   "PARSE_FAILED",
   "STUCK",
+  "LLM_UNAVAILABLE",
 ] as const;
 
 const ACCEPT = ".pdf,.docx";
@@ -34,6 +35,8 @@ export function Uploads({ jobId }: { jobId: string }) {
   const [dragging, setDragging] = useState(false);
   const [consent, setConsent] = useState(false);
   const [pending, setPending] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<number | null>(null);
   // The refusal, worded at render in the language shown.
   const [refused, setRefused] = useState<{ status: number; detail: unknown } | null>(null);
 
@@ -89,6 +92,21 @@ export function Uploads({ jobId }: { jobId: string }) {
     event.preventDefault();
     setDragging(false);
     setFiles([...event.dataTransfer.files]);
+  }
+
+  async function retryFailed(itemId: string) {
+    setRetryingId(itemId);
+    const response = await apiFetch(`/api/jobs/${jobId}/uploads/items/${itemId}/retry`, {
+      method: "POST",
+    });
+    setRetryingId(null);
+    if (response.status === 401) return window.location.replace("/login");
+    if (response.ok) {
+      setRetryError(null);
+      setVersion((v) => v + 1);
+    } else {
+      setRetryError(response.status);
+    }
   }
 
   return (
@@ -147,6 +165,9 @@ export function Uploads({ jobId }: { jobId: string }) {
         </button>
       </form>
 
+      {retryError !== null && (
+        <p role="alert">{t(retryError === 402 ? "budgetExceeded" : "retryItemFailed")}</p>
+      )}
       {batches.map((batch) => (
         <BatchProgress
           key={batch.id}
@@ -154,6 +175,8 @@ export function Uploads({ jobId }: { jobId: string }) {
           canRetry={consent && !pending}
           // Re-uploading a file makes a new batch of it (FR-A1.2).
           onRetry={(file) => send([file])}
+          retryingId={retryingId}
+          onRetryFailed={retryFailed}
         />
       ))}
     </section>
@@ -161,19 +184,26 @@ export function Uploads({ jobId }: { jobId: string }) {
 }
 
 /** One Upload Batch: its x/y while it runs, and each item with its outcome. */
-function BatchProgress({
+export function BatchProgress({
   batch,
   canRetry,
   onRetry,
+  retryingId,
+  onRetryFailed,
 }: {
   batch: Batch;
   /** Whether a failed file may be uploaded again now: it needs the attestation too. */
   canRetry: boolean;
   onRetry: (file: File) => void;
+  retryingId: string | null;
+  onRetryFailed: (itemId: string) => void;
 }) {
   const t = useTranslations("uploads");
   const locale = useLocale();
   const running = batch.status === "PROCESSING";
+  const needsReupload = batch.items.some(
+    (item) => item.status === "FAILED" && item.error_code !== "LLM_UNAVAILABLE",
+  );
   const itemError = (item: Item) => {
     const code = ITEM_ERRORS.find((known) => known === item.error_code);
     return code ? t(`itemError.${code}`) : t("itemFailed");
@@ -205,36 +235,52 @@ function BatchProgress({
           />
         </div>
       )}
-      {batch.failed > 0 && !canRetry && <p className="text-sm">{t("retryHint")}</p>}
+      {needsReupload && !canRetry && <p className="text-sm">{t("retryHint")}</p>}
       <ul aria-label={t("batchFiles")} className="flex flex-col divide-y divide-hairline-cloud">
         {batch.items.map((item) => (
           <li key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
             <span className="font-mono text-sm">{item.file_name}</span>
             <span className="text-sm">{t(`itemStatus.${item.status}`)}</span>
             {item.dedupe && <Badge>{t(`dedupe.${item.dedupe}`)}</Badge>}
-            {item.status === "FAILED" && (
-              <>
-                <label className="ml-auto cursor-pointer button-outline has-focus-visible:ring-2 has-focus-visible:ring-ring-focus has-disabled:cursor-default has-disabled:border-hairline-cloud has-disabled:bg-hairline-cloud has-disabled:text-accent-violet-mid">
-                  {t("retry")}
-                  <input
-                    type="file"
-                    accept={ACCEPT}
-                    disabled={!canRetry}
-                    aria-label={t("retryFile", { file: item.file_name })}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = "";
-                      if (file) onRetry(file);
-                    }}
-                    className="sr-only"
-                  />
-                </label>
-                <span className="w-full text-sm">
-                  <code className="font-mono">{item.error_code}</code>: {itemError(item)}{" "}
-                  {t("fixAndRetry")}
-                </span>
-              </>
-            )}
+            {item.status === "FAILED" &&
+              (item.error_code === "LLM_UNAVAILABLE" ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={retryingId === item.id}
+                    aria-label={t("retryFailedFile", { file: item.file_name })}
+                    onClick={() => onRetryFailed(item.id)}
+                    className="ml-auto button-outline"
+                  >
+                    {t("retryFailed")}
+                  </button>
+                  <span className="w-full text-sm">
+                    <code className="font-mono">{item.error_code}</code>: {itemError(item)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <label className="ml-auto cursor-pointer button-outline has-focus-visible:ring-2 has-focus-visible:ring-ring-focus has-disabled:cursor-default has-disabled:border-hairline-cloud has-disabled:bg-hairline-cloud has-disabled:text-accent-violet-mid">
+                    {t("retry")}
+                    <input
+                      type="file"
+                      accept={ACCEPT}
+                      disabled={!canRetry}
+                      aria-label={t("retryFile", { file: item.file_name })}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) onRetry(file);
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
+                  <span className="w-full text-sm">
+                    <code className="font-mono">{item.error_code}</code>: {itemError(item)}{" "}
+                    {t("fixAndRetry")}
+                  </span>
+                </>
+              ))}
           </li>
         ))}
       </ul>
