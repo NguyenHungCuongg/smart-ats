@@ -8,7 +8,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
 import pytest
@@ -161,14 +161,16 @@ async def test_budget_exceeded_uses_defaults_and_rejects_all_ai_enqueue_endpoint
     add_application(recruiter, objects, job_id)
     stored_before = dict(objects)
 
-    # Set budget slightly below the default cost of 2 CV_PARSE calls.
+    # Set budget strictly below the default cost of 2 CV_PARSE calls (numeric(10, 2)).
     default_two_cvs = usage.DEFAULT_COST_PER_CALL_USD["CV_PARSE"] * 2
     set_tenant_limits(
         recruiter.tenant_id,
-        budget_usd=(default_two_cvs - Decimal("0.000001")).quantize(Decimal("0.01")),
+        budget_usd=(
+            (default_two_cvs - Decimal("0.000001")).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+            if default_two_cvs > Decimal("0.00")
+            else Decimal("0.00")
+        ),
     )
-    if default_two_cvs < Decimal("0.01"):
-        set_tenant_limits(recruiter.tenant_id, budget_usd=Decimal("0.00"))
 
     # 2. POST /api/jobs/{job_id}/uploads -> 402, zero batch/item rows, zero new objects.
     r_upload = await client.post(
