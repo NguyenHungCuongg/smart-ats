@@ -8,6 +8,7 @@ import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import cache
 from typing import Any, cast
 
 import redis.asyncio
@@ -17,7 +18,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app import usage
-from app.auth import Authenticated
+from app.auth import MAX_REDIS_CONNECTIONS, Authenticated
 from smart_ats_scoring.llm import is_transient_error, llm_provider
 
 log = logging.getLogger(__name__)
@@ -237,8 +238,14 @@ def retry_transient_error(exc: BaseException) -> str:
     return RETRYABLE_ERROR_CODE
 
 
+@cache
+def _async_redis_for(url: str) -> redis.asyncio.Redis:
+    pool = redis.asyncio.BlockingConnectionPool.from_url(url, max_connections=MAX_REDIS_CONNECTIONS)
+    return redis.asyncio.Redis(connection_pool=pool)
+
+
 async def _async_redis() -> redis.asyncio.Redis:
-    return cast(redis.asyncio.Redis, redis.asyncio.Redis.from_url(os.environ["REDIS_URL"]))
+    return _async_redis_for(os.environ["REDIS_URL"])
 
 
 def _is_open_until(raw: bytes | str | None) -> bool:
@@ -258,10 +265,7 @@ async def is_degraded_async() -> bool:
     """Async check for whether the configured LLM provider's circuit breaker is open."""
     _, open_key, _ = breaker_keys()
     client = await _async_redis()
-    try:
-        return _is_open_until(await client.get(open_key))
-    finally:
-        await client.aclose()
+    return _is_open_until(await client.get(open_key))
 
 
 @router.get("/status", response_model=AiStatus)

@@ -6,7 +6,7 @@ import io
 import os
 import time
 import uuid
-import zipfile
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, cast
@@ -16,15 +16,18 @@ import openai
 import pytest
 import redis as redis_lib
 from celery.exceptions import Retry
-from httpx import AsyncClient
+from docx import Document
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from app import ai, jobs, scoring_runs, storage, uploads
 from app.auth import _access_token, _redis
 from app.db import tenant_session
+from app.main import app
+from smart_ats_scoring import embedding, pricing
 from smart_ats_scoring.embedding import EmbeddingResult
 from smart_ats_scoring.llm import LlmResult, UnusableResponse, Usage
-from tests.test_tenancy import owner_engine
+from tests.test_tenancy import make_tenant, owner_engine
 
 pytestmark = pytest.mark.usefixtures("database", "redis")
 
@@ -85,6 +88,28 @@ class User:
 
 
 @pytest.fixture(autouse=True)
+def jwt_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JWT_SECRET", "test-secret-at-least-32-bytes-long!")
+
+
+@pytest.fixture(autouse=True)
+def calibrated_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(
+        pricing.PRICES, LLM_MODEL, pricing.Price(Decimal("2"), Decimal("0.2"), Decimal("10"))
+    )
+    monkeypatch.setitem(
+        pricing.PRICES, EMBEDDING_MODEL, pricing.Price(Decimal("1"), Decimal("1"), Decimal(0))
+    )
+    monkeypatch.setitem(embedding.THRESHOLDS, EMBEDDING_MODEL, 0.9)
+
+
+@pytest.fixture
+async def client() -> AsyncIterator[AsyncClient]:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        yield client
+
+
+@pytest.fixture(autouse=True)
 async def _clean_breaker() -> None:
     await _redis().delete(*ai.breaker_keys())
 
@@ -115,14 +140,10 @@ def enqueued(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[tuple[str, ...]]
 
 
 def _docx(body: str) -> bytes:
+    document = Document()
+    document.add_paragraph(body)
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("[Content_Types].xml", "<Types/>")
-        zf.writestr(
-            "word/document.xml",
-            "<w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'>"
-            f"<w:body><w:p><w:r><w:t>{body}</w:t></w:r></w:p></w:body></w:document>",
-        )
+    document.save(buf)
     return buf.getvalue()
 
 
@@ -133,18 +154,12 @@ def _transient_exc(code: int = 503) -> openai.APIStatusError:
 
 
 def _make_user(role: str = "RECRUITER", tenant_id: uuid.UUID | None = None) -> User:
-    with owner_engine().begin() as conn:
-        tid = (
-            tenant_id
-            or conn.execute(
-                text("INSERT INTO tenants (slug, name) VALUES (:slug, 'Tenant') RETURNING id"),
-                {"slug": f"t-{uuid.uuid4().hex[:8]}"},
-            ).scalar_one()
-        )
-        uid = conn.execute(
+    tid = tenant_id or make_tenant()
+    with tenant_session(tid) as session:
+        uid: uuid.UUID = session.execute(
             text(
-                "INSERT INTO users (tenant_id, email, full_name, password_hash, role)"
-                " VALUES (:tid, :email, 'Test User', 'x', :role) RETURNING id"
+                "INSERT INTO users (tenant_id, email, full_name, role, is_active)"
+                " VALUES (:tid, :email, 'Test User', :role, true) RETURNING id"
             ),
             {"tid": tid, "email": f"{uuid.uuid4().hex[:8]}@example.com", "role": role},
         ).scalar_one()
@@ -185,8 +200,7 @@ async def _create_job(client: AsyncClient, user: User) -> str:
     resp = await client.post(
         "/api/jobs",
         headers=user.headers,
-        data={"title": "Placeholder", "level": "MID"},
-        files={"jd": ("jd.docx", _docx("Need Python developer with 2 years experience"))},
+        files={"file": ("jd.docx", _docx("Need Python developer with 2 years experience"))},
     )
     assert resp.status_code == 202
     return cast(str, resp.json()["id"])
@@ -213,6 +227,9 @@ async def _setup_scored_job(
         json={
             "title": "Backend Engineer",
             "level": "MID",
+            "department": "Engineering",
+            "location": "HCMC",
+            "work_mode": "HYBRID",
             "criteria": {
                 "skills": [{"name": "Python", "must_have": True}],
                 "min_years_experience": 2,
@@ -228,6 +245,7 @@ async def _setup_scored_job(
     up = await client.post(
         f"/api/jobs/{job_id}/uploads",
         headers=user.headers,
+        data={"consent_confirmed": "true"},
         files={"files": ("cv.docx", _docx("Ada Lovelace ada@example.com Python engineer"))},
     )
     assert up.status_code == 202
@@ -274,14 +292,20 @@ async def test_transient_retry_then_succeed_across_all_three_tasks_without_dupli
     ] == "SUCCEEDED"
 
     # 2. uploads.parse_cv: 429 -> retry (5s) -> succeed, 1 CV_PARSE usage row.
-    await client.put(
+    confirm_resp = await client.put(
         f"/api/jobs/{job_id}/criteria",
         headers=user.headers,
         json={
             "title": "Backend Engineer",
             "level": "MID",
+            "department": "Engineering",
+            "location": "HCMC",
+            "work_mode": "HYBRID",
             "criteria": {
-                "skills": [{"name": "Python", "must_have": True}],
+                "skills": [
+                    {"name": "Python", "must_have": True},
+                    {"name": "FastAPI", "must_have": True},
+                ],
                 "min_years_experience": 2,
                 "education": "CS",
                 "responsibilities": ["Build APIs"],
@@ -290,13 +314,16 @@ async def test_transient_retry_then_succeed_across_all_three_tasks_without_dupli
             "weights": {"technical": 55, "soft_skills": 15, "experience": 30},
         },
     )
+    assert confirm_resp.status_code == 200
     upload_llm = _ScriptedLlm([_transient_exc(429), PARSED_CV])
     monkeypatch.setattr(uploads, "llm_from_env", lambda m, **_: upload_llm)
-    await client.post(
+    up_resp = await client.post(
         f"/api/jobs/{job_id}/uploads",
         headers=user.headers,
+        data={"consent_confirmed": "true"},
         files={"files": ("cv.docx", _docx("Ada Lovelace ada@example.com Python"))},
     )
+    assert up_resp.status_code == 202
     uploads.parse_cv.apply(args=enqueued["uploads.parse_cv"].pop(0)).get()
     assert countdowns == [5, 5]
     assert upload_llm.calls == 2
@@ -372,6 +399,56 @@ async def test_exhausted_transient_fails_with_llm_unavailable_and_deterministic_
     assert bad_json["parse_status"] == "FAILED"
     assert bad_json["parse_error"] == "PARSE_FAILED"
 
+    # Deterministic UnusableResponse on uploads.parse_cv & scoring_runs.score_application
+    # also fails immediately without retry, while exhausted 5xx marks LLM_UNAVAILABLE.
+    await _redis().delete(*ai.breaker_keys())
+    job_id, _, _ = await _setup_scored_job(client, user, enqueued, monkeypatch)
+    for task in (uploads.parse_cv, scoring_runs.score_application):
+        monkeypatch.setattr(task, "_orig_retry", task.retry, raising=False)
+
+        def _spy_task_retry(*args: Any, _t: Any = task, **kwargs: Any) -> Retry:
+            countdowns.append(kwargs["countdown"])
+            return cast(Retry, _t._orig_retry(*args, **kwargs))
+
+        monkeypatch.setattr(task, "retry", _spy_task_retry)
+
+    countdowns.clear()
+    monkeypatch.setattr(
+        uploads,
+        "llm_from_env",
+        lambda m, **_: _ScriptedLlm([UnusableResponse("bad cv", Usage(LLM_MODEL, 40, 0, 10))]),
+    )
+    up_bad = await client.post(
+        f"/api/jobs/{job_id}/uploads",
+        headers=user.headers,
+        data={"consent_confirmed": "true"},
+        files={"files": ("bad.docx", _docx("Bad CV"))},
+    )
+    uploads.parse_cv.apply(args=enqueued["uploads.parse_cv"].pop(0)).get()
+    assert countdowns == []
+    batches = (await client.get(f"/api/jobs/{job_id}/uploads", headers=user.headers)).json()
+    bad_item = next(
+        i for b in batches for i in b["items"] if i["id"] == up_bad.json()["item_ids"][0]
+    )
+    assert (bad_item["status"], bad_item["error_code"]) == ("FAILED", "PARSE_FAILED")
+
+    monkeypatch.setattr(
+        scoring_runs,
+        "llm_from_env",
+        lambda m, **_: _ScriptedLlm([UnusableResponse("bad score", Usage(LLM_MODEL, 40, 0, 10))]),
+    )
+    scoring_runs.score_application.apply(
+        args=enqueued["scoring_runs.score_application"].pop(0)
+    ).get()
+    assert countdowns == []
+    latest_bad = (
+        await client.get(f"/api/jobs/{job_id}/scoring-runs/latest", headers=user.headers)
+    ).json()
+    assert (latest_bad["results"][0]["status"], latest_bad["results"][0]["error_code"]) == (
+        "FAILED",
+        "SCORING_FAILED",
+    )
+
 
 async def test_circuit_breaker_degraded_mode_reschedules_and_recovers_on_probe(
     client: AsyncClient,
@@ -383,18 +460,19 @@ async def test_circuit_breaker_degraded_mode_reschedules_and_recovers_on_probe(
     monkeypatch.setattr(jobs, "llm_from_env", lambda m, **_: _ScriptedLlm([_transient_exc(503)]))
 
     # Trigger 5+ consecutive transient errors within 1 minute so Redis breaker opens.
+    rescheduled: list[dict[str, Any]] = []
+    monkeypatch.setattr(jobs.parse, "apply_async", lambda **kw: rescheduled.append(kw))
     await _create_job(client, user)
     jobs.parse.apply(args=enqueued["jobs.parse"].pop(0)).get()
     await _create_job(client, user)
     jobs.parse.apply(args=enqueued["jobs.parse"].pop(0)).get()
+    rescheduled.clear()
 
     status_open = await client.get("/api/ai/status", headers=user.headers)
     assert status_open.status_code == 200
     assert status_open.json() == {"degraded": True}
 
     # New LLM tasks are rescheduled without calling the model and remain PENDING.
-    rescheduled: list[dict[str, Any]] = []
-    monkeypatch.setattr(jobs.parse, "apply_async", lambda **kw: rescheduled.append(kw))
     recovered_llm = _ScriptedLlm([PARSED_JOB])
     monkeypatch.setattr(jobs, "llm_from_env", lambda m, **_: recovered_llm)
     j3 = await _create_job(client, user)
@@ -472,11 +550,15 @@ async def test_manual_retry_endpoints_permissions_validation_and_reexecution(
     up_fail = await client.post(
         f"/api/jobs/{job_id}/uploads",
         headers=recruiter.headers,
+        data={"consent_confirmed": "true"},
         files={"files": ("cv2.docx", _docx("Grace Hopper grace@example.com Python"))},
     )
     assert up_fail.status_code == 202
     item_id = up_fail.json()["item_ids"][0]
     uploads.parse_cv.apply(args=enqueued["uploads.parse_cv"].pop(0)).get()
+    batches = (await client.get(f"/api/jobs/{job_id}/uploads", headers=recruiter.headers)).json()
+    failed_item = next(i for b in batches for i in b["items"] if i["id"] == item_id)
+    assert (failed_item["status"], failed_item["error_code"]) == ("FAILED", "LLM_UNAVAILABLE")
     assert (
         await client.post(
             f"/api/jobs/{job_id}/uploads/items/{item_id}/retry", headers=reviewer.headers
@@ -503,6 +585,13 @@ async def test_manual_retry_endpoints_permissions_validation_and_reexecution(
     scoring_runs.score_application.apply(
         args=enqueued["scoring_runs.score_application"].pop(0)
     ).get()
+    failed_run = (
+        await client.get(f"/api/jobs/{job_id}/scoring-runs/latest", headers=recruiter.headers)
+    ).json()
+    assert (failed_run["results"][0]["status"], failed_run["results"][0]["error_code"]) == (
+        "FAILED",
+        "LLM_UNAVAILABLE",
+    )
     assert (
         await client.post(
             f"/api/jobs/{job_id}/scoring-runs/{run_id}/results/{app_id}/retry",
@@ -529,8 +618,8 @@ async def test_manual_retry_endpoints_permissions_validation_and_reexecution(
     assert over_budget.status_code == 402
     with owner_engine().begin() as conn:
         conn.execute(
-            text("UPDATE tenants SET ai_budget_monthly_usd = NULL WHERE id = :id"),
-            {"id": recruiter.tenant_id},
+            text("UPDATE tenants SET ai_budget_monthly_usd = :b WHERE id = :id"),
+            {"b": Decimal("100"), "id": recruiter.tenant_id},
         )
 
     await _redis().delete(*ai.breaker_keys())

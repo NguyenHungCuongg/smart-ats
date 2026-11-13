@@ -323,7 +323,7 @@ async def test_ai_status_endpoint_auth_and_degraded_flag(
             closed = await client.get("/api/ai/status")
             assert closed.status_code == 200
             assert closed.json() == {"degraded": False}
-            assert fake_async.closed
+            assert not fake_async.closed
 
             _, open_key, _ = ai.breaker_keys()
             fake_sync.strings[open_key] = ("9999999999", 9999999999)

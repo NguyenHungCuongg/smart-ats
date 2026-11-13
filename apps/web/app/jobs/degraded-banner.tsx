@@ -41,7 +41,7 @@ export function DegradedAlert({ degraded }: { degraded: boolean }) {
   return (
     <div
       role="alert"
-      className="border-b border-l-4 border-accent-pink bg-surface-canvas-light px-6 py-4 text-ink-deep"
+      className="border-b border-l-4 border-b-hairline-cloud border-l-accent-pink bg-surface-canvas-light px-6 py-4 text-ink-deep"
     >
       <p className="font-semibold">{t("degradedTitle")}</p>
       <p className="mt-1 text-sm">{t("degradedBody")}</p>
