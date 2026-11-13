@@ -3,7 +3,6 @@
 from types import SimpleNamespace
 from typing import Any, cast
 
-import httpx
 import openai
 import pytest
 
@@ -123,21 +122,28 @@ def test_an_unknown_provider_is_an_error(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def _status_error(cls: type[openai.APIStatusError], status_code: int) -> openai.APIStatusError:
-    req = httpx.Request("POST", "https://api.example/v1/responses")
-    resp = httpx.Response(status_code, request=req)
+    resp = SimpleNamespace(status_code=status_code, request=SimpleNamespace(), headers={})
     return cls(f"HTTP {status_code}", response=cast(Any, resp), body=None)
 
 
+class _CustomHttpError(Exception):
+    def __init__(self, code: int) -> None:
+        super().__init__(f"status {code}")
+        self.status_code = code
+
+
 def test_transient_error_classification() -> None:
-    req = httpx.Request("POST", "https://api.example/v1/responses")
+    req = SimpleNamespace()
     assert is_transient_error(openai.APITimeoutError(request=cast(Any, req)))
     assert is_transient_error(openai.APIConnectionError(request=cast(Any, req)))
     assert is_transient_error(TimeoutError("timed out"))
-    assert is_transient_error(httpx.ReadTimeout("timed out", request=req))
+    assert is_transient_error(ConnectionError("connection reset"))
     assert is_transient_error(_status_error(openai.RateLimitError, 429))
     assert is_transient_error(_status_error(openai.InternalServerError, 502))
     assert is_transient_error(_status_error(openai.APIStatusError, 503))
+    assert is_transient_error(_CustomHttpError(504))
 
+    assert not is_transient_error(_CustomHttpError(400))
     assert not is_transient_error(_status_error(openai.BadRequestError, 400))
     assert not is_transient_error(_status_error(openai.AuthenticationError, 401))
     assert not is_transient_error(_status_error(openai.PermissionDeniedError, 403))

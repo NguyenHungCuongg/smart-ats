@@ -92,9 +92,8 @@ async def _clean_breaker() -> None:
 @pytest.fixture(autouse=True)
 def objects(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
     store: dict[str, bytes] = {}
-    monkeypatch.setattr(storage, "put", lambda k, data, ct: store.__setitem__(k, data))
-    monkeypatch.setattr(storage, "get", lambda k: store[k])
-    monkeypatch.setattr(storage, "delete", lambda k: store.pop(k, None))
+    monkeypatch.setattr(storage, "put", lambda key, data: store.__setitem__(key, data))
+    monkeypatch.setattr(storage, "get", lambda key: store[key])
     return store
 
 

@@ -5,7 +5,6 @@ import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-import httpx
 from openai import APIConnectionError, APIStatusError, OpenAI, omit
 
 
@@ -173,13 +172,17 @@ def is_transient_error(exc: BaseException) -> bool:
 
     Shared across OpenAiLlm, GeminiLlm, and both Embedders since all four use the OpenAI SDK.
     """
-    if isinstance(exc, (APIConnectionError, TimeoutError, httpx.TimeoutException)):
+    if isinstance(exc, (APIConnectionError, TimeoutError, ConnectionError)):
         return True
     if isinstance(exc, APIStatusError):
         return exc.status_code == 429 or exc.status_code >= 500
-    if isinstance(exc, httpx.HTTPStatusError):
-        code = exc.response.status_code
-        return code == 429 or code >= 500
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code == 429 or status_code >= 500
+    response = getattr(exc, "response", None)
+    resp_code = getattr(response, "status_code", None)
+    if isinstance(resp_code, int):
+        return resp_code == 429 or resp_code >= 500
     return False
 
 
