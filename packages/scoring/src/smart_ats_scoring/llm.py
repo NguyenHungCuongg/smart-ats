@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from openai import OpenAI, omit
+from openai import APIConnectionError, APIStatusError, OpenAI, omit
 
 
 @dataclass(frozen=True)
@@ -58,9 +58,9 @@ class Llm(Protocol):
 class OpenAiLlm:
     """OpenAI Responses API with a strict JSON Schema (FR-C2.1: Structured Outputs)."""
 
-    def __init__(self, model: str) -> None:
+    def __init__(self, model: str, *, max_retries: int | None = None) -> None:
         self.model = model
-        self.client = OpenAI()
+        self.client = OpenAI() if max_retries is None else OpenAI(max_retries=max_retries)
 
     def structured(
         self,
@@ -111,11 +111,10 @@ class GeminiLlm:
     llm_from_env builds it only when LLM_PROVIDER=gemini (FR-C1.5).
     """
 
-    def __init__(self, model: str, api_key: str) -> None:
+    def __init__(self, model: str, api_key: str, *, max_retries: int | None = None) -> None:
         self.model = model
-        self.client = OpenAI(
-            api_key=api_key, base_url=GEMINI_BASE_URL, max_retries=GEMINI_MAX_RETRIES
-        )
+        retries = GEMINI_MAX_RETRIES if max_retries is None else max_retries
+        self.client = OpenAI(api_key=api_key, base_url=GEMINI_BASE_URL, max_retries=retries)
 
     def structured(
         self,
@@ -168,7 +167,26 @@ def has_llm_key() -> bool:
     return bool(os.environ.get(key))
 
 
-def llm_from_env(model: str) -> Llm:
+def is_transient_error(exc: BaseException) -> bool:
+    """Classify provider failures into transient (timeout, 429, 5xx) vs deterministic (FR-C2.3).
+
+    Shared across OpenAiLlm, GeminiLlm, and both Embedders since all four use the OpenAI SDK.
+    """
+    if isinstance(exc, (APIConnectionError, TimeoutError, ConnectionError)):
+        return True
+    if isinstance(exc, APIStatusError):
+        return exc.status_code == 429 or exc.status_code >= 500
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code == 429 or status_code >= 500
+    response = getattr(exc, "response", None)
+    resp_code = getattr(response, "status_code", None)
+    if isinstance(resp_code, int):
+        return resp_code == 429 or resp_code >= 500
+    return False
+
+
+def llm_from_env(model: str, *, max_retries: int | None = None) -> Llm:
     if llm_provider() == "gemini":
-        return GeminiLlm(model, os.environ["GEMINI_API_KEY"])
-    return OpenAiLlm(model)
+        return GeminiLlm(model, os.environ["GEMINI_API_KEY"], max_retries=max_retries)
+    return OpenAiLlm(model, max_retries=max_retries)

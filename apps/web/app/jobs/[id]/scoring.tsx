@@ -32,6 +32,7 @@ const RESULT_ERRORS = [
   "READ_FAILED",
   "SCORING_FAILED",
   "STUCK",
+  "LLM_UNAVAILABLE",
 ] as const;
 
 /** Start a Scoring Run of the Job and show the Fit-Gap Report of each Application (FR-A1.3). */
@@ -50,6 +51,8 @@ export function Scoring({
   const [run, setRun] = useState<ScoringRun | null>(null);
   // The run shown: set by a start before its first load, so its events are not dropped.
   const [runId, setRunId] = useState<string | null>(null);
+  const [retryingAppId, setRetryingAppId] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<number | null>(null);
   // Bumped to reload the run.
   const [version, setVersion] = useState(0);
   const [pending, setPending] = useState(false);
@@ -95,6 +98,24 @@ export function Scoring({
     setVersion((v) => v + 1);
   }
 
+  async function onRetryResult(applicationId: string) {
+    if (!run) return;
+    setRetryingAppId(applicationId);
+    const response = await apiFetch(
+      `/api/jobs/${job.id}/scoring-runs/${run.id}/results/${applicationId}/retry`,
+      { method: "POST" },
+    );
+    setRetryingAppId(null);
+    if (response.status === 401) return window.location.replace("/login");
+    if (response.ok) {
+      setRetryError(null);
+      setRunId(run.id);
+      setVersion((v) => v + 1);
+    } else {
+      setRetryError(response.status);
+    }
+  }
+
   const blocker = scoreBlocker(t, job, applications, run);
   return (
     <section className="flex flex-col gap-4 border-t border-hairline-cloud pt-6">
@@ -129,8 +150,16 @@ export function Scoring({
         </>
       )}
       {!editable && !run && <p className="text-sm">{t("notScored")}</p>}
+      {retryError !== null && (
+        <p role="alert">{t(retryError === 402 ? "budgetExceeded" : "retryResultFailed")}</p>
+      )}
       {run?.results.map((result) => (
-        <Result key={result.application_id} result={result} />
+        <Result
+          key={result.application_id}
+          result={result}
+          retrying={retryingAppId === result.application_id}
+          onRetry={editable ? () => onRetryResult(result.application_id) : undefined}
+        />
       ))}
     </section>
   );
@@ -142,7 +171,15 @@ const REPORT_PARTS = [
   ["recommendations", "Recommendations"],
 ] as const;
 
-export function Result({ result }: { result: ScoreResult }) {
+export function Result({
+  result,
+  retrying = false,
+  onRetry,
+}: {
+  result: ScoreResult;
+  retrying?: boolean;
+  onRetry?: () => void;
+}) {
   const t = useTranslations("scoring");
   const locale = useLocale();
   const resultError = RESULT_ERRORS.find((code) => code === result.error_code);
@@ -158,7 +195,20 @@ export function Result({ result }: { result: ScoreResult }) {
       </header>
       {result.status === "PENDING" && <p role="status">{t("scoringOne")}</p>}
       {result.status === "FAILED" && (
-        <p role="alert">{resultError ? t(`resultError.${resultError}`) : t("resultFailed")}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p role="alert">{resultError ? t(`resultError.${resultError}`) : t("resultFailed")}</p>
+          {onRetry && result.error_code === "LLM_UNAVAILABLE" && (
+            <button
+              type="button"
+              disabled={retrying}
+              onClick={onRetry}
+              aria-label={t("retryResultCandidate", { name: result.full_name ?? t("candidate") })}
+              className="ml-auto button-outline"
+            >
+              {t("retryResult")}
+            </button>
+          )}
+        </div>
       )}
       {result.status === "SCORED" && rubric && report && (
         <>

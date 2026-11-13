@@ -2,6 +2,10 @@
   "locale": {
     "label": "Language"
   },
+  "ai": {
+    "degradedTitle": "AI processing is temporarily paused",
+    "degradedBody": "The AI provider is experiencing temporary errors. Your existing jobs, candidates, and pipeline stages continue working normally; new AI tasks will resume automatically in about 2 minutes."
+  },
   "home": {
     "jobs": "Jobs",
     "newJob": "Create a Job from a JD",
@@ -161,10 +165,14 @@
       "UNREADABLE": "The JD file is damaged and can't be read.",
       "UNSUPPORTED_FORMAT": "The JD's file format isn't supported.",
       "UNPRICED_MODEL": "The AI model isn't in the price table yet, so it wasn't called. Contact your administrator.",
-      "STUCK": "The system couldn't parse the JD after several attempts."
+      "STUCK": "The system couldn't parse the JD after several attempts.",
+      "LLM_UNAVAILABLE": "The AI service was temporarily unavailable."
     },
     "parseFailed": "The JD couldn't be parsed.",
     "enterByHand": "Enter the criteria by hand.",
+    "retryParse": "Retry AI parse",
+    "retryParseFailed": "Couldn't retry the JD parse. Try again or enter the criteria by hand.",
+    "budgetExceeded": "The monthly AI budget has been reached, so the retry wasn't started.",
     "notFound": "Job not found.",
     "loading": "Loading the Job",
     "reviewerReadOnly": "You see this Job as a Reviewer: read only.",
@@ -268,9 +276,13 @@
       "UNSUPPORTED_FORMAT": "The CV's or JD's file format isn't supported.",
       "READ_FAILED": "The CV or JD file couldn't be read.",
       "SCORING_FAILED": "The AI call failed.",
-      "STUCK": "The system couldn't score this Application after several attempts."
+      "STUCK": "The system couldn't score this Application after several attempts.",
+      "LLM_UNAVAILABLE": "The AI service was temporarily unavailable."
     },
     "resultFailed": "This Application couldn't be scored.",
+    "retryResult": "Retry scoring",
+    "retryResultCandidate": "Retry scoring {name}",
+    "retryResultFailed": "Couldn't retry scoring this candidate.",
     "runStatus": {
       "RUNNING": "Running",
       "COMPLETED": "Completed",
@@ -319,9 +331,13 @@
       "UNSUPPORTED_FORMAT": "The file format isn't supported.",
       "UNPRICED_MODEL": "The AI model isn't in the price table yet, so it wasn't called. Contact your administrator.",
       "PARSE_FAILED": "The CV couldn't be parsed.",
-      "STUCK": "The system couldn't process the CV after several attempts."
+      "STUCK": "The system couldn't process the CV after several attempts.",
+      "LLM_UNAVAILABLE": "The AI service was temporarily unavailable."
     },
     "itemFailed": "The CV couldn't be processed.",
+    "retryFailed": "Retry",
+    "retryFailedFile": "Retry {file}",
+    "retryItemFailed": "Couldn't retry this item.",
     "itemStatus": {
       "PENDING": "Processing…",
       "SUCCEEDED": "Succeeded",

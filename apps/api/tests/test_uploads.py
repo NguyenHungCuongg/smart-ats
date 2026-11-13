@@ -329,7 +329,7 @@ def profile(**contact: Any) -> dict[str, Any]:
 def llm(monkeypatch: pytest.MonkeyPatch) -> FakeLlm:
     fake = FakeLlm(PROFILE)
     monkeypatch.setenv("LLM_EXTRACTION_MODEL", "test-model")
-    monkeypatch.setattr(uploads, "llm_from_env", lambda model: fake)
+    monkeypatch.setattr(uploads, "llm_from_env", lambda model, **_: fake)
     monkeypatch.setitem(
         pricing.PRICES, "test-model", pricing.Price(Decimal("2"), Decimal("0.5"), Decimal("8"))
     )
@@ -665,7 +665,7 @@ async def test_cvs_with_the_same_email_in_one_batch_make_one_candidate_and_appli
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     llm = BarrierLlm(PROFILE, 2)
-    monkeypatch.setattr(uploads, "llm_from_env", lambda model: llm)
+    monkeypatch.setattr(uploads, "llm_from_env", lambda model, **_: llm)
     files = [("mot.docx", docx("CV một")), ("hai.docx", docx("CV hai"))]
     await upload(client, recruiter, job, files=files)
 
@@ -832,7 +832,7 @@ async def test_billed_response_it_cannot_use_fails_the_item_and_is_recorded_once
     enqueued: list[tuple[str, ...]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(uploads, "llm_from_env", lambda model: UnusableLlm({}))
+    monkeypatch.setattr(uploads, "llm_from_env", lambda model, **_: UnusableLlm({}))
     await upload(client, recruiter, job)
     args = enqueued[0]
     run_parse(enqueued)

@@ -27,11 +27,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app import events, outbox, storage, usage
+from app import ai, events, outbox, storage, usage
 from app.auth import Auth, Authenticated
 from app.worker import tenant_task
 from smart_ats_scoring.extraction import ExtractionError, document_type, extract_text
-from smart_ats_scoring.llm import UnusableResponse, llm_from_env
+from smart_ats_scoring.llm import UnusableResponse, is_transient_error, llm_from_env
 from smart_ats_scoring.parsing import parse_job
 
 log = logging.getLogger(__name__)
@@ -334,6 +334,32 @@ async def _refuse_while_parsing(db: AsyncSession, job_id: uuid.UUID) -> None:
         raise HTTPException(status.HTTP_409_CONFLICT, "The JD Document is still being parsed")
 
 
+@router.post("/{job_id}/parse/retry", status_code=status.HTTP_202_ACCEPTED)
+async def retry_parse(job_id: uuid.UUID, auth: LockedJob) -> Job:
+    """Re-enqueue a failed JD parse whose failure was a transient AI outage."""
+    row = (
+        await auth.db.execute(
+            text("SELECT parse_status, parse_error FROM jobs WHERE id = :id"),
+            {"id": job_id},
+        )
+    ).one()
+    if row.parse_status != "FAILED" or row.parse_error not in ai.RETRYABLE_ERRORS:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The Job parse cannot be retried")
+    await usage.check_budget(auth.db, {"JOB_PARSE": 1})
+    await auth.db.execute(
+        text(
+            "UPDATE jobs SET parse_status = 'PENDING', parse_error = NULL,"
+            "  parse_attempts = 1, parse_enqueued_at = now(), updated_at = now()"
+            " WHERE id = :id"
+        ),
+        {"id": job_id},
+    )
+    outbox.enqueue_after_commit(
+        auth.db, parse, (str(auth.tenant_id), str(job_id), str(auth.user_id))
+    )
+    return await _job(auth.db, job_id)
+
+
 @router.put("/{job_id}/criteria")
 async def confirm_criteria(job_id: uuid.UUID, body: CriteriaConfirmation, auth: LockedJob) -> Job:
     """Save the Recruiter's edits and confirm the criteria, which makes the Job scorable."""
@@ -495,7 +521,7 @@ async def assign_reviewers(
     return await _reviewers(auth.db, job_id)
 
 
-@tenant_task(name="jobs.parse", queue="llm")
+@tenant_task(name="jobs.parse", queue="llm", max_retries=len(ai.RETRY_BACKOFF_SECONDS))
 def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> None:
     """Parse the Job's JD Document into criteria for the Recruiter to confirm (FR-A1.1)."""
     # ponytail: the row lock and the transaction stay open through the LLM call (NFR-PERF-02);
@@ -519,8 +545,9 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
     else:
         try:
             jd_text = extract_text(storage.get(key))
-            with usage.llm_slot(session, tenant_id):
-                parsed = parse_job(jd_text, llm_from_env(model))
+            llm = llm_from_env(model, max_retries=0)
+            with ai.llm_call(session, tenant_id):
+                parsed = parse_job(jd_text, llm)
             usage.record(
                 session, uuid.UUID(user_id), "JOB_PARSE", parsed.usage, "job", uuid.UUID(job_id)
             )
@@ -529,14 +556,20 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
         except ExtractionError as e:
             error = e.code
         except Exception as e:
-            # The traceback may hold provider details: it goes to the log, the Job gets a code.
-            log.exception("parsing the JD Document of job %s failed", job_id)
-            error = "PARSE_FAILED"
-            if isinstance(e, UnusableResponse):
-                # Billed all the same (FR-C1.4).
-                usage.record(
-                    session, uuid.UUID(user_id), "JOB_PARSE", e.usage, "job", uuid.UUID(job_id)
+            if is_transient_error(e):
+                log.warning(
+                    "transient error parsing JD Document of job %s: %s", job_id, type(e).__name__
                 )
+                error = ai.retry_transient_error(e)
+            else:
+                # The traceback may hold provider details: it goes to the log, the Job gets a code.
+                log.exception("parsing the JD Document of job %s failed", job_id)
+                error = "PARSE_FAILED"
+                if isinstance(e, UnusableResponse):
+                    # Billed all the same (FR-C1.4).
+                    usage.record(
+                        session, uuid.UUID(user_id), "JOB_PARSE", e.usage, "job", uuid.UUID(job_id)
+                    )
 
     if error is not None:
         fail_parse(session, uuid.UUID(job_id), uuid.UUID(user_id), error)
@@ -552,7 +585,7 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
             "  department = :department, location = :location, work_mode = :work_mode,"
             "  criteria = CAST(:criteria AS jsonb),"
             "  criteria_verification = CAST(:verification AS jsonb),"
-            "  parse_status = 'SUCCEEDED', updated_at = now()"
+            "  parse_status = 'SUCCEEDED', parse_error = NULL, updated_at = now()"
             " WHERE id = :id"
         ),
         {

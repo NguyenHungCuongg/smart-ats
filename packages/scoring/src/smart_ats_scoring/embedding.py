@@ -54,9 +54,9 @@ def _vectors(response: CreateEmbeddingResponse, texts: list[str]) -> list[list[f
 
 
 class OpenAiEmbedder:
-    def __init__(self, model: str) -> None:
+    def __init__(self, model: str, *, max_retries: int | None = None) -> None:
         self.model = model
-        self.client = OpenAI()
+        self.client = OpenAI() if max_retries is None else OpenAI(max_retries=max_retries)
 
     def embed(self, texts: list[str]) -> EmbeddingResult:
         response = self.client.embeddings.create(
@@ -70,11 +70,10 @@ class OpenAiEmbedder:
 class GeminiEmbedder:
     """Gemini's OpenAI-compatible embeddings, for free testing with synthetic data (FR-C1.5)."""
 
-    def __init__(self, model: str, api_key: str) -> None:
+    def __init__(self, model: str, api_key: str, *, max_retries: int | None = None) -> None:
         self.model = model
-        self.client = OpenAI(
-            api_key=api_key, base_url=GEMINI_BASE_URL, max_retries=GEMINI_MAX_RETRIES
-        )
+        retries = GEMINI_MAX_RETRIES if max_retries is None else max_retries
+        self.client = OpenAI(api_key=api_key, base_url=GEMINI_BASE_URL, max_retries=retries)
 
     def embed(self, texts: list[str]) -> EmbeddingResult:
         # Gemini Embedding 2 has no task_type: the task goes in the text, and THRESHOLDS is
@@ -89,7 +88,7 @@ class GeminiEmbedder:
         return EmbeddingResult(_vectors(response, texts), Usage(response.model, 0, 0, 0))
 
 
-def embedder_from_env(model: str) -> Embedder:
+def embedder_from_env(model: str, *, max_retries: int | None = None) -> Embedder:
     # Refused before any call: an unpriced model would spend tokens the ledger cannot record
     # (FR-C1.4), an uncalibrated one would match must-haves on a guessed threshold.
     if price(model) is None:
@@ -99,5 +98,5 @@ def embedder_from_env(model: str) -> Embedder:
             f"no similarity threshold for model {model} in smart_ats_scoring.embedding.THRESHOLDS"
         )
     if llm_provider() == "gemini":
-        return GeminiEmbedder(model, os.environ["GEMINI_API_KEY"])
-    return OpenAiEmbedder(model)
+        return GeminiEmbedder(model, os.environ["GEMINI_API_KEY"], max_retries=max_retries)
+    return OpenAiEmbedder(model, max_retries=max_retries)

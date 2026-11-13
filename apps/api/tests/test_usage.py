@@ -486,7 +486,7 @@ async def test_llm_semaphore_reschedules_when_full_and_does_not_block_other_tena
         lambda **kwargs: rescheduled.append(kwargs),
     )
 
-    def pick_llm(model: str) -> FakeLlm:
+    def pick_llm(model: str, **_: Any) -> FakeLlm:
         with lock:
             return blocker if not blocker.entered.is_set() else fast
 
@@ -553,7 +553,7 @@ async def test_llm_semaphore_releases_slot_on_failure_and_expires_stale_leases(
         def structured(self, *args: Any, **kwargs: Any) -> LlmResult:
             raise RuntimeError("provider exploded")
 
-    monkeypatch.setattr(jobs, "llm_from_env", lambda model: BoomLlm(PARSED))
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model, **_: BoomLlm(PARSED))
     jobs.parse.apply(args=(str(recruiter.tenant_id), job1, str(recruiter.id))).get()
     assert (await client.get(f"/api/jobs/{job1}", headers=recruiter.headers)).json()[
         "parse_status"
@@ -567,7 +567,7 @@ async def test_llm_semaphore_releases_slot_on_failure_and_expires_stale_leases(
 
     # Next task succeeds because failed task released its slot and expired lease is evicted.
     good = FakeLlm(PARSED)
-    monkeypatch.setattr(jobs, "llm_from_env", lambda model: good)
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model, **_: good)
     jobs.parse.apply(args=(str(recruiter.tenant_id), job2, str(recruiter.id))).get()
     assert good.calls == 1
     assert (await client.get(f"/api/jobs/{job2}", headers=recruiter.headers)).json()[
@@ -584,7 +584,7 @@ async def test_llm_semaphore_limits_concurrent_executions_for_all_llm_tasks(
     set_tenant_limits(recruiter.tenant_id, max_concurrency=2)
 
     counter = CountingConcurrencyLlm(PARSED)
-    monkeypatch.setattr(jobs, "llm_from_env", lambda model: counter)
+    monkeypatch.setattr(jobs, "llm_from_env", lambda model, **_: counter)
 
     rescheduled: list[tuple[Any, ...]] = []
     monkeypatch.setattr(
@@ -647,13 +647,13 @@ async def test_llm_semaphore_limits_concurrent_executions_for_all_llm_tasks(
 
         upload_llm = FakeLlm(PROFILE)
         scoring_llm = FakeLlm(SCORED, MODEL)
-        monkeypatch.setattr(uploads, "llm_from_env", lambda m: upload_llm)
-        monkeypatch.setattr(scoring_runs, "llm_from_env", lambda m: scoring_llm)
+        monkeypatch.setattr(uploads, "llm_from_env", lambda m, **_: upload_llm)
+        monkeypatch.setattr(scoring_runs, "llm_from_env", lambda m, **_: scoring_llm)
         monkeypatch.setattr(apply, "llm_from_env", lambda m: upload_llm)
         monkeypatch.setattr(
             scoring_runs,
             "embedder_from_env",
-            lambda m: type(
+            lambda m, **_: type(
                 "E",
                 (),
                 {

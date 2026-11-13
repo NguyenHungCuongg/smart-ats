@@ -239,6 +239,13 @@ WRITES: dict[str, tuple[str, str, dict[str, Any]]] = {
         {"json": {"applications": [{"id": str(uuid.uuid4()), "version": 0}], "to_stage": "OFFER"}},
     ),
     "toggle public apply": ("PATCH", "/public-apply", {"json": {"enabled": True}}),
+    "retry parse": ("POST", "/parse/retry", {}),
+    "retry upload item": ("POST", f"/uploads/items/{uuid.uuid4()}/retry", {}),
+    "retry score result": (
+        "POST",
+        f"/scoring-runs/{uuid.uuid4()}/results/{uuid.uuid4()}/retry",
+        {},
+    ),
 }
 
 
