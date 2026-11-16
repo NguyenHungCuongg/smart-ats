@@ -272,6 +272,14 @@ Index HNSW giữ truy vấn nhanh. Cô lập không cần thêm điều kiện l
 - **Email:** web và API cùng origin qua Caddy, nên API đọc được cookie `NEXT_LOCALE` của request tạo ra email, theo cùng thứ tự ưu tiên như web. Subject và body được render bằng ngôn ngữ đó ngay khi ghi dòng `email_messages`, nên outbox không cần lưu ngôn ngữ.
 - **Không dịch:** Fit-Gap Report và Evidence giữ nguyên ngôn ngữ gốc; nội dung CV/JD không bao giờ được dịch.
 
+### 5.8. Audit Log & Activity Timeline (FR-A3.3)
+
+- **Ghi trong cùng transaction:** mọi thao tác thay đổi dữ liệu gọi module `app/audit.py` (hàm `arecord` cho API và `record` cho worker) trên chính session đang mở của thay đổi nghiệp vụ, không tự mở hay commit transaction và không dùng DB trigger. Nếu thao tác bị từ chối hoặc rollback thì dòng Audit Log cũng rollback theo. Bảng `audit_logs` (ERD §7) thu hồi `UPDATE`, `DELETE`, `TRUNCATE` khỏi `ats_app`, chỉ cho phép `INSERT` và `SELECT`.
+- **Bốn loại người thực hiện (`actor_type`):** `USER` (thao tác của Member, kể cả thay đổi áp dụng từ Recruiter Decision), `AGENT` (hành động của Agent kèm `actor_user_id` của Member đã khởi chạy Campaign), `SYSTEM` (kết quả của task nền như parse xong, chấm xong, email gửi xong), và `PUBLIC` (ứng viên nộp qua Public Apply Link). Ràng buộc `CHECK` ở DB và kiểm tra ở tầng code bảo đảm `actor_user_id` khác `NULL` khi và chỉ khi `actor_type` là `USER` hoặc `AGENT`.
+- **Quy tắc của Agent:** module `audit` giữ tập hành động dẫn xuất mà `AGENT` được phép ghi (như `job.scoring_run_started`). Ghi bất kỳ hành động thay đổi dữ liệu nào ngoài tập này với `actor_type = AGENT` sẽ raise lỗi ngay trong transaction để thực thi bất biến của FR-A0 (§5.3, §7) và đo bằng truy vấn trên `audit_logs` ở Experiment 3.
+- **Quy tắc nội dung `before`/`after`:** chỉ chứa id, giá trị enum, số, boolean và criteria/trọng số của Job. Tuyệt đối không chứa dữ liệu cá nhân của Candidate (họ tên, email, số điện thoại), văn bản CV/JD, ghi chú tự do (ghi chú đổi Stage, lý do từ chối, nội dung comment), địa chỉ/tiêu đề/nội dung email hay token/mật khẩu/hash, để việc xóa dữ liệu ứng viên (FR-C1.5) không phải sửa bảng chỉ append.
+- **Activity Timeline:** đọc từ `audit_logs` theo `(entity_type, entity_id)` mới nhất trước với phân trang keyset `(created_at, id)`, luôn `LEFT JOIN users` lúc đọc (không lọc `is_active`) để giữ nguyên họ tên của Member đã bị thu hồi quyền, và không bao giờ trả về `ip` hay `request_id`.
+
 ---
 
 ## 6. Chịu lỗi & Phục hồi

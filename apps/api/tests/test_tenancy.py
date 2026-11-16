@@ -211,6 +211,11 @@ TENANT_TABLES = {
         " email_id) VALUES (:invitations, :t, 'a@example.com', 'RECRUITER', :invitations,"
         " :users, now(), :email_messages)"
     ),
+    "audit_logs": (
+        "INSERT INTO audit_logs (id, tenant_id, actor_type, actor_user_id, action, entity_type,"
+        " entity_id, before, after) VALUES (:audit_logs, :t, 'USER', :users, 'job.created',"
+        " 'job', :jobs, NULL, '{}')"
+    ),
 }
 
 
@@ -353,3 +358,17 @@ def test_app_role_owns_nothing_and_cannot_bypass_rls() -> None:
             conn.scalar(text("SELECT count(*) FROM pg_class WHERE relowner = 'ats_app'::regrole"))
             == 0
         )
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE audit_logs SET action = 'job.parsed'",
+        "DELETE FROM audit_logs",
+        "TRUNCATE audit_logs",
+    ],
+)
+def test_audit_logs_is_append_only_for_ats_app(tenant_with_rows: uuid.UUID, statement: str) -> None:
+    with pytest.raises(ProgrammingError) as exc, tenant_session(tenant_with_rows) as session:
+        session.execute(text(statement))
+    assert isinstance(exc.value.orig, psycopg.errors.InsufficientPrivilege)

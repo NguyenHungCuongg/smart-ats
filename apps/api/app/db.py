@@ -50,3 +50,4 @@ async def set_tenant(session: AsyncSession, tenant_id: UUID) -> None:
     """Scope session's open transaction to tenant_id, for a request that learns its Tenant
     only from a SECURITY DEFINER lookup in that same transaction (ERD §8)."""
     await session.execute(_SET_TENANT, {"tenant_id": str(tenant_id)})
+    session.info["tenant_id"] = tenant_id

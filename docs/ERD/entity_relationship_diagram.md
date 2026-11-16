@@ -447,18 +447,18 @@ Ngắt kết nối thì xóa dòng; Channel Post đã đăng vẫn giữ.
 
 ### `audit_logs` — RLS, chỉ append (`ats_app` chỉ có `INSERT` và `SELECT`)
 
-| Cột                    | Kiểu            | Ghi chú                             |
-| ---------------------- | --------------- | ----------------------------------- |
-| id                     | uuid PK         |                                     |
-| tenant_id              | uuid NN         |                                     |
-| actor_type             | text NN         | `USER`, `AGENT`, `SYSTEM`, `PUBLIC` |
-| actor_user_id          | uuid FK → users |                                     |
-| action                 | text NN         | ví dụ `application.stage_changed`   |
-| entity_type, entity_id | text, uuid      |                                     |
-| before, after          | jsonb           |                                     |
-| request_id             | text            |                                     |
-| ip                     | inet            |                                     |
-| created_at             | timestamptz NN  |                                     |
+| Cột                    | Kiểu             | Ghi chú                                                                                                                                                          |
+| ---------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id                     | uuid PK          |                                                                                                                                                                  |
+| tenant_id              | uuid NN          |                                                                                                                                                                  |
+| actor_type             | text NN          | `USER`, `AGENT`, `SYSTEM`, `PUBLIC`; `CHECK ((actor_type IN ('USER', 'AGENT')) = (actor_user_id IS NOT NULL))`                                                   |
+| actor_user_id          | uuid FK → users  | khóa ngoại ghép `(tenant_id, actor_user_id)` tới `users`; cột `campaign_id` (uuid FK → `campaigns`) sẽ thêm cùng bảng `campaigns` ở FR-A0                        |
+| action                 | text NN          | tập đóng `<đối tượng>.<động từ>`, ví dụ `job.created`, `application.stage_changed`                                                                               |
+| entity_type, entity_id | text NN, uuid NN | đối tượng đa hình (`job`, `application`, `invitation`, `member`), không khóa ngoại trên `entity_id`; index `(tenant_id, entity_type, entity_id, created_at, id)` |
+| before, after          | jsonb            | chỉ chứa id, enum, số, boolean và criteria/trọng số của Job; không chứa PII hay văn bản tự do                                                                    |
+| request_id             | text             |                                                                                                                                                                  |
+| ip                     | inet             |                                                                                                                                                                  |
+| created_at             | timestamptz NN   |                                                                                                                                                                  |
 
 ### `platform_audit_logs` — _không RLS_, chỉ System Admin
 
@@ -497,3 +497,4 @@ Vì RLS bị force, policy ràng buộc cả `ats_owner`: một hàm `SECURITY D
 - `ai_usage_entries (tenant_id, created_at)`.
 - `jobs UNIQUE (public_slug)`.
 - `channel_connections UNIQUE (tenant_id, channel)`; `channel_posts UNIQUE (tenant_id, job_id, channel, target_id)`.
+- `audit_logs (tenant_id, entity_type, entity_id, created_at, id)`.

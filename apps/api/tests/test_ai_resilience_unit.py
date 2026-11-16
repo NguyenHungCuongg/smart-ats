@@ -372,6 +372,7 @@ class _FakeAsyncSession:
         self._execute = list(execute_results or [])
         self._scalars = list(scalar_results or [])
         self.executed_sql: list[str] = []
+        self.info: dict[str, Any] = {"tenant_id": uuid.uuid4()}
 
     async def execute(self, stmt: Any, _params: Any = None) -> _Result:
         self.executed_sql.append(str(stmt))

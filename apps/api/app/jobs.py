@@ -27,7 +27,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app import ai, events, outbox, storage, usage
+from app import ai, audit, events, outbox, storage, usage
 from app.auth import Auth, Authenticated
 from app.worker import tenant_task
 from smart_ats_scoring.extraction import ExtractionError, document_type, extract_text
@@ -275,6 +275,15 @@ async def create(
             {"tenant_id": auth.tenant_id, "title": title, "key": key, "user_id": auth.user_id},
         )
     ).scalar_one()
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="job.created",
+        entity_id=job_id,
+        after={"status": "DRAFT"},
+        ip=auth.ip,
+    )
     outbox.enqueue_after_commit(
         auth.db, parse, (str(auth.tenant_id), str(job_id), str(auth.user_id))
     )
@@ -325,6 +334,35 @@ async def get(job_id: uuid.UUID, auth: JobReader) -> Job:
     return await _job(auth.db, job_id)
 
 
+@router.get("/{job_id}/timeline")
+async def get_timeline(
+    job_id: uuid.UUID,
+    auth: JobReader,
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = Query(default=None),
+) -> audit.ActivityPage:
+    """The Job's Activity Timeline, newest first, with keyset pagination (FR-A3.3)."""
+    return await audit.timeline(
+        auth.db, entity_type="job", entity_id=job_id, limit=limit, cursor=cursor
+    )
+
+
+def _criteria_snapshot(job: Job) -> dict[str, Any]:
+    return {
+        "title": job.title,
+        "level": job.level,
+        "department": job.department,
+        "location": job.location,
+        "work_mode": job.work_mode,
+        "criteria": job.criteria,
+        "weights": job.weights.model_dump(),
+    }
+
+
+def _metadata_value(value: Any) -> Any:
+    return value.isoformat() if isinstance(value, date) else value
+
+
 async def _refuse_while_parsing(db: AsyncSession, job_id: uuid.UUID) -> None:
     parse_status = await db.scalar(
         text("SELECT parse_status FROM jobs WHERE id = :id"), {"id": job_id}
@@ -354,6 +392,16 @@ async def retry_parse(job_id: uuid.UUID, auth: LockedJob) -> Job:
         ),
         {"id": job_id},
     )
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="job.parse_retried",
+        entity_id=job_id,
+        before={"parse_status": row.parse_status, "parse_error": row.parse_error},
+        after={"parse_status": "PENDING", "parse_error": None},
+        ip=auth.ip,
+    )
     outbox.enqueue_after_commit(
         auth.db, parse, (str(auth.tenant_id), str(job_id), str(auth.user_id))
     )
@@ -364,6 +412,7 @@ async def retry_parse(job_id: uuid.UUID, auth: LockedJob) -> Job:
 async def confirm_criteria(job_id: uuid.UUID, body: CriteriaConfirmation, auth: LockedJob) -> Job:
     """Save the Recruiter's edits and confirm the criteria, which makes the Job scorable."""
     await _refuse_while_parsing(auth.db, job_id)
+    previous = await _job(auth.db, job_id)
     await auth.db.execute(
         text(
             "UPDATE jobs SET title = :title, level = :level, department = :department,"
@@ -381,7 +430,18 @@ async def confirm_criteria(job_id: uuid.UUID, body: CriteriaConfirmation, auth: 
             **{axis: Decimal(percent) / 100 for axis, percent in body.weights},
         },
     )
-    return await _job(auth.db, job_id)
+    updated = await _job(auth.db, job_id)
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="job.criteria_confirmed",
+        entity_id=job_id,
+        before=_criteria_snapshot(previous),
+        after=_criteria_snapshot(updated),
+        ip=auth.ip,
+    )
+    return updated
 
 
 @router.post("/{job_id}/transitions")
@@ -400,6 +460,16 @@ async def transition(job_id: uuid.UUID, body: Transition, auth: LockedJob) -> Jo
         ),
         {"id": job_id, "to": to},
     )
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="job.status_changed",
+        entity_id=job_id,
+        before={"status": current},
+        after={"status": to, "action": body.action},
+        ip=auth.ip,
+    )
     return await _job(auth.db, job_id)
 
 
@@ -409,12 +479,27 @@ async def change_metadata(job_id: uuid.UUID, body: MetadataChange, auth: LockedJ
     await _refuse_while_parsing(auth.db, job_id)
     changes = body.model_dump(exclude_unset=True)
     if changes:
+        previous = await _job(auth.db, job_id)
+        diff = {
+            column: value for column, value in changes.items() if getattr(previous, column) != value
+        }
         # The column names are MetadataChange's own fields, never the client's text.
         assignments = ", ".join(f"{column} = :{column}" for column in changes)
         await auth.db.execute(
             text(f"UPDATE jobs SET {assignments}, updated_at = now() WHERE id = :id"),
             {"id": job_id, **changes},
         )
+        if diff:
+            await audit.arecord(
+                auth.db,
+                actor_type="USER",
+                actor_user_id=auth.user_id,
+                action="job.metadata_changed",
+                entity_id=job_id,
+                before={column: _metadata_value(getattr(previous, column)) for column in diff},
+                after={column: _metadata_value(value) for column, value in diff.items()},
+                ip=auth.ip,
+            )
     return await _job(auth.db, job_id)
 
 
@@ -430,6 +515,11 @@ async def toggle_public_apply(job_id: uuid.UUID, body: PublicApplyToggle, auth: 
     Company Admins and Recruiters only; Reviewers are rejected by LockedJob (403).
     """
     await _refuse_while_parsing(auth.db, job_id)
+    previous_enabled = bool(
+        await auth.db.scalar(
+            text("SELECT public_apply_enabled FROM jobs WHERE id = :id"), {"id": job_id}
+        )
+    )
     if body.enabled:
         slug = secrets.token_urlsafe(16)
         await auth.db.execute(
@@ -446,6 +536,16 @@ async def toggle_public_apply(job_id: uuid.UUID, body: PublicApplyToggle, auth: 
             text("UPDATE jobs SET public_apply_enabled = false, updated_at = now() WHERE id = :id"),
             {"id": job_id},
         )
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="job.public_apply_changed",
+        entity_id=job_id,
+        before={"public_apply_enabled": previous_enabled},
+        after={"public_apply_enabled": body.enabled},
+        ip=auth.ip,
+    )
     return await _job(auth.db, job_id)
 
 
@@ -502,6 +602,13 @@ async def assign_reviewers(
                 "user_ids": invalid,
             },
         )
+    before_ids = sorted(
+        str(uid)
+        for uid in await auth.db.scalars(
+            text("SELECT user_id FROM job_reviewers WHERE job_id = :job_id"),
+            {"job_id": job_id},
+        )
+    )
     await auth.db.execute(
         text(
             "DELETE FROM job_reviewers"
@@ -517,6 +624,16 @@ async def assign_reviewers(
             " ON CONFLICT DO NOTHING"
         ),
         {"tenant_id": auth.tenant_id, "job_id": job_id, "ids": ids, "user_id": auth.user_id},
+    )
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="job.reviewers_changed",
+        entity_id=job_id,
+        before={"user_ids": before_ids},
+        after={"user_ids": sorted(str(uid) for uid in ids)},
+        ip=auth.ip,
     )
     return await _reviewers(auth.db, job_id)
 
@@ -595,6 +712,14 @@ def parse(tenant_id: uuid.UUID, session: Session, job_id: str, user_id: str) -> 
             "verification": json.dumps(verification),
         },
     )
+    audit.record(
+        session,
+        actor_type="SYSTEM",
+        action="job.parsed",
+        entity_id=uuid.UUID(job_id),
+        before={"parse_status": "PENDING"},
+        after={"parse_status": "SUCCEEDED", "parse_error": None},
+    )
     events.publish(
         session, uuid.UUID(user_id), "job.parsed", {"job_id": job_id, "parse_status": "SUCCEEDED"}
     )
@@ -608,6 +733,14 @@ def fail_parse(session: Session, job_id: uuid.UUID, user_id: uuid.UUID, error: s
             " WHERE id = :id"
         ),
         {"id": job_id, "error": error},
+    )
+    audit.record(
+        session,
+        actor_type="SYSTEM",
+        action="job.parsed",
+        entity_id=job_id,
+        before={"parse_status": "PENDING"},
+        after={"parse_status": "FAILED", "parse_error": error},
     )
     events.publish(
         session, user_id, "job.parsed", {"job_id": str(job_id), "parse_status": "FAILED"}

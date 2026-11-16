@@ -20,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
+from app import audit
 from app.db import async_engine, async_tenant_session
 
 # Lifetimes: FR-C1.1.
@@ -302,6 +303,7 @@ class Auth:
     tenant_id: uuid.UUID
     role: str
     db: AsyncSession
+    ip: str | None = None
 
 
 def _unauthorized() -> HTTPException:
@@ -311,6 +313,7 @@ def _unauthorized() -> HTTPException:
 
 
 async def _authenticate(
+    request: Request,
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Depends(HTTPBearer(auto_error=False))
     ],
@@ -329,7 +332,7 @@ async def _authenticate(
     except (jwt.PyJWTError, ValueError) as e:
         raise _unauthorized() from e
     async with async_tenant_session(tenant_id) as db:
-        yield Auth(user_id, tenant_id, claims["role"], db)
+        yield Auth(user_id, tenant_id, claims["role"], db, audit.client_ip(request))
 
 
 # scope="function": the transaction commits before the response is sent, not after.
