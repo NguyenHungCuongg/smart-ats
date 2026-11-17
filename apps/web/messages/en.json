@@ -436,5 +436,34 @@
     "shareX": "Share to X",
     "disabledNotPublished": "Job must be in Published status to share.",
     "disabledPublicApplyOff": "Public Apply Link is disabled. Enable it to share."
+  },
+  "activity": {
+    "title": "Activity",
+    "loading": "Loading activity",
+    "empty": "No activity yet.",
+    "loadMore": "Load more",
+    "actor": {
+      "SYSTEM": "System",
+      "PUBLIC": "Candidate (Public Apply)",
+      "AGENT": "Agent ({name})",
+      "unknown": "Member"
+    },
+    "badge": {
+      "SYSTEM": "System",
+      "PUBLIC": "Public Apply",
+      "AGENT": "Agent"
+    },
+    "job": {
+      "created": "{actor} created the Job.",
+      "parsedSucceeded": "{actor} parsed the JD.",
+      "parsedFailed": "{actor} failed to parse the JD ({error}).",
+      "parseRetried": "{actor} retried parsing the JD.",
+      "criteriaConfirmed": "{actor} confirmed the criteria (Technical {technical}%, Soft Skills {soft_skills}%, Experience {experience}%).",
+      "metadataChanged": "{actor} updated the Job details ({fields}).",
+      "statusChanged": "{actor} changed the Job status from {from} to {to}.",
+      "publicApplyEnabled": "{actor} enabled the Public Apply Link.",
+      "publicApplyDisabled": "{actor} disabled the Public Apply Link.",
+      "reviewersChanged": "{actor} updated the Reviewers ({count, plural, one {# Reviewer} other {# Reviewers}})."
+    }
   }
 }

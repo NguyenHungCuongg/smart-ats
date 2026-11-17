@@ -268,7 +268,7 @@ async def test_every_write_to_an_archived_job_is_refused(
 async def test_an_archived_job_still_reads(client: AsyncClient, recruiter: User) -> None:
     job_id = job_in(recruiter, "ARCHIVED")
 
-    for path in ("", "/applications", "/uploads", "/reviewers"):
+    for path in ("", "/applications", "/uploads", "/reviewers", "/timeline"):
         response = await client.get(f"/api/jobs/{job_id}{path}", headers=recruiter.headers)
         assert response.status_code == 200, path
     [job] = (await client.get("/api/jobs", headers=recruiter.headers)).json()

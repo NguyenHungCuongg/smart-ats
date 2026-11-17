@@ -17,6 +17,7 @@ import {
   weightTotal,
 } from "../criteria";
 import { canEdit } from "../lifecycle";
+import { Activity } from "./activity";
 import { MetadataForm, StatusActions } from "./lifecycle";
 import { Pipeline } from "./pipeline";
 import { PublicApplySection } from "./public-apply";
@@ -51,7 +52,14 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const [missing, setMissing] = useState(false);
   // Bumped to reload the Job.
   const [version, setVersion] = useState(0);
+  // Bumped whenever a Job action or SSE event should refresh the Activity Timeline.
+  const [activityVersion, setActivityVersion] = useState(0);
   const [applications, setApplications] = useState(0);
+
+  function updateJob(updated: Job) {
+    setJob(updated);
+    setActivityVersion((v) => v + 1);
+  }
 
   useEffect(() => {
     apiFetch(`/api/jobs/${id}`).then(async (response) => {
@@ -93,9 +101,9 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
                 <p className="text-sm">{t("archivedReadOnly")}</p>
               ) : (
                 <>
-                  <StatusActions job={job} onChanged={setJob} />
-                  <MetadataForm key={job.apply_deadline} job={job} onSaved={setJob} />
-                  <PublicApplySection job={job} onSaved={setJob} />
+                  <StatusActions job={job} onChanged={updateJob} />
+                  <MetadataForm key={job.apply_deadline} job={job} onSaved={updateJob} />
+                  <PublicApplySection job={job} onSaved={updateJob} />
                   <JobAdSection job={job} />
                 </>
               )}
@@ -107,16 +115,17 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
               <CriteriaForm
                 key={`${job.parse_status}-${job.criteria_confirmed_at}`}
                 job={job}
-                onSaved={setJob}
+                onSaved={updateJob}
               />
             ) : (
               <CriteriaView job={job} />
             )}
-            {editable && <Reviewers jobId={id} />}
+            {editable && <Reviewers jobId={id} onSaved={() => setActivityVersion((v) => v + 1)} />}
             {/* CVs go into any Job; only scoring needs confirmed criteria. */}
             {editable && <Uploads jobId={id} />}
             <Pipeline jobId={id} editable={editable} onApplications={setApplications} />
             <Scoring job={job} editable={editable} applications={applications} />
+            <Activity jobId={id} refreshKey={version + activityVersion} />
           </>
         )}
       </div>

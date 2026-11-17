@@ -51,6 +51,7 @@ Mỗi loại câu hỏi có đúng một tài liệu sở hữu. Khi hai tài li
 - [ ] Nội dung CV/JD đưa vào prompt nằm trong khối untrusted; lời gọi chấm điểm không có tool (FR-C2.2).
 - [ ] Không log hoặc gửi ra ngoài PII và secret; không commit `.env` (NFR-SEC-10).
 - [ ] Token của bên thứ ba (Page access token) chỉ lưu dạng mã hóa, chỉ giải mã ngay trước lời gọi API, không có trong response, log hay Audit Log (FR-A3.5, SAD §5.6).
+- [ ] Thao tác thay đổi mới ghi Audit Log trong cùng transaction, không chứa dữ liệu cá nhân hay văn bản tự do (FR-A3.3, SAD §5.8).
 
 ## Viết tài liệu
 

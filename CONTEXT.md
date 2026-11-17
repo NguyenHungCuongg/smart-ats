@@ -165,3 +165,11 @@ _Avoid_: Quota (in prose), limit
 **Retention Period**:
 How long a Candidate's personal data is kept after their last activity before it is anonymized.
 _Avoid_: TTL, expiry
+
+**Audit Log**:
+The append-only record of who did what in a Tenant.
+_Avoid_: History (reserved for Stage history), event log
+
+**Activity Timeline**:
+The Audit Log entries of one Job or one Application, as Members read them.
+_Avoid_: Audit trail, history

@@ -8,7 +8,7 @@ import { apiFetch } from "../../auth";
 type Reviewer = { id: string; full_name: string; email: string; assigned: boolean };
 
 /** Choose which of the Workspace's Reviewers see the Job (Reviewer Assignment). */
-export function Reviewers({ jobId }: { jobId: string }) {
+export function Reviewers({ jobId, onSaved }: { jobId: string; onSaved?: () => void }) {
   const t = useTranslations("reviewers");
   const [reviewers, setReviewers] = useState<Reviewer[] | null>(null);
   // The ids checked now; saved replaces the Job's whole list.
@@ -38,6 +38,7 @@ export function Reviewers({ jobId }: { jobId: string }) {
     if (response.ok) {
       show(await response.json());
       setSaved(true);
+      onSaved?.();
     } else {
       // 422: a Reviewer was revoked or re-roled meanwhile.
       setSaved(false);
