@@ -10,10 +10,11 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
+from app import audit
 from app.auth import Auth, Authenticated
 from app.jobs import JobWriter, Recruiter, job_reader, job_writer
 
@@ -106,34 +107,47 @@ async def _move(
     for row in rows:
         if refusal := _refusal(row.stage, to_stage, note):
             raise refusal
-    moved = await auth.db.execute(
-        text(
-            "WITH moved AS ("
-            "  UPDATE applications SET stage = :to_stage, version = version + 1,"
-            "    updated_at = now(),"
-            # Only a REJECTED Application has a reason; a reopened one drops it.
-            "    rejected_reason = CASE WHEN :to_stage = 'REJECTED'"
-            "      THEN CAST(:rejected_reason AS text) END"
-            "  WHERE id = ANY(CAST(:ids AS uuid[]))"
-            "  RETURNING id, old.stage AS from_stage, stage, version),"
-            " logged AS ("
-            "  INSERT INTO application_stage_history (tenant_id, application_id, from_stage,"
-            "    to_stage, changed_by, note)"
-            # A rejection's reason, which a reopen clears from the Application, stays here.
-            "  SELECT :tenant_id, id, from_stage, stage, :user_id,"
-            "    coalesce(CAST(:note AS text), CAST(:rejected_reason AS text)) FROM moved)"
-            " SELECT id, stage, version FROM moved ORDER BY id"
-        ),
-        {
-            "ids": list(versions),
-            "to_stage": to_stage,
-            "rejected_reason": rejected_reason,
-            "tenant_id": auth.tenant_id,
-            "user_id": auth.user_id,
-            "note": note,
-        },
-    )
-    return [Moved.model_validate(row._mapping) for row in moved]
+    moved_rows = (
+        await auth.db.execute(
+            text(
+                "WITH moved AS ("
+                "  UPDATE applications SET stage = :to_stage, version = version + 1,"
+                "    updated_at = now(),"
+                # Only a REJECTED Application has a reason; a reopened one drops it.
+                "    rejected_reason = CASE WHEN :to_stage = 'REJECTED'"
+                "      THEN CAST(:rejected_reason AS text) END"
+                "  WHERE id = ANY(CAST(:ids AS uuid[]))"
+                "  RETURNING id, old.stage AS from_stage, stage, version),"
+                " logged AS ("
+                "  INSERT INTO application_stage_history (tenant_id, application_id, from_stage,"
+                "    to_stage, changed_by, note)"
+                # A rejection's reason, which a reopen clears from the Application, stays here.
+                "  SELECT :tenant_id, id, from_stage, stage, :user_id,"
+                "    coalesce(CAST(:note AS text), CAST(:rejected_reason AS text)) FROM moved)"
+                " SELECT id, from_stage, stage, version FROM moved ORDER BY id"
+            ),
+            {
+                "ids": list(versions),
+                "to_stage": to_stage,
+                "rejected_reason": rejected_reason,
+                "tenant_id": auth.tenant_id,
+                "user_id": auth.user_id,
+                "note": note,
+            },
+        )
+    ).all()
+    for row in moved_rows:
+        await audit.arecord(
+            auth.db,
+            actor_type="USER",
+            actor_user_id=auth.user_id,
+            action="application.stage_changed",
+            entity_id=row.id,
+            before={"stage": row.from_stage},
+            after={"stage": row.stage},
+            ip=auth.ip,
+        )
+    return [Moved(id=row.id, stage=row.stage, version=row.version) for row in moved_rows]
 
 
 async def _job_of(auth: Auth, application_id: uuid.UUID) -> uuid.UUID:
@@ -181,3 +195,17 @@ async def history(application_id: uuid.UUID, auth: Authenticated) -> list[StageC
         {"id": application_id},
     )
     return [StageChange.model_validate(row._mapping) for row in rows]
+
+
+@router.get("/applications/{application_id}/timeline")
+async def get_timeline(
+    application_id: uuid.UUID,
+    auth: Authenticated,
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = Query(default=None),
+) -> audit.ActivityPage:
+    """The Application's Activity Timeline, newest first, with keyset pagination (FR-A3.3)."""
+    await job_reader(await _job_of(auth, application_id), auth)
+    return await audit.timeline(
+        auth.db, entity_type="application", entity_id=application_id, limit=limit, cursor=cursor
+    )

@@ -1,7 +1,8 @@
-// Activity Timeline formatting for a Job (FR-A3.3, NFR-USE-03).
+// Activity Timeline formatting for Jobs and Applications (FR-A3.3, NFR-USE-03).
 
 import type { Translator } from "../../i18n/messages";
 import type { JobStatus } from "./lifecycle";
+import { SOURCES, STAGES, type Source, type Stage } from "./pipeline";
 
 export type ActorType = "USER" | "AGENT" | "SYSTEM" | "PUBLIC";
 
@@ -18,11 +19,17 @@ export type JobActivityAction =
   | "job.metadata_changed"
   | "job.status_changed"
   | "job.public_apply_changed"
-  | "job.reviewers_changed";
+  | "job.reviewers_changed"
+  | "job.cvs_uploaded"
+  | "job.cv_parse_retried";
+
+export type ApplicationActivityAction = "application.created" | "application.stage_changed";
+
+export type ActivityAction = JobActivityAction | ApplicationActivityAction;
 
 export type ActivityEntry = {
   id: string;
-  action: JobActivityAction;
+  action: ActivityAction;
   actor_type: ActorType;
   actor: ActivityActor | null;
   before: Record<string, unknown> | null;
@@ -67,12 +74,18 @@ export function actorBadge(actorType: ActorType, t: Translator<"activity">): str
   return t(`badge.${actorType}`);
 }
 
-/** Pure formatter turning one Job Activity Timeline entry into a localized sentence. */
+export type ActivityTranslators = {
+  t: Translator<"activity">;
+  statusName: Translator<"lifecycle.status">;
+  jobField: Translator<"job">;
+  stageName: Translator<"pipeline.stage">;
+  sourceName: Translator<"pipeline.source">;
+};
+
+/** Pure formatter turning one Activity Timeline entry into a localized sentence. */
 export function formatActivity(
   entry: ActivityEntry,
-  t: Translator<"activity">,
-  statusName: Translator<"lifecycle.status">,
-  jobField: Translator<"job">,
+  { t, statusName, jobField, stageName, sourceName }: ActivityTranslators,
 ): string {
   const actor = formatActor(entry, t);
   switch (entry.action) {
@@ -117,6 +130,30 @@ export function formatActivity(
     case "job.reviewers_changed": {
       const ids = Array.isArray(entry.after?.user_ids) ? entry.after.user_ids : [];
       return t("job.reviewersChanged", { actor, count: ids.length });
+    }
+    case "job.cvs_uploaded": {
+      const count = Number(entry.after?.file_count ?? 0);
+      return t("job.cvsUploaded", { actor, count });
+    }
+    case "job.cv_parse_retried":
+      return t("job.cvParseRetried", { actor });
+    case "application.created": {
+      const sourceKey = String(entry.after?.source ?? "UPLOAD") as Source;
+      const stageKey = String(entry.after?.stage ?? "APPLIED") as Stage;
+      return t("application.created", {
+        actor,
+        source: SOURCES.includes(sourceKey) ? sourceName(sourceKey) : sourceKey,
+        stage: STAGES.includes(stageKey) ? stageName(stageKey) : stageKey,
+      });
+    }
+    case "application.stage_changed": {
+      const fromKey = String(entry.before?.stage ?? "APPLIED") as Stage;
+      const toKey = String(entry.after?.stage ?? "APPLIED") as Stage;
+      return t("application.stageChanged", {
+        actor,
+        from: STAGES.includes(fromKey) ? stageName(fromKey) : fromKey,
+        to: STAGES.includes(toKey) ? stageName(toKey) : toKey,
+      });
     }
   }
 }

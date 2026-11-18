@@ -258,7 +258,11 @@
     "rejectReason": "Reason for rejecting (optional)",
     "reopen": "Reopen",
     "reject": "Reject",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "activity": "Activity",
+    "activityFor": "Activity of {name}",
+    "activityTitle": "Activity · {name}",
+    "closeActivity": "Close"
   },
   "scoring": {
     "budgetExceeded": "Monthly AI budget exceeded. Ask a Company Admin to review AI usage.",
@@ -440,6 +444,7 @@
   "activity": {
     "title": "Activity",
     "loading": "Loading activity",
+    "loadFailed": "Couldn't load activity.",
     "empty": "No activity yet.",
     "loadMore": "Load more",
     "actor": {
@@ -463,7 +468,13 @@
       "statusChanged": "{actor} changed the Job status from {from} to {to}.",
       "publicApplyEnabled": "{actor} enabled the Public Apply Link.",
       "publicApplyDisabled": "{actor} disabled the Public Apply Link.",
-      "reviewersChanged": "{actor} updated the Reviewers ({count, plural, one {# Reviewer} other {# Reviewers}})."
+      "reviewersChanged": "{actor} updated the Reviewers ({count, plural, one {# Reviewer} other {# Reviewers}}).",
+      "cvsUploaded": "{actor} uploaded {count, plural, one {# CV} other {# CVs}}.",
+      "cvParseRetried": "{actor} retried parsing a CV."
+    },
+    "application": {
+      "created": "{actor} created the Application ({source}, Stage {stage}).",
+      "stageChanged": "{actor} moved the Application from {from} to {to}."
     }
   }
 }

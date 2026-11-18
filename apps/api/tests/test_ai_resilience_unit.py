@@ -464,11 +464,11 @@ async def test_retry_item_guards_and_happy_path(monkeypatch: pytest.MonkeyPatch)
     job_id, item_id, batch_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 
     # Missing / wrong job / wrong tenant -> 404.
+    db_missing = _FakeAsyncSession(execute_results=[_Result(None)])
     with pytest.raises(HTTPException) as exc:
-        await uploads.retry_item(
-            job_id, item_id, _auth(_FakeAsyncSession(execute_results=[_Result(None)]))
-        )
+        await uploads.retry_item(job_id, item_id, _auth(db_missing))
     assert exc.value.status_code == 404
+    assert not any("INSERT INTO audit_logs" in sql for sql in db_missing.executed_sql)
 
     # Non-retryable error -> 409.
     db_nonretry = _FakeAsyncSession(
@@ -479,6 +479,7 @@ async def test_retry_item_guards_and_happy_path(monkeypatch: pytest.MonkeyPatch)
     with pytest.raises(HTTPException) as exc:
         await uploads.retry_item(job_id, item_id, _auth(db_nonretry))
     assert exc.value.status_code == 409
+    assert not any("INSERT INTO audit_logs" in sql for sql in db_nonretry.executed_sql)
 
     # Happy path -> updates item to PENDING, resets batch to PROCESSING, enqueues uploads.parse_cv.
     async def _budget_ok(*_args: Any, **_kwargs: Any) -> None:
@@ -506,6 +507,7 @@ async def test_retry_item_guards_and_happy_path(monkeypatch: pytest.MonkeyPatch)
             ),
             _Result(updated_row),
             _Result(None),
+            _Result(None),
         ]
     )
     auth = _auth(db_ok)
@@ -515,6 +517,7 @@ async def test_retry_item_guards_and_happy_path(monkeypatch: pytest.MonkeyPatch)
     assert any(
         "UPDATE upload_batches SET status = 'PROCESSING'" in sql for sql in db_ok.executed_sql
     )
+    assert any("INSERT INTO audit_logs" in sql for sql in db_ok.executed_sql)
     assert enqueued == [(uploads.parse_cv, (str(auth.tenant_id), str(item_id)))]
 
 

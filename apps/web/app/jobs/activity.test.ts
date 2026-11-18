@@ -11,12 +11,13 @@ function translators(locale: Locale) {
     t: createTranslator({ locale, messages, namespace: "activity" }),
     statusName: createTranslator({ locale, messages, namespace: "lifecycle.status" }),
     jobField: createTranslator({ locale, messages, namespace: "job" }),
+    stageName: createTranslator({ locale, messages, namespace: "pipeline.stage" }),
+    sourceName: createTranslator({ locale, messages, namespace: "pipeline.source" }),
   };
 }
 
 function render(entry: ActivityEntry, locale: Locale): string {
-  const { t, statusName, jobField } = translators(locale);
-  return formatActivity(entry, t, statusName, jobField);
+  return formatActivity(entry, translators(locale));
 }
 
 const USER_ACTOR = { id: "00000000-0000-0000-0000-000000000001", full_name: "Nguyễn Văn An" };
@@ -154,4 +155,68 @@ test("formats all eight Job actions in Vietnamese and English", () => {
   });
   expect(render(reviewers, "vi")).toBe("Nguyễn Văn An đã cập nhật danh sách Reviewer (2 người).");
   expect(render(reviewers, "en")).toBe("Nguyễn Văn An updated the Reviewers (2 Reviewers).");
+});
+
+test("formats CV upload, CV retry, and Application actions in Vietnamese and English", () => {
+  const oneCv = makeEntry("job.cvs_uploaded", {
+    after: { upload_batch_id: "b1", file_count: 1 },
+  });
+  expect(render(oneCv, "vi")).toBe("Nguyễn Văn An đã tải lên 1 CV.");
+  expect(render(oneCv, "en")).toBe("Nguyễn Văn An uploaded 1 CV.");
+
+  const threeCvs = makeEntry("job.cvs_uploaded", {
+    after: { upload_batch_id: "b2", file_count: 3 },
+  });
+  expect(render(threeCvs, "vi")).toBe("Nguyễn Văn An đã tải lên 3 CV.");
+  expect(render(threeCvs, "en")).toBe("Nguyễn Văn An uploaded 3 CVs.");
+
+  const cvRetried = makeEntry("job.cv_parse_retried", {
+    before: { status: "FAILED", error_code: "LLM_UNAVAILABLE" },
+    after: { upload_batch_id: "b1", item_id: "i1", status: "PENDING", error_code: null },
+  });
+  expect(render(cvRetried, "vi")).toBe("Nguyễn Văn An đã chạy lại phân tích CV.");
+  expect(render(cvRetried, "en")).toBe("Nguyễn Văn An retried parsing a CV.");
+
+  const appUploaded = makeEntry("application.created", {
+    after: {
+      source: "UPLOAD",
+      candidate_id: "c1",
+      cv_document_id: "cv1",
+      stage: "APPLIED",
+    },
+  });
+  expect(render(appUploaded, "vi")).toBe(
+    "Nguyễn Văn An đã tạo Application (Tải lên, Stage Applied).",
+  );
+  expect(render(appUploaded, "en")).toBe(
+    "Nguyễn Văn An created the Application (Upload, Stage Applied).",
+  );
+
+  const appPublic = makeEntry("application.created", {
+    actor_type: "PUBLIC",
+    actor: null,
+    after: {
+      source: "PUBLIC_APPLY",
+      candidate_id: "c2",
+      cv_document_id: "cv2",
+      stage: "APPLIED",
+    },
+  });
+  expect(render(appPublic, "vi")).toBe(
+    "Ứng viên (Public Apply) đã tạo Application (Public Apply, Stage Applied).",
+  );
+  expect(render(appPublic, "en")).toBe(
+    "Candidate (Public Apply) created the Application (Public Apply, Stage Applied).",
+  );
+
+  const stageChanged = makeEntry("application.stage_changed", {
+    before: { stage: "APPLIED" },
+    after: { stage: "SCREENING" },
+  });
+  expect(render(stageChanged, "vi")).toBe(
+    "Nguyễn Văn An đã chuyển Application từ Applied sang Screening.",
+  );
+  expect(render(stageChanged, "en")).toBe(
+    "Nguyễn Văn An moved the Application from Applied to Screening.",
+  );
 });

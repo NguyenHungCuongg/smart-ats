@@ -226,6 +226,16 @@ async def move_first(client: AsyncClient, user: User, job_id: str) -> Response:
     )
 
 
+async def application_timeline_first(client: AsyncClient, user: User, job_id: str) -> Response:
+    """Read the Activity Timeline of the Job's first Application."""
+    [application] = query(
+        user,
+        "SELECT id FROM applications WHERE job_id = :job_id ORDER BY created_at DESC LIMIT 1",
+        job_id=job_id,
+    )
+    return await client.get(f"/api/applications/{application['id']}/timeline", headers=user.headers)
+
+
 EVERYONE = ("COMPANY_ADMIN", "RECRUITER", "REVIEWER")
 MATRIX: list[tuple[str, dict[str, str], list[Probe] | str]] = [
     ("Quản lý Tenant, gói, AI Budget nền tảng", dict.fromkeys(EVERYONE, DENIED), "FR-C1.4"),
@@ -314,7 +324,11 @@ MATRIX: list[tuple[str, dict[str, str], list[Probe] | str]] = [
             call("GET", "/api/jobs/{job}/reviewers"),
         ],
     ),
-    ("Xem Activity Timeline (FR-A3.3)", {"REVIEWER": ASSIGNED}, "FR-A3.3"),
+    (
+        "Xem Activity Timeline (FR-A3.3)",
+        {"REVIEWER": ASSIGNED},
+        [call("GET", "/api/jobs/{job}/timeline"), application_timeline_first],
+    ),
 ]
 
 CELLS = [
