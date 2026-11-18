@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { type DragEvent, type FormEvent, useEffect, useState } from "react";
+import { type DragEvent, type FormEvent, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../auth";
 import { Badge } from "../../badge";
@@ -19,6 +19,7 @@ import {
   targets,
   visible,
 } from "../pipeline";
+import { ActivityFeed } from "./activity";
 
 /** A move waiting for its reason: optional to reject, required to reopen. */
 type Asking = { card: Card; to: Stage; kind: "reject" | "reopen" };
@@ -31,12 +32,15 @@ export function Pipeline({
   jobId,
   editable,
   onApplications,
+  onActivity,
 }: {
   jobId: string;
   /** Whether cards may move: not for a Reviewer, nor on an archived Job. */
   editable: boolean;
   /** Told how many Applications the Job has, after each load. */
   onApplications: (count: number) => void;
+  /** Told whenever a Stage change should refresh Activity Timelines on the page. */
+  onActivity?: () => void;
 }) {
   const t = useTranslations("pipeline");
   const [cards, setCards] = useState<Card[] | null>(null);
@@ -46,6 +50,8 @@ export function Pipeline({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkTo, setBulkTo] = useState<Stage | "">("");
   const [asking, setAsking] = useState<Asking | null>(null);
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const activityRef = useRef<HTMLElement>(null);
   const [over, setOver] = useState<Stage | null>(null);
   const [pending, setPending] = useState(false);
   // Worded at render, so switching language rewords it.
@@ -59,6 +65,10 @@ export function Pipeline({
       onApplications(list.length);
     });
   }, [jobId, version, onApplications]);
+  useEffect(() => {
+    if (selectedAppId)
+      activityRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedAppId]);
   const reload = () => setVersion((v) => v + 1);
   const reloadForJob = (data: unknown) => {
     if ((data as { job_id: string }).job_id === jobId) reload();
@@ -82,6 +92,7 @@ export function Pipeline({
     }
     setRefusal(response.ok ? null : { status: response.status });
     reload();
+    if (response.ok) onActivity?.();
     return response.ok;
   }
 
@@ -140,6 +151,7 @@ export function Pipeline({
   }
   const shown = visible(cards, filter);
   const chosen = cards.filter((c) => selected.has(c.id));
+  const selectedCard = selectedAppId ? (cards.find((c) => c.id === selectedAppId) ?? null) : null;
   const toggle = (id: string) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -269,17 +281,46 @@ export function Pipeline({
                     await moveOne(asking.card, asking.to, reason, asking.kind);
                   }}
                   onCancel={() => setAsking(null)}
+                  activityOpen={selectedAppId === card.id}
+                  onOpenActivity={() =>
+                    setSelectedAppId((cur) => (cur === card.id ? null : card.id))
+                  }
                 />
               ))}
             </section>
           );
         })}
       </div>
+      {selectedCard && (
+        <section
+          ref={activityRef}
+          aria-label={t("activityTitle", { name: selectedCard.full_name ?? t("unnamed") })}
+          className="flex flex-col gap-3 rounded-xl border border-hairline-cloud bg-surface-canvas-light p-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="heading-display text-xl font-semibold">
+              {t("activityTitle", { name: selectedCard.full_name ?? t("unnamed") })}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setSelectedAppId(null)}
+              className="font-medium underline"
+            >
+              {t("closeActivity")}
+            </button>
+          </div>
+          <ActivityFeed
+            key={selectedCard.id}
+            endpoint={`/api/applications/${selectedCard.id}/timeline`}
+            refreshKey={version}
+          />
+        </section>
+      )}
     </section>
   );
 }
 
-function KanbanCard({
+export function KanbanCard({
   card,
   editable,
   selected,
@@ -288,6 +329,8 @@ function KanbanCard({
   asking,
   onAnswer,
   onCancel,
+  activityOpen,
+  onOpenActivity,
 }: {
   card: Card;
   editable: boolean;
@@ -297,6 +340,8 @@ function KanbanCard({
   asking: Asking | null;
   onAnswer: (reason: string) => void;
   onCancel: () => void;
+  activityOpen: boolean;
+  onOpenActivity: () => void;
 }) {
   const t = useTranslations("pipeline");
   const locale = useLocale();
@@ -354,6 +399,15 @@ function KanbanCard({
         </select>
       )}
       {asking && <ReasonForm asking={asking} onAnswer={onAnswer} onCancel={onCancel} />}
+      <button
+        type="button"
+        onClick={onOpenActivity}
+        aria-label={t("activityFor", { name })}
+        aria-expanded={activityOpen}
+        className="self-start text-sm font-medium underline"
+      >
+        {t("activity")}
+      </button>
     </article>
   );
 }

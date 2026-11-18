@@ -26,7 +26,7 @@ const ACCEPT = ".pdf,.docx";
 
 /** Upload CVs into the Job as Upload Batches (FR-A1.2) and follow their parses; the Kanban
  * Board shows the Applications they create. Only for those who may write to the Job. */
-export function Uploads({ jobId }: { jobId: string }) {
+export function Uploads({ jobId, onActivity }: { jobId: string; onActivity?: () => void }) {
   const t = useTranslations("uploads");
   const [batches, setBatches] = useState<Batch[]>([]);
   // Bumped to reload the batches.
@@ -76,6 +76,7 @@ export function Uploads({ jobId }: { jobId: string }) {
     // Each upload is attested afresh.
     setConsent(false);
     setVersion((v) => v + 1);
+    onActivity?.();
     return true;
   }
 
@@ -104,6 +105,7 @@ export function Uploads({ jobId }: { jobId: string }) {
     if (response.ok) {
       setRetryError(null);
       setVersion((v) => v + 1);
+      onActivity?.();
     } else {
       setRetryError(response.status);
     }

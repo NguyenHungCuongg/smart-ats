@@ -32,7 +32,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import emails, outbox, storage, usage
+from app import audit, emails, outbox, storage, usage
 from app.auth import _redis
 from app.db import async_engine, async_tenant_session
 from app.jobs import MAX_DOCUMENT_BYTES, WorkMode
@@ -314,6 +314,19 @@ async def submit_application(
                 " VALUES (:tenant_id, :app_id, 'APPLIED', NULL)"
             ),
             {"tenant_id": job.tenant_id, "app_id": application_id},
+        )
+        await audit.arecord(
+            db,
+            actor_type="PUBLIC",
+            action="application.created",
+            entity_id=application_id,
+            after={
+                "source": "PUBLIC_APPLY",
+                "candidate_id": str(candidate_id),
+                "cv_document_id": str(cv_document_id),
+                "stage": "APPLIED",
+            },
+            ip=audit.client_ip(request),
         )
 
         # Enqueue confirmation email (APPLY_RECEIPT) rendered in candidate's locale

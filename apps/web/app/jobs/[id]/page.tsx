@@ -76,6 +76,9 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
     },
     () => setVersion((v) => v + 1),
   );
+  useProgressEvents("upload.item", (data) => {
+    if ((data as { job_id: string }).job_id === id) setActivityVersion((v) => v + 1);
+  });
 
   const editable = job !== null && role !== null && canEdit(role, job.status);
   return (
@@ -122,8 +125,13 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
             )}
             {editable && <Reviewers jobId={id} onSaved={() => setActivityVersion((v) => v + 1)} />}
             {/* CVs go into any Job; only scoring needs confirmed criteria. */}
-            {editable && <Uploads jobId={id} />}
-            <Pipeline jobId={id} editable={editable} onApplications={setApplications} />
+            {editable && <Uploads jobId={id} onActivity={() => setActivityVersion((v) => v + 1)} />}
+            <Pipeline
+              jobId={id}
+              editable={editable}
+              onApplications={setApplications}
+              onActivity={() => setActivityVersion((v) => v + 1)}
+            />
             <Scoring job={job} editable={editable} applications={applications} />
             <Activity jobId={id} refreshKey={version + activityVersion} />
           </>

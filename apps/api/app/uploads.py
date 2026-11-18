@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import ai, events, outbox, storage, usage
+from app import ai, audit, events, outbox, storage, usage
 from app.jobs import MANAGERS, MAX_DOCUMENT_BYTES, JobManager, JobReader, JobWriter
 from app.worker import tenant_task
 from smart_ats_scoring import parsing
@@ -171,6 +171,15 @@ async def create(
                 )
             ).scalar_one()
         )
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="job.cvs_uploaded",
+        entity_id=job_id,
+        after={"upload_batch_id": str(batch_id), "file_count": len(files)},
+        ip=auth.ip,
+    )
     outbox.enqueue_after_commit(
         auth.db, parse_cv, *[(str(auth.tenant_id), str(item_id)) for item_id in item_ids]
     )
@@ -223,6 +232,21 @@ async def retry_item(job_id: uuid.UUID, item_id: uuid.UUID, auth: JobWriter) -> 
             " WHERE id = :batch_id"
         ),
         {"batch_id": item.batch_id},
+    )
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="job.cv_parse_retried",
+        entity_id=job_id,
+        before={"status": item.status, "error_code": item.error_code},
+        after={
+            "upload_batch_id": str(item.batch_id),
+            "item_id": str(item_id),
+            "status": "PENDING",
+            "error_code": None,
+        },
+        ip=auth.ip,
     )
     outbox.enqueue_after_commit(auth.db, parse_cv, (str(auth.tenant_id), str(item_id)))
     return UploadItem(**updated._mapping)
@@ -395,6 +419,19 @@ def parse_cv(tenant_id: uuid.UUID, session: Session, item_id: str) -> None:
                 "  changed_by) VALUES (:tenant_id, :id, 'APPLIED', :user_id)"
             ),
             {"tenant_id": tenant_id, "id": application.id, "user_id": item.created_by},
+        )
+        audit.record(
+            session,
+            actor_type="USER",
+            actor_user_id=item.created_by,
+            action="application.created",
+            entity_id=application.id,
+            after={
+                "source": "UPLOAD",
+                "candidate_id": str(candidate_id),
+                "cv_document_id": str(cv_id),
+                "stage": "APPLIED",
+            },
         )
     finish_item(session, item, "SUCCEEDED", cv_id=cv_id, dedupe=dedupe)
 

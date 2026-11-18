@@ -1,5 +1,6 @@
-"""Audit Log foundation and Job Activity Timeline (FR-A3.3, ERD §7)."""
+"""Audit Log foundation and Activity Timelines for Jobs and Applications (FR-A3.3, ERD §7)."""
 
+import json
 import uuid
 from collections.abc import AsyncIterator
 from datetime import timedelta
@@ -12,13 +13,16 @@ from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from app import ai, audit, jobs, storage, sweep
+from app import ai, apply, audit, emails, jobs, storage, sweep, uploads
+from app.auth import _redis
 from app.db import async_tenant_session, tenant_session
 from app.main import app
-from smart_ats_scoring import pricing
+from smart_ats_scoring import parsing, pricing
 from tests.conftest import API_DIR
+from tests.test_apply import PDF_SAMPLE
 from tests.test_jobs import CONFIRMATION, JD, PARSED, FakeLlm, User, make_user
 from tests.test_scoring_runs import add_application, make_job
+from tests.test_uploads import docx, profile
 
 pytestmark = pytest.mark.usefixtures("database")
 
@@ -150,7 +154,9 @@ def test_agent_can_record_scoring_run_started(recruiter: User) -> None:
     )
 
 
-def test_migration_0014_backfills_stage_history_per_tenant(recruiter: User) -> None:
+async def test_migration_0014_backfills_stage_history_per_tenant(
+    client: AsyncClient, recruiter: User
+) -> None:
     objects: dict[str, bytes] = {}
     job_id = make_job(recruiter, objects)
     app_upload = add_application(recruiter, objects, job_id)["id"]
@@ -248,11 +254,60 @@ def test_migration_0014_backfills_stage_history_per_tenant(recruiter: User) -> N
         ),
     ]
 
+    upload_timeline = await get_application_timeline(client, recruiter, app_upload)
+    assert [
+        (i["action"], i["actor_type"], i["before"], i["after"]) for i in upload_timeline["items"]
+    ] == [
+        ("application.stage_changed", "USER", {"stage": "APPLIED"}, {"stage": "SCREENING"}),
+        (
+            "application.created",
+            "USER",
+            None,
+            {
+                "source": "UPLOAD",
+                "candidate_id": str(upload_meta.candidate_id),
+                "cv_document_id": str(upload_meta.cv_document_id),
+                "stage": "APPLIED",
+            },
+        ),
+    ]
+    assert "secret" not in json.dumps(upload_timeline)
+
+    public_timeline = await get_application_timeline(client, recruiter, app_public)
+    assert [
+        (i["action"], i["actor_type"], i["actor"], i["before"], i["after"])
+        for i in public_timeline["items"]
+    ] == [
+        (
+            "application.created",
+            "PUBLIC",
+            None,
+            None,
+            {
+                "source": "PUBLIC_APPLY",
+                "candidate_id": str(public_meta.candidate_id),
+                "cv_document_id": str(public_meta.cv_document_id),
+                "stage": "APPLIED",
+            },
+        )
+    ]
+
 
 async def get_timeline(
     client: AsyncClient, user: User, job_id: str, **params: Any
 ) -> dict[str, Any]:
     response = await client.get(f"/api/jobs/{job_id}/timeline", headers=user.headers, params=params)
+    assert response.status_code == 200
+    data: dict[str, Any] = response.json()
+    return data
+
+
+async def get_application_timeline(
+    client: AsyncClient, user: User, application_id: str, **params: Any
+) -> dict[str, Any]:
+    response = await client.get(
+        f"/api/applications/{application_id}/timeline", headers=user.headers, params=params
+    )
     assert response.status_code == 200
     data: dict[str, Any] = response.json()
     return data
@@ -573,4 +628,397 @@ async def test_job_timeline_access_control_and_archived_read(
     ).status_code == 404
     assert (
         await client.get(f"/api/jobs/{uuid.uuid4()}/timeline", headers=recruiter.headers)
+    ).status_code == 404
+
+
+@pytest.mark.usefixtures("redis")
+async def test_cv_upload_retry_and_dedupe_audit_logs_without_pii(
+    client: AsyncClient,
+    recruiter: User,
+    objects: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uploader = make_user("RECRUITER", recruiter.tenant_id)
+    job_id = make_job(recruiter, objects)
+    second_job_id = make_job(recruiter, objects)
+
+    cv_enqueued: list[tuple[str, ...]] = []
+    monkeypatch.setattr(uploads.parse_cv, "delay", lambda *args: cv_enqueued.append(args))
+    monkeypatch.setenv("LLM_EXTRACTION_MODEL", "test-model")
+    monkeypatch.setitem(
+        pricing.PRICES, "test-model", pricing.Price(Decimal("2"), Decimal("0.5"), Decimal("8"))
+    )
+
+    secret_name = "Ứng Viên Bí Mật"
+    secret_email = "secret.candidate@example.com"
+    secret_phone = "0987654321"
+    secret_filename = "ung_vien_bi_mat.docx"
+    fake_cv_llm = FakeLlm(profile(full_name=secret_name, email=secret_email, phone=secret_phone))
+    monkeypatch.setattr(uploads, "llm_from_env", lambda model, **_: fake_cv_llm)
+
+    # Rejected upload (missing consent -> 422) leaves no audit row.
+    bad_up = await client.post(
+        f"/api/jobs/{job_id}/uploads",
+        headers=uploader.headers,
+        files=[("files", (secret_filename, docx("CV 1")))],
+        data={"consent_confirmed": "false"},
+    )
+    assert bad_up.status_code == 422
+    assert (await get_timeline(client, recruiter, job_id))["items"] == []
+
+    # 1. Valid upload batch (2 files) records job.cvs_uploaded.
+    cv1 = docx("CV 1")
+    cv2 = docx("CV 2")
+    up_res = await client.post(
+        f"/api/jobs/{job_id}/uploads",
+        headers=uploader.headers,
+        files=[("files", (secret_filename, cv1)), ("files", ("other_cv.docx", cv2))],
+        data={"consent_confirmed": "true"},
+    )
+    assert up_res.status_code == 202
+    batch_id = up_res.json()["batch_id"]
+    item1_id, item2_id = up_res.json()["item_ids"]
+
+    job_items = (await get_timeline(client, recruiter, job_id))["items"]
+    assert len(job_items) == 1
+    assert job_items[0]["action"] == "job.cvs_uploaded"
+    assert job_items[0]["actor_type"] == "USER"
+    assert job_items[0]["actor"]["id"] == str(uploader.id)
+    assert job_items[0]["before"] is None
+    assert job_items[0]["after"] == {"upload_batch_id": batch_id, "file_count": 2}
+    assert "ip" not in job_items[0] and "request_id" not in job_items[0]
+
+    # Fail item 1 with LLM_UNAVAILABLE so we can retry it.
+    with monkeypatch.context() as mp:
+        mp.setattr(uploads, "is_transient_error", lambda e: True)
+        mp.setattr(ai, "retry_transient_error", lambda e: "LLM_UNAVAILABLE")
+
+        def boom(*args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("ai down")
+
+        mp.setattr(parsing, "parse_cv", boom)
+        uploads.parse_cv.apply(args=cv_enqueued.pop(0)).get()
+
+    # Retrying non-FAILED item 2 (409) leaves no audit row.
+    assert (
+        await client.post(
+            f"/api/jobs/{job_id}/uploads/items/{item2_id}/retry", headers=uploader.headers
+        )
+    ).status_code == 409
+    assert len((await get_timeline(client, recruiter, job_id))["items"]) == 1
+
+    # 2. Retry failed item 1 -> records job.cv_parse_retried.
+    retry_res = await client.post(
+        f"/api/jobs/{job_id}/uploads/items/{item1_id}/retry", headers=uploader.headers
+    )
+    assert retry_res.status_code == 202
+
+    job_items = (await get_timeline(client, recruiter, job_id))["items"]
+    assert [i["action"] for i in job_items] == ["job.cv_parse_retried", "job.cvs_uploaded"]
+    assert job_items[0]["actor"]["id"] == str(uploader.id)
+    assert job_items[0]["before"] == {"status": "FAILED", "error_code": "LLM_UNAVAILABLE"}
+    assert job_items[0]["after"] == {
+        "upload_batch_id": batch_id,
+        "item_id": item1_id,
+        "status": "PENDING",
+        "error_code": None,
+    }
+
+    # 3. Parse retried item 1 -> creates Application with USER = uploader.
+    uploads.parse_cv.apply(args=cv_enqueued.pop(-1)).get()
+    apps = (await client.get(f"/api/jobs/{job_id}/applications", headers=recruiter.headers)).json()
+    assert len(apps) == 1
+    app_id = apps[0]["id"]
+
+    app_timeline = await get_application_timeline(client, recruiter, app_id)
+    assert len(app_timeline["items"]) == 1
+    created_entry = app_timeline["items"][0]
+    assert created_entry["action"] == "application.created"
+    assert created_entry["actor_type"] == "USER"
+    assert created_entry["actor"]["id"] == str(uploader.id)
+    assert created_entry["before"] is None
+    assert created_entry["after"]["source"] == "UPLOAD"
+    assert created_entry["after"]["stage"] == "APPLIED"
+    assert uuid.UUID(created_entry["after"]["candidate_id"])
+    assert uuid.UUID(created_entry["after"]["cv_document_id"])
+    assert "ip" not in created_entry and "request_id" not in created_entry
+
+    # Zero candidate PII or filename in either timeline!
+    for tl in (job_items, app_timeline):
+        dumped = json.dumps(tl, ensure_ascii=False)
+        for pii in (secret_name, secret_email, secret_phone, secret_filename):
+            assert pii not in dumped
+
+    # 4. Dedupe: ALREADY_APPLIED & CV_REPLACED do NOT write application.created.
+    await client.post(
+        f"/api/jobs/{job_id}/uploads",
+        headers=uploader.headers,
+        files=[("files", (secret_filename, cv1))],
+        data={"consent_confirmed": "true"},
+    )
+    uploads.parse_cv.apply(args=cv_enqueued.pop(-1)).get()
+    await client.post(
+        f"/api/jobs/{job_id}/uploads",
+        headers=uploader.headers,
+        files=[("files", ("updated.docx", docx("CV updated 2026")))],
+        data={"consent_confirmed": "true"},
+    )
+    uploads.parse_cv.apply(args=cv_enqueued.pop(-1)).get()
+    assert len((await get_application_timeline(client, recruiter, app_id))["items"]) == 1
+
+    # 5. Dedupe: EXISTING_CANDIDATE on second Job writes application.created for the new row.
+    await client.post(
+        f"/api/jobs/{second_job_id}/uploads",
+        headers=uploader.headers,
+        files=[("files", (secret_filename, cv1))],
+        data={"consent_confirmed": "true"},
+    )
+    uploads.parse_cv.apply(args=cv_enqueued.pop(-1)).get()
+    second_apps = (
+        await client.get(f"/api/jobs/{second_job_id}/applications", headers=recruiter.headers)
+    ).json()
+    assert len(second_apps) == 1
+    second_tl = await get_application_timeline(client, recruiter, second_apps[0]["id"])
+    assert [i["action"] for i in second_tl["items"]] == ["application.created"]
+
+
+@pytest.mark.usefixtures("redis")
+async def test_public_apply_records_public_application_created_without_pii_or_duplicate(
+    client: AsyncClient,
+    recruiter: User,
+    objects: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _redis().delete("apply_limit:ip:127.0.0.1", "apply_limit:ip:testclient")
+    monkeypatch.setattr(apply.parse_cv, "delay", lambda *args: None)
+    monkeypatch.setattr(emails.send_email, "delay", lambda *args: None)
+
+    job_id = make_job(recruiter, objects)
+    await client.post(
+        f"/api/jobs/{job_id}/transitions", headers=recruiter.headers, json={"action": "publish"}
+    )
+    job = (
+        await client.patch(
+            f"/api/jobs/{job_id}/public-apply", headers=recruiter.headers, json={"enabled": True}
+        )
+    ).json()
+    slug = job["public_slug"]
+
+    # Invalid submission (consent=false -> 422) leaves no Application audit row.
+    bad_apply = await client.post(
+        f"/api/apply/{slug}",
+        data={"full_name": "Invalid", "email": "inv@example.com", "consent": "false"},
+        files={"file": ("cv.pdf", PDF_SAMPLE, "application/pdf")},
+    )
+    assert bad_apply.status_code == 422
+
+    cand_name = "Trần Thị Minh Thư"
+    cand_email = "minhthu.public@example.com"
+    cand_phone = "0911222333"
+    res = await client.post(
+        f"/api/apply/{slug}",
+        data={
+            "full_name": cand_name,
+            "email": cand_email,
+            "phone": cand_phone,
+            "consent": "true",
+        },
+        files={"file": ("tran_thi_minh_thu.pdf", PDF_SAMPLE, "application/pdf")},
+    )
+    assert res.status_code == 200
+
+    [app_row] = (
+        await client.get(f"/api/jobs/{job_id}/applications", headers=recruiter.headers)
+    ).json()
+    app_id = app_row["id"]
+
+    timeline = await get_application_timeline(client, recruiter, app_id)
+    assert len(timeline["items"]) == 1
+    entry = timeline["items"][0]
+    assert entry["action"] == "application.created"
+    assert entry["actor_type"] == "PUBLIC"
+    assert entry["actor"] is None
+    assert entry["before"] is None
+    assert entry["after"]["source"] == "PUBLIC_APPLY"
+    assert entry["after"]["stage"] == "APPLIED"
+    assert "ip" not in entry and "request_id" not in entry
+
+    dumped = json.dumps(timeline, ensure_ascii=False)
+    for pii in (cand_name, cand_email, cand_phone, "tran_thi_minh_thu.pdf"):
+        assert pii not in dumped
+
+    # Verify IP was stored in DB for PUBLIC request and request_id stays NULL.
+    with tenant_session(recruiter.tenant_id) as session:
+        row = session.execute(
+            text(
+                "SELECT actor_type, ip, request_id FROM audit_logs"
+                " WHERE entity_type = 'application' AND entity_id = :id"
+            ),
+            {"id": app_id},
+        ).one()
+    assert row.actor_type == "PUBLIC"
+    assert row.ip is not None
+    assert row.request_id is None
+
+    # Duplicate email submission creates no second Application and writes no Audit Log row.
+    dup = await client.post(
+        f"/api/apply/{slug}",
+        data={"full_name": cand_name, "email": cand_email, "consent": "true"},
+        files={"file": ("cv2.pdf", PDF_SAMPLE, "application/pdf")},
+    )
+    assert dup.status_code == 200
+    assert len((await get_application_timeline(client, recruiter, app_id))["items"]) == 1
+
+
+@pytest.mark.cross_tenant
+async def test_application_stage_changes_bulk_errors_pagination_revoked_and_access(
+    client: AsyncClient, recruiter: User, objects: dict[str, bytes]
+) -> None:
+    admin = make_user("COMPANY_ADMIN", recruiter.tenant_id)
+    mover = make_user("RECRUITER", recruiter.tenant_id)
+    assigned_reviewer = make_user("REVIEWER", recruiter.tenant_id)
+    unassigned_reviewer = make_user("REVIEWER", recruiter.tenant_id)
+    other_tenant_user = make_user("COMPANY_ADMIN")
+
+    job_id = make_job(recruiter, objects)
+    await client.put(
+        f"/api/jobs/{job_id}/reviewers",
+        headers=recruiter.headers,
+        json={"user_ids": [str(assigned_reviewer.id)]},
+    )
+    app1 = add_application(recruiter, objects, job_id)["id"]
+    app2 = add_application(recruiter, objects, job_id)["id"]
+
+    # Single moves with note & rejected_reason: neither note nor reason enters audit_logs.
+    r1 = await client.patch(
+        f"/api/applications/{app1}/stage",
+        headers=mover.headers,
+        json={"to_stage": "SCREENING", "version": 0, "note": "Ghi chú nội bộ bí mật"},
+    )
+    assert r1.status_code == 200
+    r2 = await client.patch(
+        f"/api/applications/{app1}/stage",
+        headers=mover.headers,
+        json={"to_stage": "REJECTED", "version": 1, "rejected_reason": "Lý do từ chối riêng"},
+    )
+    assert r2.status_code == 200
+
+    # Refused 422 (reopen without reason) leaves no audit row.
+    assert (
+        await client.patch(
+            f"/api/applications/{app1}/stage",
+            headers=mover.headers,
+            json={"to_stage": "INTERVIEW", "version": 2, "note": "   "},
+        )
+    ).status_code == 422
+
+    # Valid reopen -> version 3.
+    r3 = await client.patch(
+        f"/api/applications/{app1}/stage",
+        headers=mover.headers,
+        json={"to_stage": "INTERVIEW", "version": 2, "note": "Bổ sung phỏng vấn"},
+    )
+    assert r3.status_code == 200
+
+    # Refused 409 stale version leaves no audit row.
+    assert (
+        await client.patch(
+            f"/api/applications/{app1}/stage",
+            headers=mover.headers,
+            json={"to_stage": "OFFER", "version": 1},
+        )
+    ).status_code == 409
+
+    # Bulk move of app1 (version 3) and app2 (version 0) to OFFER -> 1 row each.
+    bulk_ok = await client.post(
+        f"/api/jobs/{job_id}/applications/stage",
+        headers=recruiter.headers,
+        json={
+            "applications": [{"id": app1, "version": 3}, {"id": app2, "version": 0}],
+            "to_stage": "OFFER",
+        },
+    )
+    assert bulk_ok.status_code == 200
+
+    # Bulk move with one stale version (409) rolls back completely -> no audit rows added.
+    bulk_bad = await client.post(
+        f"/api/jobs/{job_id}/applications/stage",
+        headers=recruiter.headers,
+        json={
+            "applications": [{"id": app1, "version": 4}, {"id": app2, "version": 0}],
+            "to_stage": "SCREENING",
+        },
+    )
+    assert bulk_bad.status_code == 409
+
+    # Move app2 to HIRED, then refuse moving from HIRED (409) -> no extra row.
+    assert (
+        await client.patch(
+            f"/api/applications/{app2}/stage",
+            headers=recruiter.headers,
+            json={"to_stage": "HIRED", "version": 1},
+        )
+    ).status_code == 200
+    assert (
+        await client.patch(
+            f"/api/applications/{app2}/stage",
+            headers=recruiter.headers,
+            json={"to_stage": "OFFER", "version": 2},
+        )
+    ).status_code == 409
+
+    # Verify app1 & app2 timelines.
+    tl1 = await get_application_timeline(client, recruiter, app1)
+    assert [(i["action"], i["before"], i["after"]) for i in tl1["items"]] == [
+        ("application.stage_changed", {"stage": "INTERVIEW"}, {"stage": "OFFER"}),
+        ("application.stage_changed", {"stage": "REJECTED"}, {"stage": "INTERVIEW"}),
+        ("application.stage_changed", {"stage": "SCREENING"}, {"stage": "REJECTED"}),
+        ("application.stage_changed", {"stage": "APPLIED"}, {"stage": "SCREENING"}),
+    ]
+    dumped1 = json.dumps(tl1, ensure_ascii=False)
+    for forbidden_note in ("Ghi chú nội bộ bí mật", "Lý do từ chối riêng", "Bổ sung phỏng vấn"):
+        assert forbidden_note not in dumped1
+
+    tl2 = await get_application_timeline(client, recruiter, app2)
+    assert [(i["action"], i["before"], i["after"]) for i in tl2["items"]] == [
+        ("application.stage_changed", {"stage": "OFFER"}, {"stage": "HIRED"}),
+        ("application.stage_changed", {"stage": "APPLIED"}, {"stage": "OFFER"}),
+    ]
+
+    # Revoking mover keeps their full_name visible on the Application timeline.
+    revoked_res = await client.delete(f"/api/members/{mover.id}", headers=admin.headers)
+    assert revoked_res.status_code == 204
+    tl1_after_revoke = await get_application_timeline(client, admin, app1)
+    assert tl1_after_revoke["items"][1]["actor"] == {"id": str(mover.id), "full_name": "Test User"}
+
+    # Keyset pagination across app1 timeline (4 entries, limit=2).
+    collected: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        params: dict[str, Any] = {"limit": 2}
+        if cursor is not None:
+            params["cursor"] = cursor
+        page = await get_application_timeline(client, recruiter, app1, **params)
+        collected.extend(page["items"])
+        cursor = page["next_cursor"]
+        if cursor is None:
+            break
+    assert [i["id"] for i in collected] == [i["id"] for i in tl1["items"]]
+
+    # Archived Job still readable by assigned Reviewer; unassigned/other tenant/missing -> 404.
+    for action in ("publish", "close", "archive"):
+        await client.post(
+            f"/api/jobs/{job_id}/transitions", headers=recruiter.headers, json={"action": action}
+        )
+    assert (
+        await client.get(f"/api/applications/{app1}/timeline", headers=assigned_reviewer.headers)
+    ).status_code == 200
+    assert (
+        await client.get(f"/api/applications/{app1}/timeline", headers=unassigned_reviewer.headers)
+    ).status_code == 404
+    assert (
+        await client.get(f"/api/applications/{app1}/timeline", headers=other_tenant_user.headers)
+    ).status_code == 404
+    assert (
+        await client.get(f"/api/applications/{uuid.uuid4()}/timeline", headers=recruiter.headers)
     ).status_code == 404
