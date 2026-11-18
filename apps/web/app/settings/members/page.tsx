@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { type FormEvent, useEffect, useState } from "react";
 
@@ -13,6 +14,7 @@ const LINK_BUTTON = "font-medium underline";
 /** Company Admins invite, re-role and revoke the Members of their Workspace (FR-C1.2). */
 export default function MembersPage() {
   const t = useTranslations("members");
+  const tChannels = useTranslations("channels");
   const locale = useLocale();
   const [data, setData] = useState<Members | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -49,6 +51,14 @@ export default function MembersPage() {
   return (
     <main className="flex-1">
       <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
+        <div className="flex gap-4 border-b border-hairline-cloud pb-2 text-sm">
+          <span className="-mb-2 border-b-2 border-primary pb-2 font-semibold text-ink-deep">
+            {tChannels("navMembers")}
+          </span>
+          <Link href="/settings/channels" className="text-accent-violet-mid hover:text-ink-deep">
+            {tChannels("navChannels")}
+          </Link>
+        </div>
         <h1 className="heading-display text-3xl font-semibold">{t("title")}</h1>
         <InviteForm onInvited={reload} />
         {refused !== null && (

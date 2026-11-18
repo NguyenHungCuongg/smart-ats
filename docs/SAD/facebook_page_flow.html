@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Luồng tích hợp Facebook Page · Smart ATS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f8f9fa;
+      --color-surface: #ffffff;
+      --color-ink: #1e222e;
+      --color-muted: #4f5d75;
+      --color-soft: #7a8399;
+      --color-rule: rgba(45, 49, 66, 0.12);
+      --color-accent: #eb6c36;
+      --color-meta: #1877f2;
+      --color-success: #0d8a57;
+      --color-warn: #d97706;
+      --color-danger: #dc2626;
+      --font-sans: 'Geist', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --shadow-subtle: 0 1px 3px rgba(0,0,0,0.05), 0 10px 24px -8px rgba(0,0,0,0.04);
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      padding: 3rem 1.5rem;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .frame {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(2rem, 3.2vw + 1rem, 2.9rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 0.85rem;
+      color: var(--color-ink);
+    }
+
+    .intro {
+      color: var(--color-muted);
+      max-width: 82ch;
+      font-size: 1.02rem;
+      line-height: 1.65;
+      margin-bottom: 2.75rem;
+    }
+
+    .badge-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-bottom: 2rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.28rem 0.65rem;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 500;
+      border: 1px solid var(--color-rule);
+      background: var(--color-surface);
+      color: var(--color-ink);
+    }
+
+    .badge.meta { border-color: rgba(24, 119, 242, 0.3); color: var(--color-meta); }
+    .badge.accent { border-color: rgba(235, 108, 54, 0.3); color: var(--color-accent); }
+    .badge.success { border-color: rgba(13, 138, 87, 0.3); color: var(--color-success); }
+
+    section {
+      background: var(--color-surface);
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      margin-bottom: 2.5rem;
+      box-shadow: var(--shadow-subtle);
+    }
+
+    h2 {
+      font-family: var(--font-serif);
+      font-size: 1.7rem;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.6rem;
+      color: var(--color-ink);
+    }
+
+    .section-lead {
+      color: var(--color-muted);
+      font-size: 0.94rem;
+      margin-bottom: 1.75rem;
+      max-width: 85ch;
+    }
+
+    .scroll {
+      overflow-x: auto;
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-md);
+      background: #fafafa;
+      padding: 1.25rem 0.5rem;
+    }
+
+    svg {
+      display: block;
+      margin: 0 auto;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    @media (max-width: 850px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-md);
+      padding: 1.3rem;
+      background: #fafafa;
+    }
+
+    .card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card p, .card ul {
+      font-size: 0.88rem;
+      color: var(--color-muted);
+      line-height: 1.55;
+    }
+
+    .card ul {
+      list-style-type: disc;
+      padding-left: 1.2rem;
+      margin-top: 0.4rem;
+    }
+
+    .card ul li { margin-bottom: 0.3rem; }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      background: rgba(45, 49, 66, 0.06);
+      padding: 0.15rem 0.35rem;
+      border-radius: 3px;
+      color: var(--color-ink);
+    }
+
+    pre code {
+      display: block;
+      padding: 0.85rem;
+      overflow-x: auto;
+      line-height: 1.45;
+      font-size: 0.78rem;
+    }
+
+    .code-block {
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-md);
+      background: #1e222e;
+      color: #e2e8f0;
+      margin: 1rem 0;
+      overflow: hidden;
+    }
+
+    .code-block .header {
+      background: #141720;
+      padding: 0.4rem 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: #94a3b8;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .code-block pre {
+      padding: 0.85rem;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    .alert {
+      border-left: 3px solid var(--color-accent);
+      background: rgba(235, 108, 54, 0.06);
+      padding: 0.9rem 1.1rem;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      margin: 1.25rem 0;
+      font-size: 0.88rem;
+      color: var(--color-ink);
+    }
+
+    .alert.meta {
+      border-left-color: var(--color-meta);
+      background: rgba(24, 119, 242, 0.06);
+    }
+
+    .alert.success {
+      border-left-color: var(--color-success);
+      background: rgba(13, 138, 87, 0.06);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      margin-top: 1rem;
+    }
+
+    th, td {
+      border: 1px solid var(--color-rule);
+      padding: 0.65rem 0.85rem;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(45, 49, 66, 0.04);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 0.78rem;
+    }
+
+    td code {
+      font-size: 0.78rem;
+    }
+
+    footer {
+      border-top: 1px solid var(--color-rule);
+      padding-top: 1.5rem;
+      margin-top: 3rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--color-soft);
+      letter-spacing: 0.04em;
+    }
+
+    footer a { color: var(--color-muted); text-decoration: none; }
+    footer a:hover { color: var(--color-accent); text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Đăng tin Đa kênh · FR-A3.5 · SAD §5.6 · ERD §6</p>
+    <h1>Luồng tích hợp Facebook Page (Meta Graph API)</h1>
+    <p class="intro">
+      Tài liệu trực quan hóa toàn diện quy trình kết nối Facebook Page qua chuẩn OAuth 2.0 và quy trình đăng Job Ad tự động từ Smart ATS theo thiết kế bảo mật đa người thuê (Forced RLS & Fernet Encryption).
+    </p>
+
+    <div class="badge-bar">
+      <span class="badge meta">Meta Graph API v26.0</span>
+      <span class="badge accent">Development Mode (SRS §5)</span>
+      <span class="badge success">Fernet Token Encryption (NFR-SEC-10)</span>
+      <span class="badge">Forced Multi-Tenant RLS</span>
+      <span class="badge">Idempotent SELECT ... FOR UPDATE</span>
+    </div>
+
+    <!-- PHẦN 1: TỔNG QUAN VÀ TIỀN ĐIỀU KIỆN -->
+    <section>
+      <p class="eyebrow">Khái niệm & Ràng buộc</p>
+      <h2>1. Kiến trúc phân quyền & Ràng buộc Đồ án</h2>
+      <p class="section-lead">
+        Tính năng phát tán tin tuyển dụng (FR-A3.5) cho phép Recruiter phát bài đăng trực tiếp lên Facebook Page của công ty kèm Public Apply Link. Dưới đây là các cấu hình then chốt đã thống nhất trong SRS & SAD.
+      </p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>📌 Ràng buộc Meta App (SRS §5)</h3>
+          <ul>
+            <li><strong>Development Mode:</strong> Do đồ án khóa luận không có tư cách pháp nhân (Business Verification), Meta App giữ ở chế độ Development Mode.</li>
+            <li><strong>Giới hạn đối tượng:</strong> Chỉ người dùng có role trong App (Admin / Developer / Tester) mới được ủy quyền Page và nhìn thấy bài đăng test qua API.</li>
+            <li><strong>Permissions:</strong> <code>pages_show_list</code>, <code>pages_read_engagement</code>, <code>pages_manage_posts</code>.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>🔒 Nguyên tắc Bảo mật Token (SAD §5.6, NFR-SEC-10)</h3>
+          <ul>
+            <li><strong>Không lưu User Token:</strong> User Access Token chỉ dùng tạm trong request để lấy Page Token rồi hủy ngay.</li>
+            <li><strong>Mã hóa Fernet:</strong> Page Access Token được mã hóa đối xứng bằng khóa bí mật <code>CHANNEL_TOKEN_KEY</code> trước khi lưu DB.</li>
+            <li><strong>Không lọt Client:</strong> Token không bao giờ trả về frontend, không ghi vào logs hay Audit Logs.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- PHẦN 2: SEQUENCE DIAGRAM KẾT NỐI FACEBOOK PAGE -->
+    <section>
+      <p class="eyebrow">Luồng OAuth 2.0</p>
+      <h2>2. Luồng Kết nối Facebook Page (Dành cho Company Admin)</h2>
+      <p class="section-lead">
+        Company Admin thực hiện kết nối Fanpage của doanh nghiệp vào Workspace. Luồng trao đổi token từ ngắn hạn sang dài hạn và mã hóa Page Access Token vĩnh viễn (never-expiring).
+      </p>
+
+      <div class="scroll">
+        <svg viewBox="0 0 1060 620" width="1060" height="620" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+            <marker id="arrow-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1877f2"/></marker>
+            <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#0d8a57"/></marker>
+            <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+          </defs>
+
+          <!-- Lifelines -->
+          <line x1="100" y1="60" x2="100" y2="580" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <line x1="300" y1="60" x2="300" y2="580" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <line x1="530" y1="60" x2="530" y2="580" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <line x1="770" y1="60" x2="770" y2="580" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <line x1="970" y1="60" x2="970" y2="580" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,4"/>
+
+          <!-- Actors / Entities Header -->
+          <rect x="25" y="20" width="150" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.2"/>
+          <text x="100" y="45" font-family="'Geist', sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#1e222e">Company Admin</text>
+
+          <rect x="225" y="20" width="150" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.2"/>
+          <text x="300" y="45" font-family="'Geist', sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#1e222e">Web (Next.js)</text>
+
+          <rect x="455" y="20" width="150" height="40" rx="6" fill="#ffffff" stroke="#eb6c36" stroke-width="1.5"/>
+          <text x="530" y="45" font-family="'Geist', sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#eb6c36">FastAPI Backend</text>
+
+          <rect x="695" y="20" width="150" height="40" rx="6" fill="#ffffff" stroke="#1877f2" stroke-width="1.5"/>
+          <text x="770" y="45" font-family="'Geist', sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#1877f2">Meta Graph API</text>
+
+          <rect x="895" y="20" width="150" height="40" rx="6" fill="#ffffff" stroke="#0d8a57" stroke-width="1.5"/>
+          <text x="970" y="45" font-family="'Geist', sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#0d8a57">PostgreSQL (RLS)</text>
+
+          <!-- Step 1 -->
+          <path d="M 100,90 L 300,90" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#arrow)"/>
+          <text x="200" y="82" font-family="'Geist', sans-serif" font-size="11" text-anchor="middle" fill="#1e222e">1. Bấm "Kết nối Facebook Page"</text>
+
+          <!-- Step 2 -->
+          <path d="M 300,120 L 530,120" stroke="#eb6c36" stroke-width="1.5" marker-end="url(#arrow-accent)"/>
+          <text x="415" y="112" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle" fill="#eb6c36">GET /api/channels/facebook/auth-url</text>
+
+          <!-- Self State Signing -->
+          <path d="M 530,140 Q 565,140 565,155 Q 565,170 530,170" fill="none" stroke="#eb6c36" stroke-width="1.2"/>
+          <text x="575" y="158" font-family="'Geist', sans-serif" font-size="10" fill="#7a8399">Tạo & ký HMAC state = (user_id, tenant_id)</text>
+
+          <!-- Step 3 -->
+          <path d="M 530,190 L 300,190" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+          <text x="415" y="182" font-family="'Geist', sans-serif" font-size="10" text-anchor="middle" fill="#4f5d75">Trả URL Login kèm state chống CSRF</text>
+
+          <!-- Step 4 -->
+          <path d="M 300,225 L 770,225" stroke="#1877f2" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+          <text x="535" y="217" font-family="'Geist', sans-serif" font-size="11" text-anchor="middle" fill="#1877f2">2. Chuyển hướng sang Facebook OAuth Dialog (xin 3 permissions)</text>
+
+          <!-- Step 5 -->
+          <path d="M 770,260 L 100,260" stroke="#1877f2" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+          <text x="435" y="252" font-family="'Geist', sans-serif" font-size="10" text-anchor="middle" fill="#7a8399">Admin chọn Page & xác nhận cấp quyền</text>
+
+          <!-- Step 6 -->
+          <path d="M 770,300 L 530,300" stroke="#1877f2" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+          <text x="650" y="292" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle" fill="#1877f2">3. Callback: GET /callback?code=...&state=...</text>
+
+          <!-- State Verify -->
+          <path d="M 530,320 Q 565,320 565,335 Q 565,350 530,350" fill="none" stroke="#eb6c36" stroke-width="1.2"/>
+          <text x="575" y="338" font-family="'Geist', sans-serif" font-size="10" fill="#eb6c36">Verify HMAC state & đối chiếu User Auth</text>
+
+          <!-- Step 7: Exchange short-lived -->
+          <path d="M 530,370 L 770,370" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <text x="650" y="362" font-family="'Geist Mono', monospace" font-size="9" text-anchor="middle" fill="#4f5d75">GET /oauth/access_token (code -> Short-lived User Token)</text>
+
+          <!-- Step 8: Exchange long-lived -->
+          <path d="M 530,405 L 770,405" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <text x="650" y="397" font-family="'Geist Mono', monospace" font-size="9" text-anchor="middle" fill="#4f5d75">GET /oauth/access_token (fb_exchange_token -> Long-lived User Token)</text>
+
+          <!-- Step 9: Get Page Token -->
+          <path d="M 530,440 L 770,440" stroke="#1877f2" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+          <text x="650" y="432" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle" fill="#1877f2">GET /me/accounts (Lấy Page Access Token không bao giờ hết hạn)</text>
+
+          <path d="M 770,465 L 530,465" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+          <text x="650" y="458" font-family="'Geist', sans-serif" font-size="9" text-anchor="middle" fill="#7a8399">Trả về: { id: page_id, name: "...", access_token: "..." }</text>
+
+          <!-- Step 10: Encrypt & Store -->
+          <path d="M 530,485 Q 565,485 565,500 Q 565,515 530,515" fill="none" stroke="#0d8a57" stroke-width="1.5"/>
+          <text x="575" y="503" font-family="'Geist', sans-serif" font-size="10" fill="#0d8a57">Mã hóa Fernet(Page_Token, CHANNEL_TOKEN_KEY)</text>
+
+          <path d="M 530,535 L 970,535" stroke="#0d8a57" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+          <text x="750" y="527" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle" fill="#0d8a57">UPSERT channel_connections (tenant_id, 'FACEBOOK_PAGE', token_ciphertext)</text>
+
+          <!-- Finish -->
+          <path d="M 530,565 L 300,565" stroke="#0d8a57" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+          <text x="415" y="557" font-family="'Geist', sans-serif" font-size="10" text-anchor="middle" fill="#0d8a57">Redirect /settings/channels (Success: Tên Page, Page ID)</text>
+        </svg>
+      </div>
+
+      <div class="alert meta">
+        <strong>💡 Điểm tinh hoa của Graph API:</strong> Khi bạn lấy Page Access Token từ một <em>Long-lived User Token</em>, Page Access Token nhận được là <strong>vĩnh viễn (never expires)</strong>! Bạn không cần cơ chế refresh token định kỳ, token chỉ hết hạn nếu Admin chủ động đổi mật khẩu Facebook hoặc thu hồi quyền.
+      </div>
+    </section>
+
+    <!-- PHẦN 3: SEQUENCE DIAGRAM ĐĂNG BÀI JOB AD -->
+    <section>
+      <p class="eyebrow">Luồng Nghiệp vụ</p>
+      <h2>3. Luồng Đăng tin Job Ad lên Facebook Page (Dành cho Recruiter)</h2>
+      <p class="section-lead">
+        Recruiter bấm phát tán tin tuyển dụng của một Job đã duyệt. Quy trình thực hiện khóa giao dịch để đảm bảo tính Idempotency (không bao giờ đăng 2 bài cho cùng 1 Job lên Page).
+      </p>
+
+      <div class="scroll">
+        <svg viewBox="0 0 1060 610" width="1060" height="610" xmlns="http://www.w3.org/2000/svg">
+          <!-- Lifelines -->
+          <line x1="100" y1="60" x2="100" y2="570" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <line x1="330" y1="60" x2="330" y2="570" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <line x1="600" y1="60" x2="600" y2="570" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <line x1="880" y1="60" x2="880" y2="570" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4,4"/>
+
+          <!-- Actors -->
+          <rect x="25" y="20" width="150" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.2"/>
+          <text x="100" y="45" font-family="'Geist', sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#1e222e">Recruiter</text>
+
+          <rect x="255" y="20" width="150" height="40" rx="6" fill="#ffffff" stroke="#eb6c36" stroke-width="1.5"/>
+          <text x="330" y="45" font-family="'Geist', sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#eb6c36">FastAPI Backend</text>
+
+          <rect x="525" y="20" width="150" height="40" rx="6" fill="#ffffff" stroke="#0d8a57" stroke-width="1.5"/>
+          <text x="600" y="45" font-family="'Geist', sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#0d8a57">PostgreSQL (ats_app)</text>
+
+          <rect x="805" y="20" width="150" height="40" rx="6" fill="#ffffff" stroke="#1877f2" stroke-width="1.5"/>
+          <text x="880" y="45" font-family="'Geist', sans-serif" font-size="12" font-weight="600" text-anchor="middle" fill="#1877f2">Meta Graph API</text>
+
+          <!-- Step 1 -->
+          <path d="M 100,95 L 330,95" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#arrow)"/>
+          <text x="215" y="87" font-family="'Geist', sans-serif" font-size="11" text-anchor="middle" fill="#1e222e">1. POST /api/jobs/{id}/publish-facebook (body: Job Ad)</text>
+
+          <!-- Step 2: Lock -->
+          <path d="M 330,130 L 600,130" stroke="#0d8a57" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+          <text x="465" y="122" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle" fill="#0d8a57">BEGIN transaction & SELECT ... FOR UPDATE FROM jobs</text>
+
+          <!-- Step 3: Check condition -->
+          <path d="M 600,165 L 330,165" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+          <text x="465" y="157" font-family="'Geist', sans-serif" font-size="10" text-anchor="middle" fill="#7a8399">Kiểm tra: Job PUBLISHED? Public Apply Link bật?</text>
+
+          <!-- Step 4: Idempotency check -->
+          <path d="M 330,205 L 600,205" stroke="#0d8a57" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+          <text x="465" y="197" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle" fill="#0d8a57">SELECT 1 FROM channel_posts WHERE (tenant_id, job_id, channel, target_id)</text>
+
+          <!-- Branch: If already posted -->
+          <rect x="270" y="235" width="400" height="46" rx="4" fill="rgba(217, 119, 6, 0.08)" stroke="#d97706" stroke-width="0.8"/>
+          <text x="280" y="253" font-family="'Geist', sans-serif" font-size="10" font-weight="600" fill="#d97706">⚠️ Nếu đã đăng trước đó (Idempotent):</text>
+          <text x="280" y="271" font-family="'Geist', sans-serif" font-size="10" fill="#4f5d75">Không gọi lại Graph API; Trả về ngay URL bài viết cũ trong channel_posts</text>
+
+          <!-- Step 5: Read encrypted token -->
+          <path d="M 330,310 L 600,310" stroke="#0d8a57" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+          <text x="465" y="302" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle" fill="#0d8a57">SELECT token_ciphertext, external_id FROM channel_connections</text>
+
+          <!-- Decrypt -->
+          <path d="M 330,340 Q 290,340 290,355 Q 290,370 330,370" fill="none" stroke="#eb6c36" stroke-width="1.2"/>
+          <text x="280" y="358" font-family="'Geist', sans-serif" font-size="10" text-anchor="end" fill="#eb6c36">Giải mã Fernet(token_ciphertext)</text>
+
+          <!-- Step 6: Post to Meta -->
+          <path d="M 330,400 L 880,400" stroke="#1877f2" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
+          <text x="605" y="392" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle" fill="#1877f2">POST /v26.0/{page_id}/feed (message: Job Ad, link: Public Apply URL)</text>
+
+          <!-- Meta Response -->
+          <path d="M 880,440 L 330,440" stroke="#1877f2" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+          <text x="605" y="432" font-family="'Geist', sans-serif" font-size="10" text-anchor="middle" fill="#7a8399">Trả về: { id: "1056..._8912..." } (post_id thành công)</text>
+
+          <!-- Save DB -->
+          <path d="M 330,480 L 600,480" stroke="#0d8a57" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+          <text x="465" y="472" font-family="'Geist Mono', monospace" font-size="10" text-anchor="middle" fill="#0d8a57">INSERT channel_posts & INSERT audit_logs -> COMMIT</text>
+
+          <!-- Return Web -->
+          <path d="M 330,525 L 100,525" stroke="#0d8a57" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+          <text x="215" y="517" font-family="'Geist', sans-serif" font-size="11" text-anchor="middle" fill="#0d8a57">200 OK: { post_id, url: "https://facebook.com/..." }</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- PHẦN 4: LƯỢC ĐỒ DATABASE & DỮ LIỆU CẤU TRÚC -->
+    <section>
+      <p class="eyebrow">Database & Data Schema</p>
+      <h2>4. Mô hình Dữ liệu Bảng (ERD §6)</h2>
+      <p class="section-lead">
+        Hai thực thể chịu trách nhiệm cho kênh kết nối và lịch sử bài đăng. Cả hai đều thuộc phạm vi bảo vệ của RLS theo <code>tenant_id</code>.
+      </p>
+
+      <div class="grid-2">
+        <div>
+          <h3>📊 Bảng <code>channel_connections</code></h3>
+          <p>Lưu Fanpage đã kết nối của Workspace. Ràng buộc <code>UNIQUE(tenant_id, channel)</code>: mỗi Workspace kết nối tối đa 1 Page.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Cột</th>
+                <th>Kiểu</th>
+                <th>Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>id</code></td>
+                <td>uuid PK</td>
+                <td>Mặc định sinh uuidv7</td>
+              </tr>
+              <tr>
+                <td><code>tenant_id</code></td>
+                <td>uuid NN</td>
+                <td>Forced RLS</td>
+              </tr>
+              <tr>
+                <td><code>channel</code></td>
+                <td>text NN</td>
+                <td><code>'FACEBOOK_PAGE'</code></td>
+              </tr>
+              <tr>
+                <td><code>external_id</code></td>
+                <td>text NN</td>
+                <td>Page ID trên Meta</td>
+              </tr>
+              <tr>
+                <td><code>name</code></td>
+                <td>text NN</td>
+                <td>Tên hiển thị của Fanpage</td>
+              </tr>
+              <tr>
+                <td><code>token_ciphertext</code></td>
+                <td>bytea NN</td>
+                <td>Mã hóa Fernet, không trả client</td>
+              </tr>
+              <tr>
+                <td><code>connected_by</code></td>
+                <td>uuid FK</td>
+                <td>Người thực hiện kết nối (Admin)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h3>📰 Bảng <code>channel_posts</code></h3>
+          <p>Lưu lịch sử bài đăng lên Page. Ràng buộc <code>UNIQUE(tenant_id, job_id, channel, target_id)</code>: chống đăng lặp.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Cột</th>
+                <th>Kiểu</th>
+                <th>Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>id</code></td>
+                <td>uuid PK</td>
+                <td>uuidv7</td>
+              </tr>
+              <tr>
+                <td><code>job_id</code></td>
+                <td>uuid FK</td>
+                <td>Khóa ngoại tới bảng <code>jobs</code></td>
+              </tr>
+              <tr>
+                <td><code>channel</code></td>
+                <td>text NN</td>
+                <td><code>'FACEBOOK_PAGE'</code></td>
+              </tr>
+              <tr>
+                <td><code>target_id</code></td>
+                <td>text NN</td>
+                <td>ID của Page nhận bài</td>
+              </tr>
+              <tr>
+                <td><code>external_post_id</code></td>
+                <td>text NN</td>
+                <td>Post ID do Meta trả về</td>
+              </tr>
+              <tr>
+                <td><code>url</code></td>
+                <td>text NN</td>
+                <td>Đường link trực tiếp tới bài viết</td>
+              </tr>
+              <tr>
+                <td><code>posted_by</code></td>
+                <td>uuid FK</td>
+                <td>Recruiter thực hiện đăng</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PHẦN 5: XỬ LÝ LỖI & MÃ THỰC THI -->
+    <section>
+      <p class="eyebrow">Xử lý Ngoại lệ</p>
+      <h2>5. Cơ chế Xử lý Ngoại lệ & Thu hồi Quyền</h2>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>❌ Lỗi Token bị thu hồi (Meta Error Code 190)</h3>
+          <p>
+            Xảy ra khi Admin đổi mật khẩu Facebook, xóa quyền của App trong Cài đặt cá nhân, hoặc App bị gỡ.
+          </p>
+          <ul>
+            <li>Graph API trả HTTP 400 kèm mã lỗi con <code>error.code == 190</code>.</li>
+            <li>FastAPI bắt ngoại lệ này, <strong>không tạo record trong <code>channel_posts</code></strong>.</li>
+            <li>API phản hồi với mã lỗi miền <code>CHANNEL_TOKEN_INVALID</code>.</li>
+            <li>Frontend hiển thị banner đề nghị Company Admin vào <code>/settings/channels</code> kết nối lại.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>🌐 Thẻ Open Graph & Public Apply Link (SAD §5.6)</h3>
+          <p>
+            Khi đăng bài lên Facebook kèm <code>link</code>, Facebook Crawler sẽ cào trang Public Apply Link:
+          </p>
+          <ul>
+            <li>Trang <code>/apply/{slug}</code> là server component trả sẵn thẻ Open Graph (<code>og:title</code>, <code>og:description</code>, <code>og:image</code>).</li>
+            <li>Kèm schema JSON-LD <code>JobPosting</code> cho Google for Jobs.</li>
+            <li>Nhờ đó, bài đăng trên Facebook hiển thị thumbnail xem trước cực kỳ chuyên nghiệp mà không cần upload ảnh thủ công qua API.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="code-block" style="margin-top: 1.5rem;">
+        <div class="header">
+          <span>apps/api/app/channels.py · Logic mẫu gọi Meta Graph API</span>
+          <span>Python 3.13</span>
+        </div>
+        <pre><code>import httpx
+from cryptography.fernet import Fernet
+from app.config import settings
+
+def publish_job_to_facebook_page(
+    page_id: str,
+    token_ciphertext: bytes,
+    job_ad_text: str,
+    apply_url: str
+) -> dict[str, str]:
+    # 1. Giải mã token bằng Fernet
+    fernet = Fernet(settings.CHANNEL_TOKEN_KEY.encode())
+    page_token = fernet.decrypt(token_ciphertext).decode()
+
+    # 2. Gọi đồng bộ tới Meta Graph API v26.0
+    url = f"https://graph.facebook.com/v26.0/{page_id}/feed"
+    payload = {
+        "message": job_ad_text,
+        "link": apply_url,
+        "access_token": page_token
+    }
+
+    resp = httpx.post(url, json=payload, timeout=10.0)
+    data = resp.json()
+
+    if resp.status_code != 200:
+        error_code = data.get("error", {}).get("code")
+        if error_code == 190:
+            raise ChannelTokenExpiredException("Facebook Page token invalid or revoked")
+        raise ChannelPublishException(f"Meta Graph API error: {data.get('error', {}).get('message')}")
+
+    post_id = data["id"]
+    return {
+        "external_post_id": post_id,
+        "url": f"https://www.facebook.com/{post_id}"
+    }
+</code></pre>
+      </div>
+    </section>
+
+    <footer>
+      <span>Smart ATS · Tài liệu Kiến trúc Đồ án Tốt nghiệp UIT</span>
+      <span>Liên kết: <a href="system_architecture_document.md">SAD §5.6</a> · <a href="../SRS/software_requirements_specification.md">SRS FR-A3.5</a></span>
+    </footer>
+  </div>
+</body>
+</html>

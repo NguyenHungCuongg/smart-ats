@@ -5,6 +5,7 @@ from app import (
     ai,
     apply,
     auth,
+    channels,
     events,
     jobs,
     members,
@@ -44,3 +45,4 @@ app.include_router(members.router)
 app.include_router(pipeline.router)
 app.include_router(apply.router)
 app.include_router(usage.router)
+app.include_router(channels.router)

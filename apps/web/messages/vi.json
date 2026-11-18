@@ -10,7 +10,8 @@
     "jobs": "Danh sách Job",
     "newJob": "Tạo Job từ JD",
     "members": "Thành viên Workspace",
-    "usage": "Mức sử dụng AI & Ngân sách"
+    "usage": "Mức sử dụng AI & Ngân sách",
+    "channels": "Facebook Page"
   },
   "session": {
     "offline": "Không kết nối được máy chủ. Tải lại trang để thử lại.",
@@ -476,5 +477,34 @@
       "created": "{actor} đã tạo Application ({source}, Stage {stage}).",
       "stageChanged": "{actor} đã chuyển Application từ {from} sang {to}."
     }
+  },
+  "channels": {
+    "title": "Facebook Page",
+    "description": "Quản lý kết nối Facebook Page để đăng tin tuyển dụng đa kênh.",
+    "connect": "Kết nối Facebook Page",
+    "reconnect": "Kết nối lại",
+    "disconnect": "Ngắt kết nối",
+    "confirmDisconnect": "Bạn có chắc muốn ngắt kết nối Facebook Page này không?",
+    "connectedTitle": "Page đang kết nối",
+    "pageName": "Tên Page",
+    "pageId": "ID Trang",
+    "connectedBy": "Người kết nối",
+    "connectedAt": "Thời gian kết nối",
+    "notConnectedTitle": "Chưa kết nối Facebook Page",
+    "notConnectedDesc": "Kết nối Facebook Page của công ty để đăng tin tuyển dụng trực tiếp từ Smart ATS.",
+    "selectPageTitle": "Chọn Facebook Page",
+    "selectPageDesc": "Bạn quản lý nhiều Trang. Hãy chọn một Trang để liên kết với Workspace:",
+    "selectPagePlaceholder": "Chọn một Trang...",
+    "selectPageSubmit": "Xác nhận kết nối",
+    "selectPageCancel": "Hủy",
+    "loading": "Đang tải thông tin kết nối...",
+    "forbidden": "Chỉ Company Admin mới có quyền quản lý kết nối Facebook Page.",
+    "cancelled": "Đăng nhập Facebook đã bị hủy.",
+    "noRole": "Tài khoản Facebook của bạn không có vai trò (Admin, Developer, Tester) trên Meta App ở chế độ Development. Vui lòng thêm tài khoản vào Meta App.",
+    "noPages": "Tài khoản Facebook này không quản lý bất kỳ Facebook Page nào.",
+    "oauthFailed": "Kết nối Facebook thất bại. Vui lòng thử lại.",
+    "invalidSelection": "Lựa chọn Page đã hết hạn hoặc không hợp lệ. Vui lòng kết nối lại.",
+    "navMembers": "Thành viên Workspace",
+    "navChannels": "Facebook Page"
   }
 }

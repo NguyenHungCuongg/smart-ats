@@ -21,6 +21,9 @@ export default function Home() {
       <Link href="/settings/usage" className="underline">
         {t("usage")}
       </Link>
+      <Link href="/settings/channels" className="underline">
+        {t("channels")}
+      </Link>
     </main>
   );
 }
