@@ -211,7 +211,7 @@ export default function ChannelsPage() {
         ) : selectingPage ? (
           /* Multi-page selection dialog / form */
           <div className="flex flex-col gap-4 rounded-lg border border-hairline-cloud bg-surface-canvas-light p-6">
-            <h2 className="text-xl font-semibold">{t("selectPageTitle")}</h2>
+            <h2 className="heading-display text-xl font-semibold">{t("selectPageTitle")}</h2>
             <p className="text-sm text-ink-deep">{t("selectPageDesc")}</p>
             {!candidates ? (
               <p className="text-sm text-accent-violet-mid">{t("loading")}</p>
@@ -250,7 +250,7 @@ export default function ChannelsPage() {
           /* Connected page card */
           <div className="flex flex-col gap-4 rounded-lg border border-hairline-cloud bg-surface-canvas-light p-6">
             <div className="flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-xl font-semibold">
+              <h2 className="flex items-center gap-2 heading-display text-xl font-semibold">
                 {connection.name}
                 <Badge>{t("badge")}</Badge>
               </h2>
@@ -288,7 +288,7 @@ export default function ChannelsPage() {
           /* Empty / Not connected state */
           <div className="flex flex-col items-center gap-4 rounded-lg border border-hairline-cloud bg-surface-canvas-light p-8 text-center">
             <div className="flex max-w-md flex-col gap-2">
-              <h2 className="text-xl font-semibold">{t("notConnectedTitle")}</h2>
+              <h2 className="heading-display text-xl font-semibold">{t("notConnectedTitle")}</h2>
               <p className="text-sm text-accent-violet-mid">{t("notConnectedDesc")}</p>
             </div>
             <button
