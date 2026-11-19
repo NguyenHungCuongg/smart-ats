@@ -15,6 +15,7 @@ from typing import Literal
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app import audit
 from app.worker import tenant_task
 
 log = logging.getLogger(__name__)
@@ -96,12 +97,22 @@ def send_email(tenant_id: uuid.UUID, session: Session, email_id: str) -> None:
 
 def finish(session: Session, email_id: uuid.UUID, status: Literal["SENT", "FAILED"]) -> None:
     """End the email as status, masking any link token in its body."""
-    session.execute(
+    row = session.execute(
         text(
             "UPDATE email_messages SET status = :status,"
             "  sent_at = CASE WHEN :status = 'SENT' THEN now() END,"
             "  body = regexp_replace(body, 'token=[A-Za-z0-9_-]+', 'token=[redacted]', 'g')"
             " WHERE id = :id"
+            " RETURNING application_id, kind"
         ),
         {"id": email_id, "status": status},
-    )
+    ).one_or_none()
+    if row is not None and row.application_id is not None:
+        audit.record(
+            session,
+            actor_type="SYSTEM",
+            action="application.email_sent" if status == "SENT" else "application.email_failed",
+            entity_id=row.application_id,
+            before={"status": "QUEUED"},
+            after={"email_id": str(email_id), "kind": row.kind, "status": status},
+        )

@@ -78,3 +78,44 @@ test("renders loading, empty, and error states", () => {
   expect(renderList("en", { items: [] })).toContain("No activity yet.");
   expect(renderList("vi", { items: null, failed: true })).toContain('role="alert"');
 });
+
+test("renders scoring and email activity entries with badges in vi and en", () => {
+  const scoringEntries: ActivityEntry[] = [
+    {
+      id: "e-3",
+      action: "job.scoring_run_started",
+      actor_type: "AGENT",
+      actor: ACTOR,
+      before: null,
+      after: { scoring_run_id: "r-1", application_count: 2 },
+      created_at: "2026-11-19T10:00:00Z",
+    },
+    {
+      id: "e-4",
+      action: "application.scored",
+      actor_type: "SYSTEM",
+      actor: null,
+      before: { status: "PENDING" },
+      after: { scoring_run_id: "r-1", status: "SCORED", total_score: 82.5 },
+      created_at: "2026-11-19T10:01:00Z",
+    },
+    {
+      id: "e-5",
+      action: "application.email_sent",
+      actor_type: "SYSTEM",
+      actor: null,
+      before: { status: "QUEUED" },
+      after: { email_id: "em-1", kind: "APPLY_RECEIPT", status: "SENT" },
+      created_at: "2026-11-19T10:02:00Z",
+    },
+  ];
+  const viHtml = renderList("vi", { items: scoringEntries });
+  expect(viHtml).toContain("Agent (Nguyễn Văn An) đã khởi chạy Scoring Run cho 2 Application.");
+  expect(viHtml).toContain("Hệ thống đã chấm điểm Application (Total 82,5).");
+  expect(viHtml).toContain("Hệ thống đã gửi email xác nhận nhận hồ sơ.");
+
+  const enHtml = renderList("en", { items: scoringEntries });
+  expect(enHtml).toContain("Agent (Nguyễn Văn An) started a Scoring Run for 2 Applications.");
+  expect(enHtml).toContain("System scored the Application (Total 82.5).");
+  expect(enHtml).toContain("System sent the application receipt email.");
+});

@@ -525,11 +525,11 @@ async def test_retry_result_guards_and_happy_path(monkeypatch: pytest.MonkeyPatc
     job_id, run_id, app_id, row_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 
     # Missing / wrong tenant -> 404.
+    db_missing = _FakeAsyncSession(execute_results=[_Result(None)])
     with pytest.raises(HTTPException) as exc:
-        await scoring_runs.retry_result(
-            job_id, run_id, app_id, _auth(_FakeAsyncSession(execute_results=[_Result(None)]))
-        )
+        await scoring_runs.retry_result(job_id, run_id, app_id, _auth(db_missing))
     assert exc.value.status_code == 404
+    assert not any("INSERT INTO audit_logs" in sql for sql in db_missing.executed_sql)
 
     # Another running scoring run on the same Job -> 409.
     db_conflict = _FakeAsyncSession(
@@ -539,6 +539,7 @@ async def test_retry_result_guards_and_happy_path(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(HTTPException) as exc:
         await scoring_runs.retry_result(job_id, run_id, app_id, _auth(db_conflict))
     assert exc.value.status_code == 409
+    assert not any("INSERT INTO audit_logs" in sql for sql in db_conflict.executed_sql)
 
     # Non-retryable error -> 409.
     db_nonretry = _FakeAsyncSession(
@@ -548,6 +549,7 @@ async def test_retry_result_guards_and_happy_path(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(HTTPException) as exc:
         await scoring_runs.retry_result(job_id, run_id, app_id, _auth(db_nonretry))
     assert exc.value.status_code == 409
+    assert not any("INSERT INTO audit_logs" in sql for sql in db_nonretry.executed_sql)
 
     # Happy path -> resets result to PENDING, resets run to RUNNING, enqueues score_application.
     async def _budget_ok(*_args: Any, **_kwargs: Any) -> None:
@@ -584,6 +586,7 @@ async def test_retry_result_guards_and_happy_path(monkeypatch: pytest.MonkeyPatc
             _Result(_Row(id=row_id, status="FAILED", error_code="LLM_UNAVAILABLE")),
             _Result(None),
             _Result(None),
+            _Result(None),
             _Result(refreshed),
         ],
         scalar_results=[False],
@@ -593,6 +596,7 @@ async def test_retry_result_guards_and_happy_path(monkeypatch: pytest.MonkeyPatc
     assert res.status == "PENDING"
     assert res.error_code is None
     assert any("UPDATE scoring_runs SET status = 'RUNNING'" in sql for sql in db_ok.executed_sql)
+    assert any("INSERT INTO audit_logs" in sql for sql in db_ok.executed_sql)
     assert enqueued == [
         (scoring_runs.score_application, (str(auth.tenant_id), str(run_id), str(app_id)))
     ]

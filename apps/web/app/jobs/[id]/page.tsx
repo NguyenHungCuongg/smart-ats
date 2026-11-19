@@ -79,6 +79,9 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
   useProgressEvents("upload.item", (data) => {
     if ((data as { job_id: string }).job_id === id) setActivityVersion((v) => v + 1);
   });
+  useProgressEvents("scoring.result", (data) => {
+    if ((data as { job_id: string }).job_id === id) setActivityVersion((v) => v + 1);
+  });
 
   const editable = job !== null && role !== null && canEdit(role, job.status);
   return (
@@ -131,8 +134,14 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
               editable={editable}
               onApplications={setApplications}
               onActivity={() => setActivityVersion((v) => v + 1)}
+              activityVersion={activityVersion}
             />
-            <Scoring job={job} editable={editable} applications={applications} />
+            <Scoring
+              job={job}
+              editable={editable}
+              applications={applications}
+              onActivity={() => setActivityVersion((v) => v + 1)}
+            />
             <Activity jobId={id} refreshKey={version + activityVersion} />
           </>
         )}

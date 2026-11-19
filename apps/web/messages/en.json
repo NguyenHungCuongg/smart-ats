@@ -470,11 +470,23 @@
       "publicApplyDisabled": "{actor} disabled the Public Apply Link.",
       "reviewersChanged": "{actor} updated the Reviewers ({count, plural, one {# Reviewer} other {# Reviewers}}).",
       "cvsUploaded": "{actor} uploaded {count, plural, one {# CV} other {# CVs}}.",
-      "cvParseRetried": "{actor} retried parsing a CV."
+      "cvParseRetried": "{actor} retried parsing a CV.",
+      "scoringRunStarted": "{actor} started a Scoring Run for {count, plural, one {# Application} other {# Applications}}."
     },
     "application": {
       "created": "{actor} created the Application ({source}, Stage {stage}).",
-      "stageChanged": "{actor} moved the Application from {from} to {to}."
+      "stageChanged": "{actor} moved the Application from {from} to {to}.",
+      "scoreRetried": "{actor} retried scoring the Application.",
+      "scoredSucceeded": "{actor} scored the Application (Total {score}).",
+      "scoredFailed": "{actor} failed to score the Application ({error}).",
+      "emailSent": "{actor} sent the {kind} email.",
+      "emailFailed": "{actor} failed to send the {kind} email."
+    },
+    "emailKind": {
+      "APPLY_RECEIPT": "application receipt",
+      "INVITE_INTERVIEW": "interview invitation",
+      "RESULT": "result notification",
+      "FOLLOW_UP": "follow-up"
     }
   }
 }

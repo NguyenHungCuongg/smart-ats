@@ -1,27 +1,39 @@
 """Audit Log foundation and Activity Timelines for Jobs and Applications (FR-A3.3, ERD §7)."""
 
 import json
+import smtplib
 import uuid
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
+import httpx
+import openai
 import pytest
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from app import ai, apply, audit, emails, jobs, storage, sweep, uploads
+from app import ai, apply, audit, emails, jobs, scoring_runs, storage, sweep, uploads
 from app.auth import _redis
 from app.db import async_tenant_session, tenant_session
 from app.main import app
-from smart_ats_scoring import parsing, pricing
+from smart_ats_scoring import embedding, parsing, pricing
+from smart_ats_scoring.llm import LlmResult, Usage
 from tests.conftest import API_DIR
 from tests.test_apply import PDF_SAMPLE
 from tests.test_jobs import CONFIRMATION, JD, PARSED, FakeLlm, User, make_user
-from tests.test_scoring_runs import add_application, make_job
+from tests.test_scoring_runs import (
+    EMBEDDING_MODEL,
+    MODEL,
+    SCORED,
+    FakeEmbedder,
+    add_application,
+    calibrate_embedding,
+    make_job,
+)
 from tests.test_uploads import docx, profile
 
 pytestmark = pytest.mark.usefixtures("database")
@@ -1022,3 +1034,394 @@ async def test_application_stage_changes_bulk_errors_pagination_revoked_and_acce
     assert (
         await client.get(f"/api/applications/{uuid.uuid4()}/timeline", headers=recruiter.headers)
     ).status_code == 404
+
+
+def _transient_status_error(code: int = 503) -> openai.APIStatusError:
+    req = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    resp = httpx.Response(code, request=req)
+    return openai.APIStatusError("transient", response=cast(Any, resp), body=None)
+
+
+class _ScriptedLlm:
+    def __init__(self, outcomes: list[dict[str, Any] | BaseException], model: str = MODEL) -> None:
+        self.outcomes = outcomes
+        self.model = model
+        self.calls = 0
+
+    def structured(self, *args: Any, **kwargs: Any) -> LlmResult:
+        idx = min(self.calls, len(self.outcomes) - 1)
+        self.calls += 1
+        outcome = self.outcomes[idx]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return LlmResult(outcome, Usage(self.model, 1000, 500, 400))
+
+
+@pytest.mark.usefixtures("redis")
+async def test_scoring_run_start_retry_scored_rollback_and_stuck_audit_logs(
+    client: AsyncClient,
+    recruiter: User,
+    objects: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _redis().delete(*ai.breaker_keys())
+    monkeypatch.setenv("LLM_REASONING_MODEL", MODEL)
+    monkeypatch.setitem(
+        pricing.PRICES, MODEL, pricing.Price(Decimal("2"), Decimal("0.2"), Decimal("10"))
+    )
+    calibrate_embedding(monkeypatch)
+    scoring_enqueued: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        scoring_runs.score_application, "delay", lambda *args: scoring_enqueued.append(args)
+    )
+    monkeypatch.setattr(
+        scoring_runs,
+        "embedder_from_env",
+        lambda model, **_: {EMBEDDING_MODEL: FakeEmbedder()}[model],
+    )
+
+    # 1. Refused Scoring Run starts must leave zero audit rows:
+    # (a) Unconfirmed criteria -> 409
+    unconfirmed_job = make_job(recruiter, objects, confirmed=False)
+    add_application(recruiter, objects, unconfirmed_job)
+    assert (
+        await client.post(f"/api/jobs/{unconfirmed_job}/scoring-runs", headers=recruiter.headers)
+    ).status_code == 409
+    assert (await get_timeline(client, recruiter, unconfirmed_job))["items"] == []
+
+    # (b) No applications -> 409
+    job_id = make_job(recruiter, objects, confirmed=True)
+    assert (
+        await client.post(f"/api/jobs/{job_id}/scoring-runs", headers=recruiter.headers)
+    ).status_code == 409
+    assert (await get_timeline(client, recruiter, job_id))["items"] == []
+
+    app1 = add_application(recruiter, objects, job_id)["id"]
+    app2 = add_application(recruiter, objects, job_id)["id"]
+
+    # (c) Unpriced model -> 503
+    with monkeypatch.context() as mp:
+        mp.setenv("LLM_REASONING_MODEL", "unpriced-model")
+        assert (
+            await client.post(f"/api/jobs/{job_id}/scoring-runs", headers=recruiter.headers)
+        ).status_code == 503
+
+    # (d) Embedding model without similarity threshold -> 503
+    with monkeypatch.context() as mp:
+        mp.delitem(embedding.THRESHOLDS, EMBEDDING_MODEL)
+        assert (
+            await client.post(f"/api/jobs/{job_id}/scoring-runs", headers=recruiter.headers)
+        ).status_code == 503
+
+    # (e) Budget exceeded -> 402
+    with tenant_session(recruiter.tenant_id) as session:
+        session.execute(text("UPDATE tenants SET ai_budget_usd = 0"))
+    assert (
+        await client.post(f"/api/jobs/{job_id}/scoring-runs", headers=recruiter.headers)
+    ).status_code == 402
+    assert (await get_timeline(client, recruiter, job_id))["items"] == []
+    with tenant_session(recruiter.tenant_id) as session:
+        session.execute(text("UPDATE tenants SET ai_budget_usd = 100"))
+
+    # 2. Valid Scoring Run start -> records job.scoring_run_started with USER actor.
+    started = await client.post(f"/api/jobs/{job_id}/scoring-runs", headers=recruiter.headers)
+    assert started.status_code == 202
+    run_id = started.json()["run_id"]
+
+    # (f) Another Scoring Run already running -> 409, no duplicate audit row.
+    assert (
+        await client.post(f"/api/jobs/{job_id}/scoring-runs", headers=recruiter.headers)
+    ).status_code == 409
+
+    job_tl = await get_timeline(client, recruiter, job_id)
+    assert len(job_tl["items"]) == 1
+    assert job_tl["items"][0]["action"] == "job.scoring_run_started"
+    assert job_tl["items"][0]["actor_type"] == "USER"
+    assert job_tl["items"][0]["actor"]["id"] == str(recruiter.id)
+    assert job_tl["items"][0]["before"] is None
+    assert job_tl["items"][0]["after"] == {"scoring_run_id": run_id, "application_count": 2}
+    assert "ip" not in job_tl["items"][0] and "request_id" not in job_tl["items"][0]
+
+    args_by_app = {args[2]: args for args in scoring_enqueued}
+    scoring_enqueued.clear()
+
+    # 3. Transient error then retry -> rollback leaves no duplicate application.scored row.
+    flaky_llm = _ScriptedLlm([_transient_status_error(503), SCORED])
+    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model, **_: flaky_llm)
+    scoring_runs.score_application.apply(args=args_by_app[app1]).get()
+    assert flaky_llm.calls == 2
+    # Redelivered task after completion exits early with no duplicate row.
+    scoring_runs.score_application.apply(args=args_by_app[app1]).get()
+
+    app1_tl = await get_application_timeline(client, recruiter, app1)
+    assert len(app1_tl["items"]) == 1
+    assert app1_tl["items"][0]["action"] == "application.scored"
+    assert app1_tl["items"][0]["actor_type"] == "SYSTEM"
+    assert app1_tl["items"][0]["actor"] is None
+    assert app1_tl["items"][0]["before"] == {"status": "PENDING"}
+    assert app1_tl["items"][0]["after"]["scoring_run_id"] == run_id
+    assert app1_tl["items"][0]["after"]["status"] == "SCORED"
+    assert isinstance(app1_tl["items"][0]["after"]["total_score"], float)
+    assert "error_code" not in app1_tl["items"][0]["after"]
+
+    # Refused manual retry on a SCORED result (409) leaves no audit row.
+    assert (
+        await client.post(
+            f"/api/jobs/{job_id}/scoring-runs/{run_id}/results/{app1}/retry",
+            headers=recruiter.headers,
+        )
+    ).status_code == 409
+    assert len((await get_application_timeline(client, recruiter, app1))["items"]) == 1
+
+    # 4. Exhausted transient failure -> application.scored (FAILED, LLM_UNAVAILABLE),
+    # then manual retry -> application.score_retried (USER),
+    # then stuck sweep -> application.scored (FAILED, STUCK).
+    await _redis().delete(*ai.breaker_keys())
+    always_down = _ScriptedLlm([_transient_status_error(503)])
+    monkeypatch.setattr(scoring_runs, "llm_from_env", lambda model, **_: always_down)
+    scoring_runs.score_application.apply(args=args_by_app[app2]).get()
+
+    app2_tl_failed = await get_application_timeline(client, recruiter, app2)
+    assert [
+        (i["action"], i["actor_type"], i["before"], i["after"]) for i in app2_tl_failed["items"]
+    ] == [
+        (
+            "application.scored",
+            "SYSTEM",
+            {"status": "PENDING"},
+            {"scoring_run_id": run_id, "status": "FAILED", "error_code": "LLM_UNAVAILABLE"},
+        )
+    ]
+
+    retry_res = await client.post(
+        f"/api/jobs/{job_id}/scoring-runs/{run_id}/results/{app2}/retry",
+        headers=recruiter.headers,
+    )
+    assert retry_res.status_code == 202
+    scoring_enqueued.clear()
+
+    with tenant_session(recruiter.tenant_id) as session:
+        session.execute(
+            text(
+                "UPDATE score_results SET attempts = :max_attempts,"
+                "  enqueued_at = now() - :past"
+                " WHERE scoring_run_id = :run_id AND application_id = :app_id"
+            ),
+            {
+                "max_attempts": sweep.MAX_ATTEMPTS,
+                "past": sweep.STUCK_AFTER + timedelta(minutes=1),
+                "run_id": run_id,
+                "app_id": app2,
+            },
+        )
+    sweep.tenant.apply(args=(str(recruiter.tenant_id),)).get()
+
+    # Refused manual retry on a STUCK result (409) leaves no extra audit row.
+    assert (
+        await client.post(
+            f"/api/jobs/{job_id}/scoring-runs/{run_id}/results/{app2}/retry",
+            headers=recruiter.headers,
+        )
+    ).status_code == 409
+
+    app2_tl = await get_application_timeline(client, recruiter, app2)
+    assert [(i["action"], i["actor_type"], i["before"], i["after"]) for i in app2_tl["items"]] == [
+        (
+            "application.scored",
+            "SYSTEM",
+            {"status": "PENDING"},
+            {"scoring_run_id": run_id, "status": "FAILED", "error_code": "STUCK"},
+        ),
+        (
+            "application.score_retried",
+            "USER",
+            {"status": "FAILED", "error_code": "LLM_UNAVAILABLE"},
+            {"scoring_run_id": run_id, "status": "PENDING", "error_code": None},
+        ),
+        (
+            "application.scored",
+            "SYSTEM",
+            {"status": "PENDING"},
+            {"scoring_run_id": run_id, "status": "FAILED", "error_code": "LLM_UNAVAILABLE"},
+        ),
+    ]
+    assert app2_tl["items"][1]["actor"]["id"] == str(recruiter.id)
+
+    # Zero candidate PII in Job or Application timelines.
+    for tl in (job_tl, app1_tl, app2_tl):
+        dumped = json.dumps(tl, ensure_ascii=False)
+        assert "Nguyễn Văn An" not in dumped
+
+
+@pytest.mark.usefixtures("redis")
+async def test_application_email_sent_failed_and_stuck_audit_logs_without_email_content(
+    client: AsyncClient,
+    recruiter: User,
+    objects: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _redis().delete("apply_limit:ip:127.0.0.1", "apply_limit:ip:testclient")
+    monkeypatch.setenv("EMAIL_FROM", "ats@example.com")
+    monkeypatch.setattr(apply.parse_cv, "delay", lambda *args: None)
+    email_enqueued: list[tuple[str, ...]] = []
+    monkeypatch.setattr(emails.send_email, "delay", lambda *args: email_enqueued.append(args))
+
+    admin = make_user("COMPANY_ADMIN", recruiter.tenant_id)
+    job_id = make_job(recruiter, objects)
+    await client.post(
+        f"/api/jobs/{job_id}/transitions", headers=recruiter.headers, json={"action": "publish"}
+    )
+    job = (
+        await client.patch(
+            f"/api/jobs/{job_id}/public-apply", headers=recruiter.headers, json={"enabled": True}
+        )
+    ).json()
+    slug = job["public_slug"]
+
+    candidates = [
+        ("Lê Minh Khôi", "khoi.sent@example.com", "0901112223"),
+        ("Phạm Thu Hà", "ha.failed@example.com", "0904445556"),
+        ("Đỗ Quang Huy", "huy.stuck@example.com", "0907778889"),
+    ]
+    for name, email_addr, phone in candidates:
+        res = await client.post(
+            f"/api/apply/{slug}",
+            data={"full_name": name, "email": email_addr, "phone": phone, "consent": "true"},
+            files={"file": ("cv.pdf", PDF_SAMPLE, "application/pdf")},
+        )
+        assert res.status_code == 200
+
+    assert len(email_enqueued) == 3
+    sent_args, failed_args, stuck_args = email_enqueued
+    sent_email_id, failed_email_id, stuck_email_id = sent_args[1], failed_args[1], stuck_args[1]
+
+    with tenant_session(recruiter.tenant_id) as session:
+        app_by_email_id = {
+            str(r.id): str(r.application_id)
+            for r in session.execute(
+                text(
+                    "SELECT id, application_id FROM email_messages WHERE application_id IS NOT NULL"
+                )
+            ).all()
+        }
+
+    # 1. SMTP succeeds -> application.email_sent (SYSTEM); redelivery leaves no duplicate.
+    delivered: list[str] = []
+    monkeypatch.setattr(emails, "deliver", lambda msg: delivered.append(str(msg["To"])))
+    emails.send_email.apply(args=sent_args).get()
+    emails.send_email.apply(args=sent_args).get()  # redelivered
+    assert delivered == ["khoi.sent@example.com"]
+
+    sent_tl = await get_application_timeline(client, recruiter, app_by_email_id[sent_email_id])
+    assert [(i["action"], i["actor_type"], i["before"], i["after"]) for i in sent_tl["items"]] == [
+        (
+            "application.email_sent",
+            "SYSTEM",
+            {"status": "QUEUED"},
+            {"email_id": sent_email_id, "kind": "APPLY_RECEIPT", "status": "SENT"},
+        ),
+        (
+            "application.created",
+            "PUBLIC",
+            None,
+            sent_tl["items"][1]["after"],
+        ),
+    ]
+
+    # 2. SMTP fails -> application.email_failed (SYSTEM).
+    def smtp_boom(_msg: Any) -> None:
+        raise smtplib.SMTPException("550 rejected ha.failed@example.com")
+
+    monkeypatch.setattr(emails, "deliver", smtp_boom)
+    emails.send_email.apply(args=failed_args).get()
+
+    failed_tl = await get_application_timeline(client, recruiter, app_by_email_id[failed_email_id])
+    assert [
+        (i["action"], i["actor_type"], i["before"], i["after"]) for i in failed_tl["items"]
+    ] == [
+        (
+            "application.email_failed",
+            "SYSTEM",
+            {"status": "QUEUED"},
+            {"email_id": failed_email_id, "kind": "APPLY_RECEIPT", "status": "FAILED"},
+        ),
+        (
+            "application.created",
+            "PUBLIC",
+            None,
+            failed_tl["items"][1]["after"],
+        ),
+    ]
+
+    # 3. Stuck email in sweep -> application.email_failed (SYSTEM).
+    with tenant_session(recruiter.tenant_id) as session:
+        session.execute(
+            text(
+                "UPDATE email_messages SET attempts = :max_attempts,"
+                "  enqueued_at = now() - :past"
+                " WHERE id = :id"
+            ),
+            {
+                "max_attempts": sweep.MAX_ATTEMPTS,
+                "past": sweep.STUCK_AFTER + timedelta(minutes=1),
+                "id": stuck_email_id,
+            },
+        )
+    sweep.tenant.apply(args=(str(recruiter.tenant_id),)).get()
+
+    stuck_tl = await get_application_timeline(client, recruiter, app_by_email_id[stuck_email_id])
+    assert [(i["action"], i["actor_type"], i["before"], i["after"]) for i in stuck_tl["items"]] == [
+        (
+            "application.email_failed",
+            "SYSTEM",
+            {"status": "QUEUED"},
+            {"email_id": stuck_email_id, "kind": "APPLY_RECEIPT", "status": "FAILED"},
+        ),
+        (
+            "application.created",
+            "PUBLIC",
+            None,
+            stuck_tl["items"][1]["after"],
+        ),
+    ]
+
+    # 4. Member invitation email (application_id IS NULL) writes no application.email_* row.
+    email_enqueued.clear()
+    inv = await client.post(
+        "/api/invitations",
+        headers=admin.headers,
+        json={"email": "invitee.nullapp@example.com", "role": "RECRUITER"},
+    )
+    assert inv.status_code == 201
+    monkeypatch.setattr(emails, "deliver", lambda _msg: None)
+    emails.send_email.apply(args=email_enqueued.pop(0)).get()
+    with tenant_session(recruiter.tenant_id) as session:
+        inv_app_emails = session.scalar(
+            text(
+                "SELECT count(*) FROM audit_logs"
+                " WHERE action IN ('application.email_sent', 'application.email_failed')"
+            )
+        )
+    assert inv_app_emails == 3
+
+    # 5. Zero email addresses, subjects, bodies, or candidate PII in any timeline response.
+    forbidden = [
+        "khoi.sent@example.com",
+        "ha.failed@example.com",
+        "huy.stuck@example.com",
+        "Lê Minh Khôi",
+        "Phạm Thu Hà",
+        "Đỗ Quang Huy",
+        "0901112223",
+        "0904445556",
+        "0907778889",
+        "Xác nhận nhận hồ sơ",
+        "Application received",
+        "Cảm ơn bạn đã nộp hồ sơ",
+        "Thank you for applying",
+        "Backend Developer",
+    ]
+    for tl in (sent_tl, failed_tl, stuck_tl):
+        dumped = json.dumps(tl, ensure_ascii=False)
+        for secret in forbidden:
+            assert secret not in dumped

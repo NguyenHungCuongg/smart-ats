@@ -13,6 +13,7 @@ function translators(locale: Locale) {
     jobField: createTranslator({ locale, messages, namespace: "job" }),
     stageName: createTranslator({ locale, messages, namespace: "pipeline.stage" }),
     sourceName: createTranslator({ locale, messages, namespace: "pipeline.source" }),
+    locale,
   };
 }
 
@@ -219,4 +220,78 @@ test("formats CV upload, CV retry, and Application actions in Vietnamese and Eng
   expect(render(stageChanged, "en")).toBe(
     "Nguyễn Văn An moved the Application from Applied to Screening.",
   );
+});
+
+test("formats scoring and application email actions in Vietnamese and English", () => {
+  const scoringOne = makeEntry("job.scoring_run_started", {
+    after: { scoring_run_id: "r1", application_count: 1 },
+  });
+  expect(render(scoringOne, "vi")).toBe(
+    "Nguyễn Văn An đã khởi chạy Scoring Run cho 1 Application.",
+  );
+  expect(render(scoringOne, "en")).toBe("Nguyễn Văn An started a Scoring Run for 1 Application.");
+
+  const scoringAgent = makeEntry("job.scoring_run_started", {
+    actor_type: "AGENT",
+    actor: USER_ACTOR,
+    after: { scoring_run_id: "r2", application_count: 3 },
+  });
+  expect(render(scoringAgent, "vi")).toBe(
+    "Agent (Nguyễn Văn An) đã khởi chạy Scoring Run cho 3 Application.",
+  );
+  expect(render(scoringAgent, "en")).toBe(
+    "Agent (Nguyễn Văn An) started a Scoring Run for 3 Applications.",
+  );
+
+  const scoreRetried = makeEntry("application.score_retried", {
+    before: { status: "FAILED", error_code: "LLM_UNAVAILABLE" },
+    after: { scoring_run_id: "r1", status: "PENDING", error_code: null },
+  });
+  expect(render(scoreRetried, "vi")).toBe("Nguyễn Văn An đã chạy lại chấm điểm cho Application.");
+  expect(render(scoreRetried, "en")).toBe("Nguyễn Văn An retried scoring the Application.");
+
+  const scoredOk = makeEntry("application.scored", {
+    actor_type: "SYSTEM",
+    actor: null,
+    before: { status: "PENDING" },
+    after: { scoring_run_id: "r1", status: "SCORED", total_score: 74.5 },
+  });
+  expect(render(scoredOk, "vi")).toBe("Hệ thống đã chấm điểm Application (Total 74,5).");
+  expect(render(scoredOk, "en")).toBe("System scored the Application (Total 74.5).");
+
+  const scoredFailed = makeEntry("application.scored", {
+    actor_type: "SYSTEM",
+    actor: null,
+    before: { status: "PENDING" },
+    after: { scoring_run_id: "r1", status: "FAILED", error_code: "STUCK" },
+  });
+  expect(render(scoredFailed, "vi")).toBe("Hệ thống chấm điểm Application thất bại (STUCK).");
+  expect(render(scoredFailed, "en")).toBe("System failed to score the Application (STUCK).");
+
+  const emailSent = makeEntry("application.email_sent", {
+    actor_type: "SYSTEM",
+    actor: null,
+    before: { status: "QUEUED" },
+    after: { email_id: "em1", kind: "APPLY_RECEIPT", status: "SENT" },
+  });
+  expect(render(emailSent, "vi")).toBe("Hệ thống đã gửi email xác nhận nhận hồ sơ.");
+  expect(render(emailSent, "en")).toBe("System sent the application receipt email.");
+
+  const emailFailed = makeEntry("application.email_failed", {
+    actor_type: "SYSTEM",
+    actor: null,
+    before: { status: "QUEUED" },
+    after: { email_id: "em2", kind: "APPLY_RECEIPT", status: "FAILED" },
+  });
+  expect(render(emailFailed, "vi")).toBe("Hệ thống gửi email xác nhận nhận hồ sơ thất bại.");
+  expect(render(emailFailed, "en")).toBe("System failed to send the application receipt email.");
+
+  const interviewEmailSent = makeEntry("application.email_sent", {
+    actor_type: "SYSTEM",
+    actor: null,
+    before: { status: "QUEUED" },
+    after: { email_id: "em3", kind: "INVITE_INTERVIEW", status: "SENT" },
+  });
+  expect(render(interviewEmailSent, "vi")).toBe("Hệ thống đã gửi email mời phỏng vấn.");
+  expect(render(interviewEmailSent, "en")).toBe("System sent the interview invitation email.");
 });

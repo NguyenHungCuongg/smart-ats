@@ -470,11 +470,23 @@
       "publicApplyDisabled": "{actor} đã tắt Public Apply Link.",
       "reviewersChanged": "{actor} đã cập nhật danh sách Reviewer ({count} người).",
       "cvsUploaded": "{actor} đã tải lên {count} CV.",
-      "cvParseRetried": "{actor} đã chạy lại phân tích CV."
+      "cvParseRetried": "{actor} đã chạy lại phân tích CV.",
+      "scoringRunStarted": "{actor} đã khởi chạy Scoring Run cho {count} Application."
     },
     "application": {
       "created": "{actor} đã tạo Application ({source}, Stage {stage}).",
-      "stageChanged": "{actor} đã chuyển Application từ {from} sang {to}."
+      "stageChanged": "{actor} đã chuyển Application từ {from} sang {to}.",
+      "scoreRetried": "{actor} đã chạy lại chấm điểm cho Application.",
+      "scoredSucceeded": "{actor} đã chấm điểm Application (Total {score}).",
+      "scoredFailed": "{actor} chấm điểm Application thất bại ({error}).",
+      "emailSent": "{actor} đã gửi email {kind}.",
+      "emailFailed": "{actor} gửi email {kind} thất bại."
+    },
+    "emailKind": {
+      "APPLY_RECEIPT": "xác nhận nhận hồ sơ",
+      "INVITE_INTERVIEW": "mời phỏng vấn",
+      "RESULT": "thông báo kết quả",
+      "FOLLOW_UP": "theo dõi"
     }
   }
 }

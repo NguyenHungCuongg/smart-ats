@@ -21,9 +21,25 @@ export type JobActivityAction =
   | "job.public_apply_changed"
   | "job.reviewers_changed"
   | "job.cvs_uploaded"
-  | "job.cv_parse_retried";
+  | "job.cv_parse_retried"
+  | "job.scoring_run_started";
 
-export type ApplicationActivityAction = "application.created" | "application.stage_changed";
+export type ApplicationActivityAction =
+  | "application.created"
+  | "application.stage_changed"
+  | "application.score_retried"
+  | "application.scored"
+  | "application.email_sent"
+  | "application.email_failed";
+
+const APPLICATION_EMAIL_KINDS = [
+  "APPLY_RECEIPT",
+  "INVITE_INTERVIEW",
+  "RESULT",
+  "FOLLOW_UP",
+] as const;
+
+type ApplicationEmailKind = (typeof APPLICATION_EMAIL_KINDS)[number];
 
 export type ActivityAction = JobActivityAction | ApplicationActivityAction;
 
@@ -80,12 +96,13 @@ export type ActivityTranslators = {
   jobField: Translator<"job">;
   stageName: Translator<"pipeline.stage">;
   sourceName: Translator<"pipeline.source">;
+  locale: string;
 };
 
 /** Pure formatter turning one Activity Timeline entry into a localized sentence. */
 export function formatActivity(
   entry: ActivityEntry,
-  { t, statusName, jobField, stageName, sourceName }: ActivityTranslators,
+  { t, statusName, jobField, stageName, sourceName, locale }: ActivityTranslators,
 ): string {
   const actor = formatActor(entry, t);
   switch (entry.action) {
@@ -137,6 +154,10 @@ export function formatActivity(
     }
     case "job.cv_parse_retried":
       return t("job.cvParseRetried", { actor });
+    case "job.scoring_run_started": {
+      const count = Number(entry.after?.application_count ?? 0);
+      return t("job.scoringRunStarted", { actor, count });
+    }
     case "application.created": {
       const sourceKey = String(entry.after?.source ?? "UPLOAD") as Source;
       const stageKey = String(entry.after?.stage ?? "APPLIED") as Stage;
@@ -154,6 +175,27 @@ export function formatActivity(
         from: STAGES.includes(fromKey) ? stageName(fromKey) : fromKey,
         to: STAGES.includes(toKey) ? stageName(toKey) : toKey,
       });
+    }
+    case "application.score_retried":
+      return t("application.scoreRetried", { actor });
+    case "application.scored": {
+      if (entry.after?.status === "SCORED") {
+        const rawScore = Number(entry.after?.total_score ?? 0);
+        const score = rawScore.toLocaleString(locale, { maximumFractionDigits: 2 });
+        return t("application.scoredSucceeded", { actor, score });
+      }
+      const error = String(entry.after?.error_code ?? "SCORING_FAILED");
+      return t("application.scoredFailed", { actor, error });
+    }
+    case "application.email_sent":
+    case "application.email_failed": {
+      const rawKind = String(entry.after?.kind ?? "");
+      const kind = APPLICATION_EMAIL_KINDS.includes(rawKind as ApplicationEmailKind)
+        ? t(`emailKind.${rawKind as ApplicationEmailKind}`)
+        : rawKind;
+      return entry.action === "application.email_sent"
+        ? t("application.emailSent", { actor, kind })
+        : t("application.emailFailed", { actor, kind });
     }
   }
 }
