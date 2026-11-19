@@ -485,8 +485,6 @@
     "reconnect": "Reconnect",
     "disconnect": "Disconnect",
     "confirmDisconnect": "Are you sure you want to disconnect this Facebook Page?",
-    "connectedTitle": "Connected Page",
-    "pageName": "Page Name",
     "pageId": "Page ID",
     "connectedBy": "Connected by",
     "connectedAt": "Connected at",
@@ -494,7 +492,6 @@
     "notConnectedDesc": "Connect your company's Facebook Page to post job ads directly from Smart ATS.",
     "selectPageTitle": "Select a Facebook Page",
     "selectPageDesc": "You manage multiple Pages. Please choose one to connect to this Workspace:",
-    "selectPagePlaceholder": "Select a Page...",
     "selectPageSubmit": "Confirm connection",
     "selectPageCancel": "Cancel",
     "loading": "Loading Facebook Page connection...",
@@ -505,8 +502,6 @@
     "noRole": "Your Facebook account does not have a role (Admin, Developer, Tester) on the Meta App in Development mode. Please add your account to the Meta App.",
     "noPages": "This Facebook account does not manage any Facebook Pages.",
     "oauthFailed": "Facebook connection failed. Please try again.",
-    "invalidSelection": "Page selection has expired or is invalid. Please try connecting again.",
-    "navMembers": "Workspace Members",
-    "navChannels": "Facebook Page"
+    "invalidSelection": "Page selection has expired or is invalid. Please try connecting again."
   }
 }

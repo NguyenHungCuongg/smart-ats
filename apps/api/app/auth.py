@@ -28,6 +28,19 @@ ACCESS_TTL = timedelta(minutes=15)
 REFRESH_TTL = timedelta(days=7)
 REFRESH_COOKIE = "refresh_token"
 REFRESH_PATH = "/api/auth/refresh"
+# Short-lived cookies tied to the signed-in user; cleared whenever the browser switches accounts.
+_SESSION_BOUND_COOKIES: tuple[tuple[str, str, Literal["lax", "strict", "none"]], ...] = (
+    ("fb_oauth_state", "/api/channels/facebook", "lax"),
+    ("fb_page_selection", "/api/channels/facebook", "lax"),
+)
+
+
+def clear_session_bound_cookies(response: Response) -> None:
+    """Clear cookies bound to the previous user when signing in or signing out."""
+    for name, path, samesite in _SESSION_BOUND_COOKIES:
+        response.delete_cookie(name, path=path, secure=True, httponly=True, samesite=samesite)
+
+
 # Lockout after consecutive failures, per account and per IP: FR-C1.1.
 MAX_FAILURES = 5
 LOCK_FOR = timedelta(minutes=15)
@@ -166,6 +179,7 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Tok
             family_id=uuid.uuid4(),
             expires_at=datetime.now(UTC) + REFRESH_TTL,
         )
+    clear_session_bound_cookies(response)
     return tokens
 
 
@@ -240,6 +254,7 @@ async def logout(response: Response, refresh_token: Annotated[str, Cookie()] = "
     response.delete_cookie(
         REFRESH_COOKIE, path=REFRESH_PATH, secure=True, httponly=True, samesite="strict"
     )
+    clear_session_bound_cookies(response)
 
 
 def _hash_refresh_token(refresh_token: str) -> str:

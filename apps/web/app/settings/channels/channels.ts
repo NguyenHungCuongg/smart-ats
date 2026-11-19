@@ -16,10 +16,10 @@ export type FacebookCandidatePage = {
 };
 
 export type ChannelErrorCode =
-  "cancelled" | "no_role" | "no_pages" | "oauth_failed" | "invalid_selection";
+  "cancelled" | "no_role" | "no_pages" | "oauth_failed" | "invalid_selection" | "config_missing";
 
 /**
- * Maps callback error codes to user-friendly translated error messages (SAD §5.6).
+ * Maps callback and API error codes to localized messages (SAD §5.6, NFR-USE-03).
  */
 export function getChannelErrorMessage(
   t: Translator<"channels">,
@@ -35,6 +35,8 @@ export function getChannelErrorMessage(
       return t("noPages");
     case "invalid_selection":
       return t("invalidSelection");
+    case "config_missing":
+      return t("configMissing");
     case "oauth_failed":
     default:
       return t("oauthFailed");

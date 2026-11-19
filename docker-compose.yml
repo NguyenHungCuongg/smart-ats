@@ -64,6 +64,12 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:?set in .env}
       # The origin of the links in Member invitation emails (FR-C1.2).
       WEB_BASE_URL: ${WEB_BASE_URL:?set in .env}
+      # Facebook Page connection (FR-A3.5, SAD §5.6); optional until configured in .env.
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      FACEBOOK_REDIRECT_URI: ${FACEBOOK_REDIRECT_URI:-}
+      FACEBOOK_GRAPH_VERSION: ${FACEBOOK_GRAPH_VERSION:-v26.0}
+      CHANNEL_TOKEN_KEY: ${CHANNEL_TOKEN_KEY:-}
       # Uvicorn takes the client IP from Caddy's X-Forwarded-For only for listed proxies; Caddy's
       # address varies, so trust any. Per-IP login lockout (FR-C1.1) needs the browser's IP, and
       # port 8000 is published on loopback only, so only local processes could spoof the header.

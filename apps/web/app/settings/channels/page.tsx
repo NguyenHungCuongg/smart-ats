@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
 import { Badge } from "../../badge";
+import { SettingsNav } from "../settings-nav";
 import {
   type FacebookCandidatePage,
   type FacebookConnection,
@@ -16,8 +17,17 @@ import {
 const LINK_BUTTON = "font-medium underline";
 
 export default function ChannelsPage() {
+  return (
+    <Suspense>
+      <ChannelsContent />
+    </Suspense>
+  );
+}
+
+function ChannelsContent() {
   const t = useTranslations("channels");
   const locale = useLocale();
+  const searchParams = useSearchParams();
 
   const [connection, setConnection] = useState<FacebookConnection | null>(null);
   const [candidates, setCandidates] = useState<FacebookCandidatePage[] | null>(null);
@@ -25,42 +35,14 @@ export default function ChannelsPage() {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [forbidden, setForbidden] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    return getChannelErrorMessage(t, params.get("error"));
-  });
-  const [selectingPage, setSelectingPage] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const params = new URLSearchParams(window.location.search);
-    return params.get("select_page") === "1";
-  });
+  // Kept as an error code so live language switches re-render in the active locale (NFR-USE-03).
+  const [errorCode, setErrorCode] = useState<string | null>(() => searchParams.get("error"));
+  const [selectingPage, setSelectingPage] = useState(() => searchParams.get("select_page") === "1");
   const [version, setVersion] = useState(0);
 
   const reload = () => setVersion((v) => v + 1);
   const formatDateTime = (iso: string) => new Date(iso).toLocaleString(locale);
-
-  useEffect(() => {
-    let active = true;
-    apiFetch("/api/auth/me").then(async (response) => {
-      if (!active) return;
-      if (response.status === 401) {
-        window.location.replace("/login");
-        return;
-      }
-      if (response.ok) {
-        const me = await response.json();
-        if (me.role !== "COMPANY_ADMIN") {
-          setForbidden(true);
-        }
-      } else {
-        setForbidden(true);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const errorMsg = getChannelErrorMessage(t, errorCode);
 
   useEffect(() => {
     let active = true;
@@ -78,6 +60,8 @@ export default function ChannelsPage() {
       if (response.ok) {
         const data = await response.json();
         setConnection(data);
+      } else {
+        setErrorCode("oauth_failed");
       }
       setLoading(false);
     });
@@ -87,10 +71,19 @@ export default function ChannelsPage() {
   }, [version]);
 
   useEffect(() => {
-    if (!selectingPage) return;
+    if (!selectingPage || forbidden) return;
     let active = true;
     apiFetch("/api/channels/facebook/pages").then(async (response) => {
       if (!active) return;
+      if (response.status === 401) {
+        window.location.replace("/login");
+        return;
+      }
+      if (response.status === 403) {
+        setForbidden(true);
+        setSelectingPage(false);
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
         setCandidates(data);
@@ -98,18 +91,18 @@ export default function ChannelsPage() {
           setSelectedPageId(data[0].id);
         }
       } else {
-        setErrorMsg(t("invalidSelection"));
+        setErrorCode("invalid_selection");
         setSelectingPage(false);
       }
     });
     return () => {
       active = false;
     };
-  }, [selectingPage, t]);
+  }, [selectingPage, forbidden]);
 
   async function startConnect() {
     setConnecting(true);
-    setErrorMsg(null);
+    setErrorCode(null);
     const res = await apiFetch("/api/channels/facebook/auth-url");
     if (res.status === 401) {
       window.location.replace("/login");
@@ -121,7 +114,7 @@ export default function ChannelsPage() {
       return;
     }
     if (res.status === 503) {
-      setErrorMsg(t("configMissing"));
+      setErrorCode("config_missing");
       setConnecting(false);
       return;
     }
@@ -129,7 +122,7 @@ export default function ChannelsPage() {
       const data = await res.json();
       window.location.href = data.auth_url;
     } else {
-      setErrorMsg(t("oauthFailed"));
+      setErrorCode("oauth_failed");
       setConnecting(false);
     }
   }
@@ -142,27 +135,41 @@ export default function ChannelsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ page_id: selectedPageId }),
     });
+    if (res.status === 401) {
+      window.location.replace("/login");
+      return;
+    }
+    if (res.status === 403) {
+      setForbidden(true);
+      return;
+    }
     if (res.ok) {
       window.history.replaceState({}, "", "/settings/channels");
+      setErrorCode(null);
       setSelectingPage(false);
       reload();
     } else {
-      setErrorMsg(t("invalidSelection"));
+      setErrorCode("invalid_selection");
     }
   }
 
   async function disconnect() {
     if (!window.confirm(t("confirmDisconnect"))) return;
     const res = await apiFetch("/api/channels/facebook", { method: "DELETE" });
+    if (res.status === 401) {
+      window.location.replace("/login");
+      return;
+    }
     if (res.status === 403) {
       setForbidden(true);
       return;
     }
     if (res.ok) {
+      setErrorCode(null);
       setConnection(null);
       reload();
     } else {
-      setErrorMsg(t("oauthFailed"));
+      setErrorCode("oauth_failed");
     }
   }
 
@@ -179,15 +186,7 @@ export default function ChannelsPage() {
   return (
     <main className="flex-1">
       <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
-        {/* Navigation tabs */}
-        <div className="flex gap-4 border-b border-hairline-cloud pb-2 text-sm">
-          <Link href="/settings/members" className="text-accent-violet-mid hover:text-ink-deep">
-            {t("navMembers")}
-          </Link>
-          <span className="-mb-2 border-b-2 border-primary pb-2 font-semibold text-ink-deep">
-            {t("navChannels")}
-          </span>
-        </div>
+        <SettingsNav active="channels" />
 
         <div className="flex flex-col gap-1">
           <h1 className="heading-display text-3xl font-semibold">{t("title")}</h1>
@@ -218,6 +217,7 @@ export default function ChannelsPage() {
             ) : (
               <form onSubmit={handleSelectSubmit} className="flex flex-col gap-4">
                 <select
+                  aria-label={t("selectPageTitle")}
                   className="max-w-md text-input"
                   value={selectedPageId}
                   onChange={(e) => setSelectedPageId(e.target.value)}

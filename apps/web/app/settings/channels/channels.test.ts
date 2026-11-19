@@ -21,6 +21,9 @@ test("maps callback error codes to localized error messages", () => {
   expect(getChannelErrorMessage(t("vi"), "invalid_selection")).toBe(
     "Lựa chọn Page đã hết hạn hoặc không hợp lệ. Vui lòng kết nối lại.",
   );
+  expect(getChannelErrorMessage(t("vi"), "config_missing")).toBe(
+    "Chức năng Facebook chưa được cấu hình trên hệ thống.",
+  );
   expect(getChannelErrorMessage(t("vi"), "oauth_failed")).toBe(
     "Kết nối Facebook thất bại. Vui lòng thử lại.",
   );
@@ -34,6 +37,9 @@ test("maps callback error codes to localized error messages", () => {
   );
   expect(getChannelErrorMessage(t("en"), "invalid_selection")).toBe(
     "Page selection has expired or is invalid. Please try connecting again.",
+  );
+  expect(getChannelErrorMessage(t("en"), "config_missing")).toBe(
+    "Facebook integration is not configured on the system.",
   );
   expect(getChannelErrorMessage(t("en"), "oauth_failed")).toBe(
     "Facebook connection failed. Please try again.",

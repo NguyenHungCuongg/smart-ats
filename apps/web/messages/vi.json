@@ -485,8 +485,6 @@
     "reconnect": "Kết nối lại",
     "disconnect": "Ngắt kết nối",
     "confirmDisconnect": "Bạn có chắc muốn ngắt kết nối Facebook Page này không?",
-    "connectedTitle": "Page đang kết nối",
-    "pageName": "Tên Page",
     "pageId": "ID Trang",
     "connectedBy": "Người kết nối",
     "connectedAt": "Thời gian kết nối",
@@ -494,7 +492,6 @@
     "notConnectedDesc": "Kết nối Facebook Page của công ty để đăng tin tuyển dụng trực tiếp từ Smart ATS.",
     "selectPageTitle": "Chọn Facebook Page",
     "selectPageDesc": "Bạn quản lý nhiều Trang. Hãy chọn một Trang để liên kết với Workspace:",
-    "selectPagePlaceholder": "Chọn một Trang...",
     "selectPageSubmit": "Xác nhận kết nối",
     "selectPageCancel": "Hủy",
     "loading": "Đang tải thông tin kết nối...",
@@ -505,8 +502,6 @@
     "noRole": "Tài khoản Facebook của bạn không có vai trò (Admin, Developer, Tester) trên Meta App ở chế độ Development. Vui lòng thêm tài khoản vào Meta App.",
     "noPages": "Tài khoản Facebook này không quản lý bất kỳ Facebook Page nào.",
     "oauthFailed": "Kết nối Facebook thất bại. Vui lòng thử lại.",
-    "invalidSelection": "Lựa chọn Page đã hết hạn hoặc không hợp lệ. Vui lòng kết nối lại.",
-    "navMembers": "Thành viên Workspace",
-    "navChannels": "Facebook Page"
+    "invalidSelection": "Lựa chọn Page đã hết hạn hoặc không hợp lệ. Vui lòng kết nối lại."
   }
 }

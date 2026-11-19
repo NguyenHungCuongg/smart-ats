@@ -269,11 +269,13 @@ MATRIX: list[tuple[str, dict[str, str], list[Probe] | str]] = [
         "Kết nối, ngắt kết nối Facebook Page (FR-A3.5)",
         {"RECRUITER": DENIED, "REVIEWER": DENIED},
         [
+            call("GET", "/api/channels/facebook"),
             call("GET", "/api/channels/facebook/auth-url"),
+            call("GET", "/api/channels/facebook/pages"),
+            call("POST", "/api/channels/facebook/select", json={"page_id": "page-1"}),
             call("DELETE", "/api/channels/facebook"),
         ],
     ),
-    ("Đăng và chia sẻ Job Ad (FR-A3.5)", {"REVIEWER": DENIED}, "FR-A3.5"),
     (
         "Upload & Parse CV (FR-A1.2)",
         {"REVIEWER": DENIED},

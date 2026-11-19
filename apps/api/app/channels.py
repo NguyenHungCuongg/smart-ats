@@ -2,7 +2,7 @@
 
 Company Admin connects a Facebook Page for the Workspace via OAuth 2.0.
 The Page access token is encrypted at rest using Fernet with CHANNEL_TOKEN_KEY
-and never leaves the server. Recruiters and Reviewers cannot manage connections.
+and never leaves the API. Recruiters and Reviewers cannot manage connections.
 """
 
 import json
@@ -21,15 +21,21 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
-from app.auth import Auth, Authenticated
+from app import audit
+from app.auth import Auth, Authenticated, _redis
 from app.db import async_tenant_session
 
 router = APIRouter(prefix="/api/channels/facebook")
 
+OAUTH_STATE_COOKIE = "fb_oauth_state"
 OAUTH_STATE_TTL = timedelta(minutes=10)
 PAGE_SELECTION_COOKIE = "fb_page_selection"
 PAGE_SELECTION_TTL = timedelta(minutes=5)
+CHANNEL_COOKIE_PATH = "/api/channels/facebook"
+DEFAULT_GRAPH_VERSION = "v26.0"
 
 
 # --- Exceptions ---
@@ -49,10 +55,31 @@ class FacebookTokenError(FacebookError):
 
 
 class FacebookGraphError(FacebookError):
-    """Raised on other Graph API errors."""
+    """Raised on other Graph API or transport errors."""
 
 
-# --- Adapter Protocol and Concrete Implementation ---
+# --- Configuration & Adapter ---
+
+
+@dataclass(frozen=True)
+class FacebookConfig:
+    app_id: str
+    app_secret: str
+    redirect_uri: str
+    graph_version: str
+    token_key: str
+
+
+def _graph_version() -> str:
+    return os.environ.get("FACEBOOK_GRAPH_VERSION", "").strip() or DEFAULT_GRAPH_VERSION
+
+
+def _app_credentials() -> tuple[str, str]:
+    app_id = os.environ.get("FACEBOOK_APP_ID", "").strip()
+    app_secret = os.environ.get("FACEBOOK_APP_SECRET", "").strip()
+    if not app_id or not app_secret:
+        raise FacebookGraphError("Facebook app ID or secret is not configured")
+    return app_id, app_secret
 
 
 @dataclass(frozen=True)
@@ -83,36 +110,58 @@ class FacebookAdapter(Protocol):
 
 
 class GraphAPIAdapter:
-    """Thin adapter for Meta Graph API calls."""
+    """Thin adapter for Meta Graph API calls (the only module that calls Facebook)."""
 
     def __init__(self, timeout: float = 10.0) -> None:
         self.timeout = timeout
 
-    def _graph_version(self) -> str:
-        return os.environ.get("FACEBOOK_GRAPH_VERSION", "v26.0")
-
-    def _app_credentials(self) -> tuple[str, str]:
-        app_id = os.environ.get("FACEBOOK_APP_ID")
-        app_secret = os.environ.get("FACEBOOK_APP_SECRET")
-        if not app_id or not app_secret:
-            raise FacebookGraphError("Facebook app ID or secret is not configured")
-        return app_id, app_secret
-
     def _handle_error(self, data: dict[str, Any], default_message: str) -> None:
-        err = data.get("error", {})
-        code = err.get("code")
-        subcode = err.get("error_subcode")
-        msg = err.get("message", default_message)
+        err = data.get("error")
+        err_dict = err if isinstance(err, dict) else {}
+        code = err_dict.get("code")
+        subcode = err_dict.get("error_subcode")
+        msg = err_dict.get("message") or default_message
         if code == 190:
-            raise FacebookTokenError(msg, code=code, subcode=subcode)
-        raise FacebookGraphError(msg, code=code, subcode=subcode)
+            raise FacebookTokenError(str(msg), code=code, subcode=subcode)
+        raise FacebookGraphError(str(msg), code=code, subcode=subcode)
+
+    def _request(
+        self,
+        client: httpx.Client,
+        method: str,
+        url: str,
+        *,
+        default_error: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        try:
+            resp = client.request(method, url, **kwargs)
+        except httpx.TimeoutException as e:
+            raise FacebookGraphError("Facebook Graph API request timed out") from e
+        except httpx.HTTPError as e:
+            # Never include str(e): httpx error text can echo query params containing secrets.
+            raise FacebookGraphError("Facebook Graph API request failed") from e
+
+        try:
+            data: Any = resp.json()
+        except ValueError as e:
+            raise FacebookGraphError(f"{default_error} (HTTP {resp.status_code})") from e
+
+        if not isinstance(data, dict):
+            raise FacebookGraphError(default_error)
+        if resp.status_code != 200:
+            self._handle_error(data, default_error)
+        return data
 
     def exchange_code_for_user_token(self, code: str, redirect_uri: str) -> str:
-        app_id, app_secret = self._app_credentials()
-        version = self._graph_version()
+        app_id, app_secret = _app_credentials()
+        version = _graph_version()
         with httpx.Client(timeout=self.timeout) as client:
-            resp = client.get(
+            data = self._request(
+                client,
+                "GET",
                 f"https://graph.facebook.com/{version}/oauth/access_token",
+                default_error="Failed to exchange authorization code",
                 params={
                     "client_id": app_id,
                     "client_secret": app_secret,
@@ -120,15 +169,15 @@ class GraphAPIAdapter:
                     "code": code,
                 },
             )
-            data = resp.json()
-            if resp.status_code != 200:
-                self._handle_error(data, "Failed to exchange authorization code")
             short_token = data.get("access_token")
             if not short_token:
                 raise FacebookGraphError("No access token in response")
 
-            resp_long = client.get(
+            data_long = self._request(
+                client,
+                "GET",
                 f"https://graph.facebook.com/{version}/oauth/access_token",
+                default_error="Failed to obtain long-lived user token",
                 params={
                     "grant_type": "fb_exchange_token",
                     "client_id": app_id,
@@ -136,33 +185,35 @@ class GraphAPIAdapter:
                     "fb_exchange_token": short_token,
                 },
             )
-            data_long = resp_long.json()
-            if resp_long.status_code != 200:
-                self._handle_error(data_long, "Failed to obtain long-lived user token")
             long_token = data_long.get("access_token")
             if not long_token:
                 raise FacebookGraphError("No long-lived access token in response")
             return str(long_token)
 
     def list_pages(self, user_access_token: str) -> list[FacebookPage]:
-        version = self._graph_version()
+        version = _graph_version()
         with httpx.Client(timeout=self.timeout) as client:
-            resp = client.get(
+            data = self._request(
+                client,
+                "GET",
                 f"https://graph.facebook.com/{version}/me/accounts",
-                params={"access_token": user_access_token},
+                default_error="Failed to list Facebook pages",
+                headers={"Authorization": f"Bearer {user_access_token}"},
             )
-            data = resp.json()
-            if resp.status_code != 200:
-                self._handle_error(data, "Failed to list Facebook pages")
             pages_data = data.get("data", [])
-            return [
-                FacebookPage(
-                    id=str(item["id"]),
-                    name=str(item["name"]),
-                    access_token=str(item["access_token"]),
-                )
-                for item in pages_data
-            ]
+            if not isinstance(pages_data, list):
+                raise FacebookGraphError("Unexpected response format from Facebook pages endpoint")
+            try:
+                return [
+                    FacebookPage(
+                        id=str(item["id"]),
+                        name=str(item["name"]),
+                        access_token=str(item["access_token"]),
+                    )
+                    for item in pages_data
+                ]
+            except (KeyError, TypeError) as e:
+                raise FacebookGraphError("Missing page fields in Facebook response") from e
 
     def publish_feed_post(
         self,
@@ -171,25 +222,26 @@ class GraphAPIAdapter:
         message: str,
         link: str | None = None,
     ) -> FacebookPostResult:
-        version = self._graph_version()
+        version = _graph_version()
+        payload: dict[str, Any] = {"message": message}
+        if link:
+            payload["link"] = link
         with httpx.Client(timeout=self.timeout) as client:
-            payload: dict[str, Any] = {
-                "message": message,
-                "access_token": page_access_token,
-            }
-            if link:
-                payload["link"] = link
-            resp = client.post(
+            data = self._request(
+                client,
+                "POST",
                 f"https://graph.facebook.com/{version}/{page_id}/feed",
+                default_error="Failed to publish feed post",
+                headers={"Authorization": f"Bearer {page_access_token}"},
                 json=payload,
             )
-            data = resp.json()
-            if resp.status_code != 200:
-                self._handle_error(data, "Failed to publish feed post")
-            post_id = str(data["id"])
+            post_id = data.get("id")
+            if not post_id:
+                raise FacebookGraphError("No post id in response")
+            post_id_str = str(post_id)
             return FacebookPostResult(
-                external_post_id=post_id,
-                url=f"https://www.facebook.com/{post_id}",
+                external_post_id=post_id_str,
+                url=f"https://www.facebook.com/{post_id_str}",
             )
 
 
@@ -197,29 +249,37 @@ class GraphAPIAdapter:
 adapter: FacebookAdapter = GraphAPIAdapter()
 
 
-# --- Token Encryption & Configuration Helpers ---
+# --- Token Encryption, State & Cookie Helpers ---
 
 
-def check_facebook_config() -> dict[str, str]:
-    required = [
+def check_facebook_config() -> FacebookConfig:
+    required = (
         "FACEBOOK_APP_ID",
         "FACEBOOK_APP_SECRET",
         "FACEBOOK_REDIRECT_URI",
         "CHANNEL_TOKEN_KEY",
-    ]
-    missing = [k for k in required if not os.environ.get(k)]
+    )
+    missing = [k for k in required if not os.environ.get(k, "").strip()]
     if missing:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             f"Facebook integration is not configured (missing {', '.join(missing)})",
         )
-    return {
-        "app_id": os.environ["FACEBOOK_APP_ID"],
-        "app_secret": os.environ["FACEBOOK_APP_SECRET"],
-        "redirect_uri": os.environ["FACEBOOK_REDIRECT_URI"],
-        "graph_version": os.environ.get("FACEBOOK_GRAPH_VERSION", "v26.0"),
-        "token_key": os.environ["CHANNEL_TOKEN_KEY"],
-    }
+    token_key = os.environ["CHANNEL_TOKEN_KEY"].strip()
+    try:
+        Fernet(token_key.encode())
+    except (ValueError, TypeError) as e:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Facebook integration is not configured (invalid CHANNEL_TOKEN_KEY)",
+        ) from e
+    return FacebookConfig(
+        app_id=os.environ["FACEBOOK_APP_ID"].strip(),
+        app_secret=os.environ["FACEBOOK_APP_SECRET"].strip(),
+        redirect_uri=os.environ["FACEBOOK_REDIRECT_URI"].strip(),
+        graph_version=_graph_version(),
+        token_key=token_key,
+    )
 
 
 def encrypt_token(token: str, key: str | None = None) -> bytes:
@@ -241,18 +301,18 @@ def create_oauth_state(user_id: uuid.UUID, tenant_id: uuid.UUID, role: str) -> s
         "purpose": "facebook_oauth",
         "iat": int(now.timestamp()),
         "exp": int((now + OAUTH_STATE_TTL).timestamp()),
-        "nonce": secrets.token_hex(8),
+        "nonce": secrets.token_hex(16),
     }
     return jwt.encode(claims, os.environ["JWT_SECRET"], algorithm="HS256")
 
 
 def verify_oauth_state(state: str) -> dict[str, Any]:
     try:
-        claims = jwt.decode(
+        claims: dict[str, Any] = jwt.decode(
             state,
             os.environ["JWT_SECRET"],
             algorithms=["HS256"],
-            options={"require": ["sub", "tid", "role", "purpose", "exp"]},
+            options={"require": ["sub", "tid", "role", "purpose", "nonce", "exp"]},
         )
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "OAuth state has expired") from e
@@ -292,14 +352,86 @@ def decrypt_selection(token_str: str, token_key: str) -> dict[str, Any]:
     return payload
 
 
+def _oauth_nonce_key(nonce: str) -> str:
+    return f"fb_oauth_nonce:{nonce}"
+
+
+def _selection_key(selection_id: str) -> str:
+    return f"fb_page_selection:{selection_id}"
+
+
+def _set_channel_cookie(response: Response, name: str, value: str, ttl: timedelta) -> None:
+    response.set_cookie(
+        name,
+        value,
+        max_age=int(ttl.total_seconds()),
+        path=CHANNEL_COOKIE_PATH,
+        secure=True,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def _delete_channel_cookie(response: Response, name: str) -> None:
+    response.delete_cookie(
+        name,
+        path=CHANNEL_COOKIE_PATH,
+        secure=True,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def _is_meta_role_error(text_value: str | None) -> bool:
+    lower = (text_value or "").lower()
+    return "role" in lower or "developer" in lower or "not active" in lower
+
+
+def _callback_error_redirect(web_base: str, error_code: str) -> RedirectResponse:
+    redirect = RedirectResponse(f"{web_base}/settings/channels?error={error_code}", status_code=302)
+    _delete_channel_cookie(redirect, OAUTH_STATE_COOKIE)
+    return redirect
+
+
+async def _load_page_selection(
+    selection_id: str | None,
+    token_key: str,
+    user_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+) -> dict[str, Any]:
+    if not selection_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No page selection in progress")
+    raw: bytes | None = await _redis().get(_selection_key(selection_id))
+    if raw is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Page selection has expired")
+    payload = decrypt_selection(raw.decode("ascii"), token_key)
+    if uuid.UUID(payload["sub"]) != user_id or uuid.UUID(payload["tid"]) != tenant_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Page selection belongs to another user")
+    return payload
+
+
 async def _upsert_connection(
-    session: Any,
+    session: AsyncSession,
     tenant_id: uuid.UUID,
     external_id: str,
     name: str,
     token_ciphertext: bytes,
     connected_by: uuid.UUID,
+    ip: str | None,
 ) -> tuple[uuid.UUID, datetime]:
+    existing = (
+        await session.execute(
+            text(
+                "SELECT channel, external_id FROM channel_connections"
+                " WHERE channel = 'FACEBOOK_PAGE' FOR UPDATE"
+            )
+        )
+    ).one_or_none()
+    before = (
+        {"channel": existing.channel, "external_id": existing.external_id}
+        if existing is not None
+        else None
+    )
     row = (
         await session.execute(
             text("""
@@ -327,21 +459,17 @@ async def _upsert_connection(
             },
         )
     ).one()
+    await audit.arecord(
+        session,
+        actor_type="USER",
+        actor_user_id=connected_by,
+        action="channel_connection.connected",
+        entity_id=row.id,
+        before=before,
+        after={"channel": "FACEBOOK_PAGE", "external_id": external_id},
+        ip=ip,
+    )
     return row.id, row.created_at
-
-
-def _verify_page_selection(
-    raw: str | None,
-    token_key: str,
-    user_id: uuid.UUID,
-    tenant_id: uuid.UUID,
-) -> dict[str, Any]:
-    if not raw:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No page selection in progress")
-    payload = decrypt_selection(raw, token_key)
-    if uuid.UUID(payload["sub"]) != user_id or uuid.UUID(payload["tid"]) != tenant_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Page selection belongs to another user")
-    return payload
 
 
 # --- Dependencies & Pydantic Models ---
@@ -387,33 +515,28 @@ async def get_auth_url(
 ) -> dict[str, str]:
     config = check_facebook_config()
     state = create_oauth_state(admin.user_id, admin.tenant_id, admin.role)
-    response.set_cookie(
-        "fb_oauth_state",
-        state,
-        max_age=int(OAUTH_STATE_TTL.total_seconds()),
-        path="/",
-        secure=True,
-        httponly=True,
-        samesite="lax",
+    nonce = verify_oauth_state(state)["nonce"]
+    await _redis().set(
+        _oauth_nonce_key(nonce), f"{admin.tenant_id}:{admin.user_id}", px=OAUTH_STATE_TTL
     )
+    _set_channel_cookie(response, OAUTH_STATE_COOKIE, state, OAUTH_STATE_TTL)
     scope = "pages_manage_posts,pages_read_engagement,pages_show_list"
     params = urllib.parse.urlencode(
         {
-            "client_id": config["app_id"],
-            "redirect_uri": config["redirect_uri"],
+            "client_id": config.app_id,
+            "redirect_uri": config.redirect_uri,
             "scope": scope,
             "state": state,
             "response_type": "code",
         }
     )
-    auth_url = f"https://www.facebook.com/{config['graph_version']}/dialog/oauth?{params}"
+    auth_url = f"https://www.facebook.com/{config.graph_version}/dialog/oauth?{params}"
     return {"auth_url": auth_url}
 
 
 @router.get("/callback")
 async def facebook_callback(
     request: Request,
-    response: Response,
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
@@ -425,106 +548,76 @@ async def facebook_callback(
 
     # Meta-returned OAuth cancellation or refusal
     if error is not None:
+        if fb_oauth_state:
+            try:
+                cookie_nonce = verify_oauth_state(fb_oauth_state)["nonce"]
+            except HTTPException:
+                cookie_nonce = None
+            if cookie_nonce:
+                await _redis().delete(_oauth_nonce_key(cookie_nonce))
         if error == "access_denied" or error_reason == "user_denied":
-            return RedirectResponse(
-                f"{web_base}/settings/channels?error=cancelled", status_code=302
-            )
-        desc_lower = (error_description or "").lower()
-        if (
-            "role" in desc_lower
-            or "developer" in desc_lower
-            or "not active" in desc_lower
-            or error == "no_role"
-        ):
-            return RedirectResponse(f"{web_base}/settings/channels?error=no_role", status_code=302)
-        return RedirectResponse(f"{web_base}/settings/channels?error=oauth_failed", status_code=302)
+            return _callback_error_redirect(web_base, "cancelled")
+        if error == "no_role" or _is_meta_role_error(error_description):
+            return _callback_error_redirect(web_base, "no_role")
+        return _callback_error_redirect(web_base, "oauth_failed")
 
     if not code or not state:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing code or state")
 
     config = check_facebook_config()
     claims = verify_oauth_state(state)
-    state_user_id = uuid.UUID(claims["sub"])
-    state_tenant_id = uuid.UUID(claims["tid"])
 
-    # Authenticate and verify user context matches the state
-    auth_header = request.headers.get("authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        bearer_token = auth_header[7:].strip()
-        try:
-            bearer_claims = jwt.decode(
-                bearer_token,
-                os.environ["JWT_SECRET"],
-                algorithms=["HS256"],
-                options={"require": ["sub", "tid", "role"]},
-            )
-            bearer_user_id = uuid.UUID(bearer_claims["sub"])
-            bearer_tenant_id = uuid.UUID(bearer_claims["tid"])
-            bearer_role = bearer_claims["role"]
-        except Exception as e:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid authorization token") from e
-
-        if bearer_role != "COMPANY_ADMIN":
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Only Company Admins manage Facebook Page connection"
-            )
-        if bearer_user_id != state_user_id or bearer_tenant_id != state_tenant_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "OAuth state belongs to another user")
-    elif fb_oauth_state:
-        try:
-            cookie_claims = verify_oauth_state(fb_oauth_state)
-            cookie_user_id = uuid.UUID(cookie_claims["sub"])
-            cookie_tenant_id = uuid.UUID(cookie_claims["tid"])
-            cookie_role = cookie_claims["role"]
-        except Exception as e:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, "Invalid or expired state cookie"
-            ) from e
-
-        if cookie_role != "COMPANY_ADMIN":
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Only Company Admins manage Facebook Page connection"
-            )
-        if cookie_user_id != state_user_id or cookie_tenant_id != state_tenant_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "OAuth state belongs to another user")
-    else:
+    if not fb_oauth_state:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing OAuth authentication context")
+    if not secrets.compare_digest(fb_oauth_state, state):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "OAuth state belongs to another user")
 
     if claims.get("role") != "COMPANY_ADMIN":
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Only Company Admins manage Facebook Page connection"
         )
 
-    # Exchange code for long-lived user token
-    try:
-        user_token = adapter.exchange_code_for_user_token(code, config["redirect_uri"])
-    except FacebookTokenError as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Facebook token error: {e}") from e
-    except FacebookGraphError as e:
-        msg_lower = str(e).lower()
-        if "role" in msg_lower or "developer" in msg_lower or "not active" in msg_lower:
-            return RedirectResponse(f"{web_base}/settings/channels?error=no_role", status_code=302)
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Facebook API error: {e}") from e
+    state_user_id = uuid.UUID(claims["sub"])
+    state_tenant_id = uuid.UUID(claims["tid"])
 
-    # List pages
-    try:
-        pages = adapter.list_pages(user_token)
-    except FacebookTokenError as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Facebook token error: {e}") from e
-    except FacebookGraphError as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Facebook API error: {e}") from e
+    # Single-use nonce bound to the admin who initiated OAuth.
+    expected_owner = f"{state_tenant_id}:{state_user_id}".encode()
+    stored_owner: bytes | None = await _redis().getdel(_oauth_nonce_key(claims["nonce"]))
+    if stored_owner != expected_owner:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or already used OAuth state")
 
-    # Drop user token immediately (never stored in DB or cookie)
-    del user_token
+    # Confirm the user is still an active Company Admin before calling Graph API.
+    async with async_tenant_session(state_tenant_id) as session:
+        is_admin = await session.scalar(
+            text("SELECT 1 FROM users WHERE id = :id AND is_active AND role = 'COMPANY_ADMIN'"),
+            {"id": state_user_id},
+        )
+    if is_admin is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Only Company Admins manage Facebook Page connection"
+        )
+
+    # Exchange code for long-lived user token, then list Pages.
+    try:
+        user_token = await run_in_threadpool(
+            adapter.exchange_code_for_user_token, code, config.redirect_uri
+        )
+        pages = await run_in_threadpool(adapter.list_pages, user_token)
+    except FacebookGraphError as e:
+        if _is_meta_role_error(str(e)):
+            return _callback_error_redirect(web_base, "no_role")
+        return _callback_error_redirect(web_base, "oauth_failed")
+    except FacebookTokenError:
+        return _callback_error_redirect(web_base, "oauth_failed")
+    finally:
+        user_token = ""
 
     if len(pages) == 0:
-        redirect = RedirectResponse(f"{web_base}/settings/channels?error=no_pages", status_code=302)
-        redirect.delete_cookie("fb_oauth_state", path="/")
-        return redirect
+        return _callback_error_redirect(web_base, "no_pages")
 
     if len(pages) == 1:
         page = pages[0]
-        ciphertext = encrypt_token(page.access_token, config["token_key"])
+        ciphertext = encrypt_token(page.access_token, config.token_key)
         async with async_tenant_session(state_tenant_id) as session:
             await _upsert_connection(
                 session,
@@ -533,25 +626,21 @@ async def facebook_callback(
                 page.name,
                 ciphertext,
                 state_user_id,
+                audit.client_ip(request),
             )
         redirect = RedirectResponse(f"{web_base}/settings/channels?connected=1", status_code=302)
-        redirect.delete_cookie("fb_oauth_state", path="/")
-        redirect.delete_cookie(PAGE_SELECTION_COOKIE, path="/")
+        _delete_channel_cookie(redirect, OAUTH_STATE_COOKIE)
+        _delete_channel_cookie(redirect, PAGE_SELECTION_COOKIE)
         return redirect
 
-    # Multiple pages: store encrypted candidate pages with short TTL in HttpOnly cookie
-    selection_str = encrypt_selection(state_user_id, state_tenant_id, pages, config["token_key"])
+    # Multiple pages: keep encrypted tokens server-side in Redis with a short TTL;
+    # the browser cookie holds only an opaque random selection id.
+    selection_id = secrets.token_urlsafe(32)
+    encrypted_selection = encrypt_selection(state_user_id, state_tenant_id, pages, config.token_key)
+    await _redis().set(_selection_key(selection_id), encrypted_selection, px=PAGE_SELECTION_TTL)
     redirect = RedirectResponse(f"{web_base}/settings/channels?select_page=1", status_code=302)
-    redirect.set_cookie(
-        PAGE_SELECTION_COOKIE,
-        selection_str,
-        max_age=int(PAGE_SELECTION_TTL.total_seconds()),
-        path="/",
-        secure=True,
-        httponly=True,
-        samesite="lax",
-    )
-    redirect.delete_cookie("fb_oauth_state", path="/")
+    _set_channel_cookie(redirect, PAGE_SELECTION_COOKIE, selection_id, PAGE_SELECTION_TTL)
+    _delete_channel_cookie(redirect, OAUTH_STATE_COOKIE)
     return redirect
 
 
@@ -561,8 +650,8 @@ async def list_candidate_pages(
     fb_page_selection: Annotated[str | None, Cookie()] = None,
 ) -> list[FacebookPageCandidate]:
     config = check_facebook_config()
-    payload = _verify_page_selection(
-        fb_page_selection, config["token_key"], admin.user_id, admin.tenant_id
+    payload = await _load_page_selection(
+        fb_page_selection, config.token_key, admin.user_id, admin.tenant_id
     )
     return [FacebookPageCandidate(id=p["id"], name=p["name"]) for p in payload["pages"]]
 
@@ -575,15 +664,15 @@ async def select_page(
     fb_page_selection: Annotated[str | None, Cookie()] = None,
 ) -> FacebookConnectionResponse:
     config = check_facebook_config()
-    payload = _verify_page_selection(
-        fb_page_selection, config["token_key"], admin.user_id, admin.tenant_id
+    payload = await _load_page_selection(
+        fb_page_selection, config.token_key, admin.user_id, admin.tenant_id
     )
 
     matched = next((p for p in payload["pages"] if p["id"] == body.page_id), None)
     if not matched:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Selected page not found in candidates")
 
-    ciphertext = encrypt_token(matched["access_token"], config["token_key"])
+    ciphertext = encrypt_token(matched["access_token"], config.token_key)
     conn_id, created_at = await _upsert_connection(
         admin.db,
         admin.tenant_id,
@@ -591,6 +680,7 @@ async def select_page(
         matched["name"],
         ciphertext,
         admin.user_id,
+        admin.ip,
     )
 
     user_name = (
@@ -600,7 +690,9 @@ async def select_page(
         )
     ).scalar_one()
 
-    response.delete_cookie(PAGE_SELECTION_COOKIE, path="/")
+    if fb_page_selection:
+        await _redis().delete(_selection_key(fb_page_selection))
+    _delete_channel_cookie(response, PAGE_SELECTION_COOKIE)
     return FacebookConnectionResponse(
         id=conn_id,
         channel="FACEBOOK_PAGE",
@@ -614,16 +706,10 @@ async def select_page(
 
 @router.get("")
 async def get_facebook_connection(
-    auth: Authenticated,
+    admin: CompanyAdmin,
 ) -> FacebookConnectionResponse | None:
-    if auth.role not in ("COMPANY_ADMIN", "RECRUITER"):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Only Company Admins and Recruiters view channel connections",
-        )
-
     row = (
-        await auth.db.execute(
+        await admin.db.execute(
             text("""
                 SELECT c.id, c.channel, c.external_id, c.name, c.connected_by,
                        u.full_name AS connected_by_name, c.created_at
@@ -652,5 +738,23 @@ async def get_facebook_connection(
 async def disconnect_facebook_page(
     admin: CompanyAdmin,
 ) -> Response:
-    await admin.db.execute(text("DELETE FROM channel_connections WHERE channel = 'FACEBOOK_PAGE'"))
+    deleted = (
+        await admin.db.execute(
+            text(
+                "DELETE FROM channel_connections WHERE channel = 'FACEBOOK_PAGE'"
+                " RETURNING id, channel, external_id"
+            )
+        )
+    ).one_or_none()
+    if deleted is not None:
+        await audit.arecord(
+            admin.db,
+            actor_type="USER",
+            actor_user_id=admin.user_id,
+            action="channel_connection.disconnected",
+            entity_id=deleted.id,
+            before={"channel": deleted.channel, "external_id": deleted.external_id},
+            after=None,
+            ip=admin.ip,
+        )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
