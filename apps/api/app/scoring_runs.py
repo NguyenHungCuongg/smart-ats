@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import ai, events, outbox, storage, usage
+from app import ai, audit, events, outbox, storage, usage
 from app.jobs import JobReader, LockedJob, Weights
 from app.worker import tenant_task
 from smart_ats_scoring.embedding import Embedder, EmbeddingResult, embedder_from_env, threshold
@@ -160,6 +160,15 @@ async def create(job_id: uuid.UUID, auth: LockedJob) -> RunCreated:
         )
     ).all()
 
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="job.scoring_run_started",
+        entity_id=job_id,
+        after={"scoring_run_id": str(run_id), "application_count": len(application_ids)},
+        ip=auth.ip,
+    )
     outbox.enqueue_after_commit(
         auth.db,
         score_application,
@@ -213,6 +222,16 @@ async def retry_result(
     await auth.db.execute(
         text("UPDATE scoring_runs SET status = 'RUNNING', completed_at = NULL WHERE id = :id"),
         {"id": run_id},
+    )
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="application.score_retried",
+        entity_id=application_id,
+        before={"status": row.status, "error_code": row.error_code},
+        after={"scoring_run_id": str(run_id), "status": "PENDING", "error_code": None},
+        ip=auth.ip,
     )
     outbox.enqueue_after_commit(
         auth.db,
@@ -396,6 +415,18 @@ def score_application(
                 "grounding": result.grounding_rate,
             },
         )
+        audit.record(
+            session,
+            actor_type="SYSTEM",
+            action="application.scored",
+            entity_id=uuid.UUID(application_id),
+            before={"status": "PENDING"},
+            after={
+                "scoring_run_id": run_id,
+                "status": "SCORED",
+                "total_score": result.total,
+            },
+        )
         _finished(session, row.created_by, row.job_id, run_id, application_id, "SCORED")
     else:
         fail_result(session, row.id, row.created_by, row.job_id, run_id, application_id, error)
@@ -414,6 +445,18 @@ def fail_result(
     session.execute(
         text("UPDATE score_results SET status = 'FAILED', error_code = :code WHERE id = :id"),
         {"id": result_id, "code": error},
+    )
+    audit.record(
+        session,
+        actor_type="SYSTEM",
+        action="application.scored",
+        entity_id=uuid.UUID(application_id),
+        before={"status": "PENDING"},
+        after={
+            "scoring_run_id": run_id,
+            "status": "FAILED",
+            "error_code": error,
+        },
     )
     _finished(session, user_id, job_id, run_id, application_id, "FAILED")
 

@@ -40,11 +40,14 @@ export function Scoring({
   job,
   editable,
   applications,
+  onActivity,
 }: {
   job: Job;
   /** Whether a run may start: not for a Reviewer, nor on an archived Job. */
   editable: boolean;
   applications: number;
+  /** Told whenever starting or retrying scoring should refresh Activity Timelines on the page. */
+  onActivity?: () => void;
 }) {
   const t = useTranslations("scoring");
   const locale = useLocale();
@@ -92,6 +95,7 @@ export function Scoring({
     if (response.ok) {
       setRefused(null);
       setRunId((await response.json()).run_id);
+      onActivity?.();
     } else {
       setRefused(response.status);
     }
@@ -111,6 +115,7 @@ export function Scoring({
       setRetryError(null);
       setRunId(run.id);
       setVersion((v) => v + 1);
+      onActivity?.();
     } else {
       setRetryError(response.status);
     }

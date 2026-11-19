@@ -131,8 +131,14 @@ export default function JobPage({ params }: PageProps<"/jobs/[id]">) {
               editable={editable}
               onApplications={setApplications}
               onActivity={() => setActivityVersion((v) => v + 1)}
+              activityVersion={activityVersion}
             />
-            <Scoring job={job} editable={editable} applications={applications} />
+            <Scoring
+              job={job}
+              editable={editable}
+              applications={applications}
+              onActivity={() => setActivityVersion((v) => v + 1)}
+            />
             <Activity jobId={id} refreshKey={version + activityVersion} />
           </>
         )}

@@ -50,7 +50,7 @@ export function ActivityList({
   const stageName = useTranslations("pipeline.stage");
   const sourceName = useTranslations("pipeline.source");
   const locale = useLocale();
-  const translators = { t, statusName, jobField, stageName, sourceName };
+  const translators = { t, statusName, jobField, stageName, sourceName, locale };
 
   if (failed) {
     return <p role="alert">{t("loadFailed")}</p>;

@@ -33,6 +33,7 @@ export function Pipeline({
   editable,
   onApplications,
   onActivity,
+  activityVersion = 0,
 }: {
   jobId: string;
   /** Whether cards may move: not for a Reviewer, nor on an archived Job. */
@@ -41,6 +42,8 @@ export function Pipeline({
   onApplications: (count: number) => void;
   /** Told whenever a Stage change should refresh Activity Timelines on the page. */
   onActivity?: () => void;
+  /** Bumped by sibling sections (e.g. scoring retry) to refresh an open Application Timeline. */
+  activityVersion?: number;
 }) {
   const t = useTranslations("pipeline");
   const [cards, setCards] = useState<Card[] | null>(null);
@@ -312,7 +315,7 @@ export function Pipeline({
           <ActivityFeed
             key={selectedCard.id}
             endpoint={`/api/applications/${selectedCard.id}/timeline`}
-            refreshKey={version}
+            refreshKey={version + activityVersion}
           />
         </section>
       )}
