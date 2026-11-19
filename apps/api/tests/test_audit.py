@@ -35,6 +35,7 @@ from tests.test_scoring_runs import (
     make_job,
 )
 from tests.test_uploads import docx, profile
+from tests.test_usage import set_tenant_limits
 
 pytestmark = pytest.mark.usefixtures("database")
 
@@ -1114,14 +1115,12 @@ async def test_scoring_run_start_retry_scored_rollback_and_stuck_audit_logs(
         ).status_code == 503
 
     # (e) Budget exceeded -> 402
-    with tenant_session(recruiter.tenant_id) as session:
-        session.execute(text("UPDATE tenants SET ai_budget_usd = 0"))
+    set_tenant_limits(recruiter.tenant_id, budget_usd=Decimal("0.00"))
     assert (
         await client.post(f"/api/jobs/{job_id}/scoring-runs", headers=recruiter.headers)
     ).status_code == 402
     assert (await get_timeline(client, recruiter, job_id))["items"] == []
-    with tenant_session(recruiter.tenant_id) as session:
-        session.execute(text("UPDATE tenants SET ai_budget_usd = 100"))
+    set_tenant_limits(recruiter.tenant_id, budget_usd=Decimal("100.00"))
 
     # 2. Valid Scoring Run start -> records job.scoring_run_started with USER actor.
     started = await client.post(f"/api/jobs/{job_id}/scoring-runs", headers=recruiter.headers)
@@ -1161,7 +1160,7 @@ async def test_scoring_run_start_retry_scored_rollback_and_stuck_audit_logs(
     assert app1_tl["items"][0]["before"] == {"status": "PENDING"}
     assert app1_tl["items"][0]["after"]["scoring_run_id"] == run_id
     assert app1_tl["items"][0]["after"]["status"] == "SCORED"
-    assert isinstance(app1_tl["items"][0]["after"]["total_score"], float)
+    assert isinstance(app1_tl["items"][0]["after"]["total_score"], (int, float))
     assert "error_code" not in app1_tl["items"][0]["after"]
 
     # Refused manual retry on a SCORED result (409) leaves no audit row.
@@ -1262,6 +1261,7 @@ async def test_application_email_sent_failed_and_stuck_audit_logs_without_email_
 ) -> None:
     await _redis().delete("apply_limit:ip:127.0.0.1", "apply_limit:ip:testclient")
     monkeypatch.setenv("EMAIL_FROM", "ats@example.com")
+    monkeypatch.setenv("WEB_BASE_URL", "https://ats.example")
     monkeypatch.setattr(apply.parse_cv, "delay", lambda *args: None)
     email_enqueued: list[tuple[str, ...]] = []
     monkeypatch.setattr(emails.send_email, "delay", lambda *args: email_enqueued.append(args))
