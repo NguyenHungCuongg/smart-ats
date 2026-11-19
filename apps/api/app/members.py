@@ -21,7 +21,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app import emails, outbox
-from app.auth import REFRESH_TTL, Auth, Authenticated, TokenResponse, issue_tokens, password_hash
+from app.auth import (
+    REFRESH_TTL,
+    Auth,
+    Authenticated,
+    TokenResponse,
+    clear_session_bound_cookies,
+    issue_tokens,
+    password_hash,
+)
 from app.db import async_engine, set_tenant
 
 # FR-C1.2.
@@ -260,6 +268,7 @@ async def accept(body: Acceptance, response: Response) -> TokenResponse:
             family_id=uuid.uuid4(),
             expires_at=datetime.now(UTC) + REFRESH_TTL,
         )
+    clear_session_bound_cookies(response)
     return tokens
 
 

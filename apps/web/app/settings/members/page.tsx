@@ -5,6 +5,7 @@ import { type FormEvent, useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
 import { Badge } from "../../badge";
+import { SettingsNav } from "../settings-nav";
 import { type Members, ROLE_NAMES, ROLES, type Role, changeError, inviteError } from "./members";
 
 // Secondary actions read as link-on-light: one filled button per page (DESIGN.md).
@@ -49,6 +50,7 @@ export default function MembersPage() {
   return (
     <main className="flex-1">
       <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
+        <SettingsNav active="members" />
         <h1 className="heading-display text-3xl font-semibold">{t("title")}</h1>
         <InviteForm onInvited={reload} />
         {refused !== null && (

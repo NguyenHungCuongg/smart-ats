@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.13.*"
 
 [manifest]
@@ -1105,7 +1105,9 @@ dependencies = [
     { name = "alembic" },
     { name = "boto3" },
     { name = "celery", extra = ["redis"] },
+    { name = "cryptography" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pwdlib", extra = ["argon2"] },
     { name = "pyjwt" },
@@ -1119,7 +1121,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "testcontainers" },
@@ -1130,7 +1131,9 @@ requires-dist = [
     { name = "alembic", specifier = "~=1.20.0" },
     { name = "boto3", specifier = "~=1.43.108" },
     { name = "celery", extras = ["redis"], specifier = "~=5.6.0" },
+    { name = "cryptography", specifier = "~=50.0.2" },
     { name = "fastapi", specifier = "~=0.141.0" },
+    { name = "httpx", specifier = "~=0.28.1" },
     { name = "psycopg", extras = ["binary"], specifier = "~=3.3.6" },
     { name = "pwdlib", extras = ["argon2"], specifier = "~=0.3.1" },
     { name = "pyjwt", specifier = "~=2.15.1" },
@@ -1144,7 +1147,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = "~=0.28.1" },
     { name = "pytest", specifier = "~=9.0" },
     { name = "pytest-asyncio", specifier = "~=1.4.0" },
     { name = "testcontainers", extras = ["postgres"], specifier = "~=4.15.0" },

@@ -10,7 +10,8 @@
     "jobs": "Jobs",
     "newJob": "Create a Job from a JD",
     "members": "Workspace Members",
-    "usage": "AI Usage & Budget"
+    "usage": "AI Usage & Budget",
+    "channels": "Facebook Page"
   },
   "session": {
     "offline": "Can't reach the server. Reload the page to try again.",
@@ -488,5 +489,31 @@
       "RESULT": "result notification",
       "FOLLOW_UP": "follow-up"
     }
+  },
+  "channels": {
+    "title": "Facebook Page",
+    "description": "Manage Facebook Page connection for multi-channel job posting.",
+    "connect": "Connect Facebook Page",
+    "reconnect": "Reconnect",
+    "disconnect": "Disconnect",
+    "confirmDisconnect": "Are you sure you want to disconnect this Facebook Page?",
+    "pageId": "Page ID",
+    "connectedBy": "Connected by",
+    "connectedAt": "Connected at",
+    "notConnectedTitle": "No Facebook Page connected",
+    "notConnectedDesc": "Connect your company's Facebook Page to post job ads directly from Smart ATS.",
+    "selectPageTitle": "Select a Facebook Page",
+    "selectPageDesc": "You manage multiple Pages. Please choose one to connect to this Workspace:",
+    "selectPageSubmit": "Confirm connection",
+    "selectPageCancel": "Cancel",
+    "loading": "Loading Facebook Page connection...",
+    "configMissing": "Facebook integration is not configured on the system.",
+    "badge": "Facebook Page",
+    "forbidden": "Only Company Admins can manage the Facebook Page connection.",
+    "cancelled": "Facebook login was cancelled.",
+    "noRole": "Your Facebook account does not have a role (Admin, Developer, Tester) on the Meta App in Development mode. Please add your account to the Meta App.",
+    "noPages": "This Facebook account does not manage any Facebook Pages.",
+    "oauthFailed": "Facebook connection failed. Please try again.",
+    "invalidSelection": "Page selection has expired or is invalid. Please try connecting again."
   }
 }

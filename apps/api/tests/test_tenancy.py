@@ -216,6 +216,11 @@ TENANT_TABLES = {
         " entity_id, before, after) VALUES (:audit_logs, :t, 'USER', :users, 'job.created',"
         " 'job', :jobs, NULL, '{}')"
     ),
+    "channel_connections": (
+        "INSERT INTO channel_connections (id, tenant_id, channel, external_id, name,"
+        " token_ciphertext, connected_by) VALUES (:channel_connections, :t, 'FACEBOOK_PAGE',"
+        " 'ext-page-1', 'Demo Page', '\\x0102', :users)"
+    ),
 }
 
 

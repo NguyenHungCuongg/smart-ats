@@ -50,6 +50,8 @@ AuditAction = Literal[
     "invitation.email_failed",
     "member.role_changed",
     "member.revoked",
+    "channel_connection.connected",
+    "channel_connection.disconnected",
 ]
 ACTIONS: frozenset[str] = frozenset(get_args(AuditAction))
 
