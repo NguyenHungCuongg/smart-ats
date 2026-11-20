@@ -4,6 +4,7 @@ The Meta Graph API is faked via the adapter seam; PostgreSQL, RLS, Redis, token 
 Audit Log, FastAPI routing and CSRF state verification are real.
 """
 
+import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -56,6 +57,10 @@ class FakeFacebookAdapter:
     ) -> FacebookPostResult:
         if page_access_token == "invalid-token":
             raise FacebookTokenError("Page token invalid", code=190)
+        if page_access_token == "timeout-token":
+            raise channels.FacebookGraphError("Facebook Graph API request timed out")
+        if page_access_token == "error-token":
+            raise channels.FacebookGraphError("Unknown Graph error", code=500)
         post_id = f"{page_id}_{len(self.posts) + 1}"
         self.posts.append(
             {"page_id": page_id, "token": page_access_token, "message": message, "link": link}
@@ -512,3 +517,306 @@ async def test_meta_and_graph_errors_redirect_to_catalog_codes(
     )
     assert res_role_err.status_code == 302
     assert res_role_err.headers["location"] == "https://ats.example/settings/channels?error=no_role"
+
+
+# --- Channel 03: Post Job Ad to Facebook Page Tests (FR-A3.5) ---
+
+
+def _connect_page(
+    user: User,
+    page_id: str = "page-1",
+    page_name: str = "Tech Corp Fanpage",
+    token: str = "page-token-secret-999",
+) -> None:
+    ciphertext = channels.encrypt_token(token, FERNET_KEY)
+    with tenant_session(user.tenant_id) as session:
+        session.execute(
+            text("""
+                INSERT INTO channel_connections (
+                    id, tenant_id, channel, external_id, name,
+                    token_ciphertext, connected_by, created_at
+                ) VALUES (
+                    uuidv7(), :tenant_id, 'FACEBOOK_PAGE', :external_id, :name,
+                    :ciphertext, :user_id, now()
+                )
+                ON CONFLICT (tenant_id, channel) DO UPDATE SET
+                    external_id = EXCLUDED.external_id,
+                    name = EXCLUDED.name,
+                    token_ciphertext = EXCLUDED.token_ciphertext,
+                    connected_by = EXCLUDED.connected_by
+            """),
+            {
+                "tenant_id": user.tenant_id,
+                "external_id": page_id,
+                "name": page_name,
+                "ciphertext": ciphertext,
+                "user_id": user.id,
+            },
+        )
+
+
+def _make_job(
+    user: User,
+    *,
+    status: str = "PUBLISHED",
+    public_apply_enabled: bool = True,
+) -> tuple[str, str]:
+    slug = f"job-{uuid.uuid4().hex[:12]}"
+    with tenant_session(user.tenant_id) as session:
+        job_id = session.scalar(
+            text("""
+                INSERT INTO jobs (
+                    tenant_id, title, level, status, parse_status, created_by,
+                    weight_technical, weight_soft_skills, weight_experience,
+                    public_apply_enabled, public_slug, location, work_mode, published_at
+                ) VALUES (
+                    :tenant_id, 'Senior Python Dev', 'SENIOR', :status, 'SUCCEEDED',
+                    :user_id, 0.50, 0.25, 0.25, :enabled, :slug, 'Hà Nội', 'HYBRID',
+                    CASE WHEN :status = 'PUBLISHED' THEN now() ELSE NULL END
+                )
+                RETURNING id
+            """),
+            {
+                "tenant_id": user.tenant_id,
+                "user_id": user.id,
+                "status": status,
+                "enabled": public_apply_enabled,
+                "slug": slug,
+            },
+        )
+    return str(job_id), slug
+
+
+async def test_publish_job_post_to_facebook_page_success_and_idempotent(
+    client: AsyncClient, admin: User, recruiter: User, fake_adapter: FakeFacebookAdapter
+) -> None:
+    _connect_page(admin, page_id="page-tech", page_name="Tech Fanpage")
+    job_id, slug = _make_job(recruiter)
+
+    # 1. First publish call succeeds with 201 Created
+    post_res = await client.post(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Join us as a Senior Python Dev!"},
+    )
+    assert post_res.status_code == 201
+    post_data = post_res.json()
+    assert post_data["job_id"] == job_id
+    assert post_data["channel"] == "FACEBOOK_PAGE"
+    assert post_data["target_id"] == "page-tech"
+    assert post_data["url"] == "https://www.facebook.com/page-tech_1"
+    assert post_data["body"] == "Join us as a Senior Python Dev!"
+    assert post_data["posted_by"] == str(recruiter.id)
+    assert post_data["posted_by_name"] == "Test User"
+    assert "token" not in post_data
+    assert "token_ciphertext" not in post_data
+
+    # Verify fake_adapter was called once with the right link and token
+    assert len(fake_adapter.posts) == 1
+    assert fake_adapter.posts[0]["page_id"] == "page-tech"
+    assert fake_adapter.posts[0]["link"] == f"https://ats.example/apply/{slug}"
+    assert fake_adapter.posts[0]["message"] == "Join us as a Senior Python Dev!"
+
+    # 2. Second publish call returns existing post with 200 OK without calling Facebook again
+    second_res = await client.post(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Different text that will be ignored"},
+    )
+    assert second_res.status_code == 200
+    second_data = second_res.json()
+    assert second_data["id"] == post_data["id"]
+    assert second_data["url"] == post_data["url"]
+    # Adapter was NOT called again
+    assert len(fake_adapter.posts) == 1
+
+    # 3. List channel posts returns the post
+    list_res = await client.get(f"/api/jobs/{job_id}/channel-posts", headers=recruiter.headers)
+    assert list_res.status_code == 200
+    posts = list_res.json()
+    assert len(posts) == 1
+    assert posts[0]["id"] == post_data["id"]
+
+    # 4. Job Facebook status returns connected and the post
+    status_res = await client.get(
+        f"/api/jobs/{job_id}/channels/facebook", headers=recruiter.headers
+    )
+    assert status_res.status_code == 200
+    fb_status = status_res.json()
+    assert fb_status["connected"] is True
+    assert fb_status["page_name"] == "Tech Fanpage"
+    assert len(fb_status["posts"]) == 1
+
+
+async def test_publish_token_error_records_nothing_and_returns_error(
+    client: AsyncClient, admin: User, recruiter: User, fake_adapter: FakeFacebookAdapter
+) -> None:
+    # Connect with invalid-token so FakeFacebookAdapter raises FacebookTokenError(code=190)
+    _connect_page(admin, page_id="page-bad", token="invalid-token")
+    job_id, _ = _make_job(recruiter)
+
+    res = await client.post(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Job text"},
+    )
+    assert res.status_code == 400
+    assert res.json()["detail"]["code"] == "TOKEN_EXPIRED"
+
+    # Verify no row was inserted into channel_posts
+    with tenant_session(admin.tenant_id) as session:
+        count = session.scalar(
+            text("SELECT count(*) FROM channel_posts WHERE job_id = :job_id"), {"job_id": job_id}
+        )
+        assert count == 0
+
+
+async def test_publish_timeout_and_graph_error_records_nothing_and_returns_error(
+    client: AsyncClient, admin: User, recruiter: User, fake_adapter: FakeFacebookAdapter
+) -> None:
+    # 1. Timeout returns 504 with TIMEOUT code
+    _connect_page(admin, page_id="page-to", token="timeout-token")
+    job_id_1, _ = _make_job(recruiter)
+
+    res_to = await client.post(
+        f"/api/jobs/{job_id_1}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Job text"},
+    )
+    assert res_to.status_code == 504
+    assert res_to.json()["detail"]["code"] == "TIMEOUT"
+
+    # 2. Generic Graph error returns 502 with GRAPH_ERROR code
+    _connect_page(admin, page_id="page-err", token="error-token")
+    job_id_2, _ = _make_job(recruiter)
+
+    res_err = await client.post(
+        f"/api/jobs/{job_id_2}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Job text"},
+    )
+    assert res_err.status_code == 502
+    assert res_err.json()["detail"]["code"] == "GRAPH_ERROR"
+
+    # Verify no row was inserted for either job
+    with tenant_session(admin.tenant_id) as session:
+        count = session.scalar(
+            text("SELECT count(*) FROM channel_posts WHERE job_id IN (:j1, :j2)"),
+            {"j1": job_id_1, "j2": job_id_2},
+        )
+        assert count == 0
+
+
+async def test_publish_rejected_when_not_published_or_link_disabled(
+    client: AsyncClient, admin: User, recruiter: User
+) -> None:
+    _connect_page(admin)
+
+    # 1. Job is in DRAFT
+    job_draft, _ = _make_job(recruiter, status="DRAFT", public_apply_enabled=True)
+    res_draft = await client.post(
+        f"/api/jobs/{job_draft}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Draft job"},
+    )
+    assert res_draft.status_code == 409
+    assert res_draft.json()["detail"]["code"] == "JOB_NOT_PUBLISHED"
+
+    # 2. Public Apply link is disabled
+    job_disabled, _ = _make_job(recruiter, status="PUBLISHED", public_apply_enabled=False)
+    res_disabled = await client.post(
+        f"/api/jobs/{job_disabled}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Disabled apply link"},
+    )
+    assert res_disabled.status_code == 409
+    assert res_disabled.json()["detail"]["code"] == "PUBLIC_APPLY_DISABLED"
+
+
+async def test_publish_rejected_when_page_not_connected(
+    client: AsyncClient, admin: User, recruiter: User
+) -> None:
+    # Ensure no channel connection
+    with tenant_session(admin.tenant_id) as session:
+        session.execute(text("DELETE FROM channel_connections WHERE channel = 'FACEBOOK_PAGE'"))
+
+    job_id, _ = _make_job(recruiter)
+    res = await client.post(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Job text"},
+    )
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "NOT_CONNECTED"
+
+
+async def test_publish_and_list_rbac_and_cross_tenant(
+    client: AsyncClient, admin: User, recruiter: User, reviewer: User
+) -> None:
+    _connect_page(admin)
+    job_id, _ = _make_job(recruiter)
+
+    # 1. Reviewer is forbidden (403)
+    res_rev_post = await client.post(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=reviewer.headers,
+        json={"message": "Job text"},
+    )
+    assert res_rev_post.status_code == 403
+
+    res_rev_get = await client.get(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=reviewer.headers,
+    )
+    assert res_rev_get.status_code == 403
+
+    # 2. Other tenant is 404
+    other_admin = make_user("COMPANY_ADMIN")
+    res_other_post = await client.post(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=other_admin.headers,
+        json={"message": "Job text"},
+    )
+    assert res_other_post.status_code == 404
+
+    res_other_get = await client.get(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=other_admin.headers,
+    )
+    assert res_other_get.status_code == 404
+
+
+async def test_disconnect_retains_channel_posts(
+    client: AsyncClient, admin: User, recruiter: User, fake_adapter: FakeFacebookAdapter
+) -> None:
+    _connect_page(admin, page_id="page-persist")
+    job_id, _ = _make_job(recruiter)
+
+    # 1. Publish successfully
+    res = await client.post(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Permanent post"},
+    )
+    assert res.status_code == 201
+
+    # 2. Company Admin disconnects Facebook Page
+    del_res = await client.delete("/api/channels/facebook", headers=admin.headers)
+    assert del_res.status_code == 204
+
+    # 3. Channel Post is still preserved
+    list_res = await client.get(f"/api/jobs/{job_id}/channel-posts", headers=recruiter.headers)
+    assert list_res.status_code == 200
+    posts = list_res.json()
+    assert len(posts) == 1
+    assert posts[0]["body"] == "Permanent post"
+    assert posts[0]["target_id"] == "page-persist"
+
+    # Status shows connected=False but posts are still returned
+    status_res = await client.get(
+        f"/api/jobs/{job_id}/channels/facebook", headers=recruiter.headers
+    )
+    assert status_res.status_code == 200
+    status_data = status_res.json()
+    assert status_data["connected"] is False
+    assert len(status_data["posts"]) == 1

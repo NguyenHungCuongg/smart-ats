@@ -277,6 +277,15 @@ MATRIX: list[tuple[str, dict[str, str], list[Probe] | str]] = [
         ],
     ),
     (
+        "Đăng và chia sẻ Job Ad (FR-A3.5)",
+        {"REVIEWER": DENIED},
+        [
+            call("GET", "/api/jobs/{job}/channel-posts"),
+            call("GET", "/api/jobs/{job}/channels/facebook"),
+            call("POST", "/api/jobs/{job}/channel-posts", json={"message": "Job Ad content"}),
+        ],
+    ),
+    (
         "Upload & Parse CV (FR-A1.2)",
         {"REVIEWER": DENIED},
         [

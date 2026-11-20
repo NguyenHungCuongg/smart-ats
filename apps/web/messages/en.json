@@ -440,7 +440,22 @@
     "shareFacebook": "Share to Facebook",
     "shareX": "Share to X",
     "disabledNotPublished": "Job must be in Published status to share.",
-    "disabledPublicApplyOff": "Public Apply Link is disabled. Enable it to share."
+    "disabledPublicApplyOff": "Public Apply Link is disabled. Enable it to share.",
+    "facebookPage": "Facebook Page",
+    "connectedPage": "Page: {name}",
+    "notConnected": "Facebook Page is not connected. A Company Admin needs to connect a Page in Settings.",
+    "publishFacebook": "Publish to Facebook Page",
+    "publishing": "Publishing...",
+    "publishedSuccess": "Successfully published to Facebook Page!",
+    "alreadyPublished": "This Job has already been published to this Facebook Page.",
+    "viewPost": "View Post",
+    "channelPostsTitle": "Published Posts",
+    "noPosts": "No posts published yet.",
+    "postedBy": "Posted by {name} • {time}",
+    "errorTokenExpired": "Facebook Page session has expired or been revoked. Please ask a Company Admin to reconnect in Settings.",
+    "errorNotConnected": "Facebook Page is not connected. Please ask a Company Admin to connect a Page in Settings.",
+    "errorTimeout": "Facebook request timed out. Please try again.",
+    "errorFailed": "Failed to publish to Facebook Page. Please try again."
   },
   "activity": {
     "title": "Activity",

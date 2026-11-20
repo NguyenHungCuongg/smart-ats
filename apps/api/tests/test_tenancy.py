@@ -221,6 +221,11 @@ TENANT_TABLES = {
         " token_ciphertext, connected_by) VALUES (:channel_connections, :t, 'FACEBOOK_PAGE',"
         " 'ext-page-1', 'Demo Page', '\\x0102', :users)"
     ),
+    "channel_posts": (
+        "INSERT INTO channel_posts (id, tenant_id, job_id, channel, target_id, external_post_id,"
+        " url, body, posted_by, posted_at) VALUES (:channel_posts, :t, :jobs, 'FACEBOOK_PAGE',"
+        " 'ext-page-1', 'post-1', 'https://www.facebook.com/post-1', 'body text', :users, now())"
+    ),
 }
 
 
