@@ -27,7 +27,7 @@ from starlette.concurrency import run_in_threadpool
 from app import audit
 from app.auth import Auth, Authenticated, _redis
 from app.db import async_tenant_session
-from app.jobs import JobManager
+from app.jobs import JobManager, LockedJob
 
 router = APIRouter(prefix="/api/channels/facebook")
 jobs_router = APIRouter(prefix="/api/jobs", tags=["channels"])
@@ -847,21 +847,19 @@ async def get_job_facebook_channel(
 
 
 @jobs_router.post("/{job_id}/channel-posts", status_code=status.HTTP_201_CREATED)
-@jobs_router.post("/{job_id}/channel-posts/facebook", status_code=status.HTTP_201_CREATED)
 async def publish_facebook_post(
     job_id: uuid.UUID,
     body: PublishFacebookPostRequest,
-    auth: JobManager,
+    auth: LockedJob,
     response: Response,
 ) -> ChannelPostResponse:
-    # 1. Lock Job row and verify preconditions under transaction
+    # 1. Verify Job status & public apply preconditions (row locked FOR UPDATE by LockedJob)
     job_row = (
         await auth.db.execute(
             text("""
-                SELECT id, status, public_apply_enabled, public_slug
+                SELECT status, public_apply_enabled, public_slug
                 FROM jobs
                 WHERE id = :id
-                FOR UPDATE
             """),
             {"id": job_id},
         )

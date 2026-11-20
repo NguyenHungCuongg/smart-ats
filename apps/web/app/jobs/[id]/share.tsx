@@ -102,7 +102,7 @@ export function JobAdSection({
     setPublishError(null);
     setPublishSuccess(null);
 
-    const res = await apiFetch(`/api/jobs/${job.id}/channel-posts/facebook`, {
+    const res = await apiFetch(`/api/jobs/${job.id}/channel-posts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: content }),
