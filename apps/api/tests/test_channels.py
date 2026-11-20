@@ -57,6 +57,10 @@ class FakeFacebookAdapter:
     ) -> FacebookPostResult:
         if page_access_token == "invalid-token":
             raise FacebookTokenError("Page token invalid", code=190)
+        if page_access_token == "timeout-token":
+            raise channels.FacebookGraphError("Facebook Graph API request timed out")
+        if page_access_token == "error-token":
+            raise channels.FacebookGraphError("Unknown Graph error", code=500)
         post_id = f"{page_id}_{len(self.posts) + 1}"
         self.posts.append(
             {"page_id": page_id, "token": page_access_token, "message": message, "link": link}
@@ -663,6 +667,42 @@ async def test_publish_token_error_records_nothing_and_returns_error(
     with tenant_session(admin.tenant_id) as session:
         count = session.scalar(
             text("SELECT count(*) FROM channel_posts WHERE job_id = :job_id"), {"job_id": job_id}
+        )
+        assert count == 0
+
+
+async def test_publish_timeout_and_graph_error_records_nothing_and_returns_error(
+    client: AsyncClient, admin: User, recruiter: User, fake_adapter: FakeFacebookAdapter
+) -> None:
+    # 1. Timeout returns 504 with TIMEOUT code
+    _connect_page(admin, page_id="page-to", token="timeout-token")
+    job_id_1, _ = _make_job(recruiter)
+
+    res_to = await client.post(
+        f"/api/jobs/{job_id_1}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Job text"},
+    )
+    assert res_to.status_code == 504
+    assert res_to.json()["detail"]["code"] == "TIMEOUT"
+
+    # 2. Generic Graph error returns 502 with GRAPH_ERROR code
+    _connect_page(admin, page_id="page-err", token="error-token")
+    job_id_2, _ = _make_job(recruiter)
+
+    res_err = await client.post(
+        f"/api/jobs/{job_id_2}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Job text"},
+    )
+    assert res_err.status_code == 502
+    assert res_err.json()["detail"]["code"] == "GRAPH_ERROR"
+
+    # Verify no row was inserted for either job
+    with tenant_session(admin.tenant_id) as session:
+        count = session.scalar(
+            text("SELECT count(*) FROM channel_posts WHERE job_id IN (:j1, :j2)"),
+            {"j1": job_id_1, "j2": job_id_2},
         )
         assert count == 0
 

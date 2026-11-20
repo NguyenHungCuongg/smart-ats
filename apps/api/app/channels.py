@@ -12,7 +12,7 @@ import urllib.parse
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 import httpx
 import jwt
@@ -768,7 +768,7 @@ async def disconnect_facebook_page(
 class ChannelPostResponse(BaseModel):
     id: uuid.UUID
     job_id: uuid.UUID
-    channel: str = "FACEBOOK_PAGE"
+    channel: Literal["FACEBOOK_PAGE"] = "FACEBOOK_PAGE"
     target_id: str
     external_post_id: str
     url: str
@@ -789,6 +789,21 @@ class FacebookJobChannelStatus(BaseModel):
     posts: list[ChannelPostResponse] = []
 
 
+def _row_to_channel_post(row: Any) -> ChannelPostResponse:
+    return ChannelPostResponse(
+        id=row.id,
+        job_id=row.job_id,
+        channel=row.channel,
+        target_id=row.target_id,
+        external_post_id=row.external_post_id,
+        url=row.url,
+        body=row.body,
+        posted_by=row.posted_by,
+        posted_by_name=row.posted_by_name,
+        posted_at=row.posted_at,
+    )
+
+
 @jobs_router.get("/{job_id}/channel-posts")
 async def list_channel_posts(
     job_id: uuid.UUID,
@@ -807,21 +822,7 @@ async def list_channel_posts(
             {"job_id": job_id},
         )
     ).all()
-    return [
-        ChannelPostResponse(
-            id=r.id,
-            job_id=r.job_id,
-            channel=r.channel,
-            target_id=r.target_id,
-            external_post_id=r.external_post_id,
-            url=r.url,
-            body=r.body,
-            posted_by=r.posted_by,
-            posted_by_name=r.posted_by_name,
-            posted_at=r.posted_at,
-        )
-        for r in rows
-    ]
+    return [_row_to_channel_post(r) for r in rows]
 
 
 @jobs_router.get("/{job_id}/channels/facebook")
@@ -847,7 +848,6 @@ async def get_job_facebook_channel(
 
 @jobs_router.post("/{job_id}/channel-posts", status_code=status.HTTP_201_CREATED)
 @jobs_router.post("/{job_id}/channel-posts/facebook", status_code=status.HTTP_201_CREATED)
-@jobs_router.post("/{job_id}/channels/facebook", status_code=status.HTTP_201_CREATED)
 async def publish_facebook_post(
     job_id: uuid.UUID,
     body: PublishFacebookPostRequest,
@@ -926,18 +926,7 @@ async def publish_facebook_post(
 
     if existing_post is not None:
         response.status_code = status.HTTP_200_OK
-        return ChannelPostResponse(
-            id=existing_post.id,
-            job_id=existing_post.job_id,
-            channel=existing_post.channel,
-            target_id=existing_post.target_id,
-            external_post_id=existing_post.external_post_id,
-            url=existing_post.url,
-            body=existing_post.body,
-            posted_by=existing_post.posted_by,
-            posted_by_name=existing_post.posted_by_name,
-            posted_at=existing_post.posted_at,
-        )
+        return _row_to_channel_post(existing_post)
 
     # 4. Decrypt token and call Facebook adapter
     token_key = os.environ.get("CHANNEL_TOKEN_KEY", "").strip()

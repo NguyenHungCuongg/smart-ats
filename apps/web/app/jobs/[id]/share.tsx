@@ -232,7 +232,7 @@ export function JobAdSection({
         </div>
 
         {!loadingStatus && channelStatus && !channelStatus.connected && (
-          <div className="flex flex-col gap-1 text-sm text-accent-pink">
+          <div className="flex flex-col gap-1 border-l-2 border-accent-pink pl-2 text-sm">
             <p>{t("notConnected")}</p>
           </div>
         )}
@@ -251,7 +251,7 @@ export function JobAdSection({
         )}
 
         {publishError && (
-          <p role="alert" className="text-xs text-accent-pink">
+          <p role="alert" className="border-l-2 border-accent-pink pl-2 text-xs">
             {publishError}
           </p>
         )}
@@ -287,7 +287,7 @@ export function JobAdSection({
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">
-                        {post.channel === "FACEBOOK_PAGE" ? "Facebook Page" : post.channel}
+                        {post.channel === "FACEBOOK_PAGE" ? t("facebookPage") : post.channel}
                       </span>
                       <span className="opacity-70">
                         {t("postedBy", {
