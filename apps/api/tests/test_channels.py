@@ -610,6 +610,9 @@ async def test_publish_job_post_to_facebook_page_success_and_idempotent(
     assert post_data["posted_by_name"] == "Test User"
     assert "token" not in post_data
     assert "token_ciphertext" not in post_data
+    assert "access_token" not in post_data
+    assert "page-token-secret-999" not in str(post_data)
+    assert "page-token-secret-999" not in post_res.text
 
     # Verify fake_adapter was called once with the right link and token
     assert len(fake_adapter.posts) == 1
@@ -627,6 +630,8 @@ async def test_publish_job_post_to_facebook_page_success_and_idempotent(
     second_data = second_res.json()
     assert second_data["id"] == post_data["id"]
     assert second_data["url"] == post_data["url"]
+    assert "page-token-secret-999" not in str(second_data)
+    assert "page-token-secret-999" not in second_res.text
     # Adapter was NOT called again
     assert len(fake_adapter.posts) == 1
 
@@ -636,6 +641,8 @@ async def test_publish_job_post_to_facebook_page_success_and_idempotent(
     posts = list_res.json()
     assert len(posts) == 1
     assert posts[0]["id"] == post_data["id"]
+    assert "page-token-secret-999" not in str(posts)
+    assert "page-token-secret-999" not in list_res.text
 
     # 4. Job Facebook status returns connected and the post
     status_res = await client.get(
@@ -646,6 +653,29 @@ async def test_publish_job_post_to_facebook_page_success_and_idempotent(
     assert fb_status["connected"] is True
     assert fb_status["page_name"] == "Tech Fanpage"
     assert len(fb_status["posts"]) == 1
+    assert "page-token-secret-999" not in str(fb_status)
+    assert "page-token-secret-999" not in status_res.text
+
+    # 5. Audit Log recorded once in the same transaction; idempotent call adds no duplicate
+    audit_rows = query(
+        recruiter,
+        "SELECT action, actor_type, actor_user_id, entity_type, entity_id, before, after"
+        " FROM audit_logs WHERE entity_type = 'channel_post' ORDER BY created_at, id",
+    )
+    assert len(audit_rows) == 1
+    assert audit_rows[0]["action"] == "channel_post.created"
+    assert audit_rows[0]["actor_type"] == "USER"
+    assert audit_rows[0]["actor_user_id"] == recruiter.id
+    assert str(audit_rows[0]["entity_id"]) == str(post_data["id"])
+    assert audit_rows[0]["before"] is None
+    assert audit_rows[0]["after"] == {
+        "channel_post_id": str(post_data["id"]),
+        "channel": "FACEBOOK_PAGE",
+        "target_id": "page-tech",
+        "external_post_id": "page-tech_1",
+    }
+    assert "page-token-secret-999" not in str(audit_rows)
+    assert "Join us as a Senior Python Dev!" not in str(audit_rows)
 
 
 async def test_publish_token_error_records_nothing_and_returns_error(
@@ -750,6 +780,7 @@ async def test_publish_rejected_when_page_not_connected(
     assert res.json()["detail"]["code"] == "NOT_CONNECTED"
 
 
+@pytest.mark.cross_tenant
 async def test_publish_and_list_rbac_and_cross_tenant(
     client: AsyncClient, admin: User, recruiter: User, reviewer: User
 ) -> None:
@@ -770,6 +801,12 @@ async def test_publish_and_list_rbac_and_cross_tenant(
     )
     assert res_rev_get.status_code == 403
 
+    res_rev_status = await client.get(
+        f"/api/jobs/{job_id}/channels/facebook",
+        headers=reviewer.headers,
+    )
+    assert res_rev_status.status_code == 403
+
     # 2. Other tenant is 404
     other_admin = make_user("COMPANY_ADMIN")
     res_other_post = await client.post(
@@ -785,6 +822,42 @@ async def test_publish_and_list_rbac_and_cross_tenant(
     )
     assert res_other_get.status_code == 404
 
+    res_other_status = await client.get(
+        f"/api/jobs/{job_id}/channels/facebook",
+        headers=other_admin.headers,
+    )
+    assert res_other_status.status_code == 404
+
+
+async def test_publish_rejected_when_web_base_url_missing(
+    client: AsyncClient, admin: User, recruiter: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _connect_page(admin)
+    job_id, _ = _make_job(recruiter)
+    monkeypatch.setenv("WEB_BASE_URL", "")
+
+    res = await client.post(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "Valid job ad"},
+    )
+    assert res.status_code == 503
+    assert res.json()["detail"]["code"] == "CONFIG_ERROR"
+
+
+async def test_publish_rejected_when_message_whitespace_only(
+    client: AsyncClient, admin: User, recruiter: User
+) -> None:
+    _connect_page(admin)
+    job_id, _ = _make_job(recruiter)
+
+    res = await client.post(
+        f"/api/jobs/{job_id}/channel-posts",
+        headers=recruiter.headers,
+        json={"message": "   \n\t  "},
+    )
+    assert res.status_code == 422
+
 
 async def test_disconnect_retains_channel_posts(
     client: AsyncClient, admin: User, recruiter: User, fake_adapter: FakeFacebookAdapter
@@ -799,6 +872,7 @@ async def test_disconnect_retains_channel_posts(
         json={"message": "Permanent post"},
     )
     assert res.status_code == 201
+    assert "page-token-secret-999" not in res.text
 
     # 2. Company Admin disconnects Facebook Page
     del_res = await client.delete("/api/channels/facebook", headers=admin.headers)
@@ -811,6 +885,7 @@ async def test_disconnect_retains_channel_posts(
     assert len(posts) == 1
     assert posts[0]["body"] == "Permanent post"
     assert posts[0]["target_id"] == "page-persist"
+    assert "page-token-secret-999" not in list_res.text
 
     # Status shows connected=False but posts are still returned
     status_res = await client.get(
@@ -820,3 +895,4 @@ async def test_disconnect_retains_channel_posts(
     status_data = status_res.json()
     assert status_data["connected"] is False
     assert len(status_data["posts"]) == 1
+    assert "page-token-secret-999" not in status_res.text

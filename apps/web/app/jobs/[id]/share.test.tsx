@@ -4,8 +4,9 @@ import { describe, expect, test } from "vitest";
 
 import type { Locale } from "../../../i18n/locale";
 import { CATALOGS } from "../../../i18n/messages";
+import type { Translator } from "../../../i18n/messages";
 import type { Job } from "../criteria";
-import { type FacebookJobChannelStatus, JobAdSection } from "./share";
+import { type FacebookJobChannelStatus, JobAdSection, getPublishErrorMessage } from "./share";
 
 const dummyJob: Job = {
   id: "job-1",
@@ -165,5 +166,34 @@ describe("JobAdSection component", () => {
     expect(html).toContain("Bài viết đã đăng");
     expect(html).toContain("Nguyễn Văn A");
     expect(html).toContain("Xem bài viết");
+  });
+
+  test("maps error codes to localized strings", () => {
+    const tEn = ((key: string) =>
+      (CATALOGS.en.jobShare as Record<string, string>)[key] ??
+      key) as unknown as Translator<"jobShare">;
+    const tVi = ((key: string) =>
+      (CATALOGS.vi.jobShare as Record<string, string>)[key] ??
+      key) as unknown as Translator<"jobShare">;
+
+    expect(getPublishErrorMessage(tEn, "TOKEN_EXPIRED")).toContain(
+      "Facebook Page session has expired",
+    );
+    expect(getPublishErrorMessage(tVi, "TOKEN_EXPIRED")).toContain(
+      "Phiên đăng nhập Facebook Page đã hết hạn",
+    );
+
+    expect(getPublishErrorMessage(tEn, "NOT_CONNECTED")).toContain(
+      "Facebook Page is not connected",
+    );
+    expect(getPublishErrorMessage(tVi, "NOT_CONNECTED")).toContain("Chưa kết nối Facebook Page");
+
+    expect(getPublishErrorMessage(tEn, "TIMEOUT")).toContain("Facebook request timed out");
+    expect(getPublishErrorMessage(tVi, "TIMEOUT")).toContain(
+      "Hết thời gian chờ phản hồi từ Facebook",
+    );
+
+    expect(getPublishErrorMessage(tEn, "UNKNOWN")).toContain("Failed to publish to Facebook Page");
+    expect(getPublishErrorMessage(tEn, null)).toBeNull();
   });
 });

@@ -19,7 +19,7 @@ import jwt
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -781,6 +781,13 @@ class ChannelPostResponse(BaseModel):
 class PublishFacebookPostRequest(BaseModel):
     message: str = Field(min_length=1)
 
+    @field_validator("message")
+    @classmethod
+    def validate_message_not_whitespace(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Message cannot be blank")
+        return v
+
 
 class FacebookJobChannelStatus(BaseModel):
     connected: bool
@@ -936,7 +943,12 @@ async def publish_facebook_post(
             detail={"code": "CONFIG_ERROR", "message": "Failed to decrypt Facebook access token"},
         ) from e
 
-    web_base = os.environ.get("WEB_BASE_URL", "").rstrip("/")
+    web_base = os.environ.get("WEB_BASE_URL", "").strip().rstrip("/")
+    if not web_base:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "CONFIG_ERROR", "message": "WEB_BASE_URL is not configured"},
+        )
     apply_url = f"{web_base}/apply/{job_row.public_slug}"
 
     try:
@@ -990,6 +1002,22 @@ async def publish_facebook_post(
             },
         )
     ).one()
+
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="channel_post.created",
+        entity_id=inserted.id,
+        before=None,
+        after={
+            "channel_post_id": str(inserted.id),
+            "channel": "FACEBOOK_PAGE",
+            "target_id": conn_row.external_id,
+            "external_post_id": post_result.external_post_id,
+        },
+        ip=auth.ip,
+    )
 
     poster_name = (
         await auth.db.execute(

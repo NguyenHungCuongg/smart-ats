@@ -269,6 +269,10 @@ def test_channel_post_models_validation() -> None:
     with pytest.raises(ValidationError):
         PublishFacebookPostRequest(message="")
 
+    # Whitespace-only message fails
+    with pytest.raises(ValidationError):
+        PublishFacebookPostRequest(message="   ")
+
     # Post response model
     now = datetime.now(UTC)
     post_id = uuid.uuid4()

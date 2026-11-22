@@ -52,6 +52,7 @@ AuditAction = Literal[
     "member.revoked",
     "channel_connection.connected",
     "channel_connection.disconnected",
+    "channel_post.created",
 ]
 ACTIONS: frozenset[str] = frozenset(get_args(AuditAction))
 

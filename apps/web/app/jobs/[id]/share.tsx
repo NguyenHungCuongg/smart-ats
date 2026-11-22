@@ -4,7 +4,9 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import type { Locale } from "../../../i18n/locale";
+import type { Translator } from "../../../i18n/messages";
 import { apiFetch } from "../../auth";
+import { Badge } from "../../badge";
 import type { Job } from "../criteria";
 import {
   buildFacebookShareUrl,
@@ -33,6 +35,27 @@ export interface FacebookJobChannelStatus {
   page_name?: string | null;
   page_id?: string | null;
   posts: ChannelPost[];
+}
+
+export function getPublishErrorMessage(
+  t: Translator<"jobShare">,
+  code: string | null,
+): string | null {
+  if (!code) return null;
+  switch (code) {
+    case "TOKEN_EXPIRED":
+      return t("errorTokenExpired");
+    case "NOT_CONNECTED":
+      return t("errorNotConnected");
+    case "TIMEOUT":
+      return t("errorTimeout");
+    case "JOB_NOT_PUBLISHED":
+      return t("disabledNotPublished");
+    case "PUBLIC_APPLY_DISABLED":
+      return t("disabledPublicApplyOff");
+    default:
+      return t("errorFailed");
+  }
 }
 
 export function JobAdSection({
@@ -73,9 +96,11 @@ export function JobAdSection({
   );
   const [loadingStatus, setLoadingStatus] = useState(initialChannelStatus === undefined);
   const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishErrorCode, setPublishErrorCode] = useState<string | null>(null);
   const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
   const [isAlreadyPublished, setIsAlreadyPublished] = useState(false);
+
+  const publishError = getPublishErrorMessage(t, publishErrorCode);
 
   useEffect(() => {
     if (initialChannelStatus !== undefined) return;
@@ -97,50 +122,43 @@ export function JobAdSection({
   }, [job.id, initialChannelStatus]);
 
   async function publishToFacebook() {
-    if (!isReady || publishing) return;
+    if (!isReady || publishing || !content.trim()) return;
     setPublishing(true);
-    setPublishError(null);
+    setPublishErrorCode(null);
     setPublishSuccess(null);
 
-    const res = await apiFetch(`/api/jobs/${job.id}/channel-posts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: content }),
-    });
+    try {
+      const res = await apiFetch(`/api/jobs/${job.id}/channel-posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: content }),
+      });
 
-    setPublishing(false);
-    if (res.status === 401) {
-      window.location.replace("/login");
-      return;
-    }
+      if (res.status === 401) {
+        window.location.replace("/login");
+        return;
+      }
 
-    if (res.ok) {
-      const data: ChannelPost = await res.json();
-      setIsAlreadyPublished(res.status === 200);
-      setPublishSuccess(data.url);
-      setChannelStatus((prev) => ({
-        connected: prev?.connected ?? true,
-        page_name: prev?.page_name ?? null,
-        page_id: prev?.page_id ?? null,
-        posts: [data, ...(prev?.posts.filter((p) => p.id !== data.id) ?? [])],
-      }));
-      return;
-    }
+      if (res.ok) {
+        const data: ChannelPost = await res.json();
+        setIsAlreadyPublished(res.status === 200);
+        setPublishSuccess(data.url);
+        setChannelStatus((prev) => ({
+          connected: prev?.connected ?? true,
+          page_name: prev?.page_name ?? null,
+          page_id: prev?.page_id ?? null,
+          posts: [data, ...(prev?.posts.filter((p) => p.id !== data.id) ?? [])],
+        }));
+        return;
+      }
 
-    const err = await res.json().catch(() => null);
-    const code = err?.detail?.code ?? err?.detail;
-    if (code === "TOKEN_EXPIRED") {
-      setPublishError(t("errorTokenExpired"));
-    } else if (code === "NOT_CONNECTED") {
-      setPublishError(t("errorNotConnected"));
-    } else if (code === "TIMEOUT") {
-      setPublishError(t("errorTimeout"));
-    } else if (code === "JOB_NOT_PUBLISHED") {
-      setPublishError(t("disabledNotPublished"));
-    } else if (code === "PUBLIC_APPLY_DISABLED") {
-      setPublishError(t("disabledPublicApplyOff"));
-    } else {
-      setPublishError(t("errorFailed"));
+      const err = await res.json().catch(() => null);
+      const code = err?.detail?.code ?? err?.detail ?? "FAILED";
+      setPublishErrorCode(code);
+    } catch {
+      setPublishErrorCode("FAILED");
+    } finally {
+      setPublishing(false);
     }
   }
 
@@ -224,9 +242,7 @@ export function JobAdSection({
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold">{t("facebookPage")}</span>
             {channelStatus?.connected && channelStatus.page_name && (
-              <span className="rounded-full bg-accent-violet/10 px-2.5 py-0.5 text-xs font-medium text-accent-violet">
-                {t("connectedPage", { name: channelStatus.page_name })}
-              </span>
+              <Badge>{t("connectedPage", { name: channelStatus.page_name })}</Badge>
             )}
           </div>
         </div>
@@ -241,7 +257,7 @@ export function JobAdSection({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              disabled={!isReady || publishing}
+              disabled={!isReady || publishing || !content.trim()}
               onClick={publishToFacebook}
               className="button-outline text-sm font-medium whitespace-nowrap"
             >
@@ -259,7 +275,7 @@ export function JobAdSection({
         {publishSuccess && (
           <div
             role="status"
-            className="rounded flex flex-col gap-1 bg-accent-violet/10 p-2 text-xs text-accent-violet"
+            className="flex flex-col gap-1 rounded-xs bg-accent-violet/10 p-2 text-xs text-accent-violet"
           >
             <span>{isAlreadyPublished ? t("alreadyPublished") : t("publishedSuccess")}</span>
             <a
@@ -275,14 +291,14 @@ export function JobAdSection({
 
         {channelStatus?.posts && channelStatus.posts.length > 0 && (
           <div className="mt-2 flex flex-col gap-2 border-t border-hairline-cloud pt-2 dark:border-hairline-violet">
-            <span className="text-text-mid text-xs font-medium tracking-wider uppercase">
+            <span className="text-xs font-medium tracking-wider text-accent-violet-mid uppercase">
               {t("channelPostsTitle")}
             </span>
             <ul className="flex flex-col gap-2">
               {channelStatus.posts.map((post) => (
                 <li
                   key={post.id}
-                  className="rounded flex flex-wrap items-center justify-between gap-2 border border-hairline-cloud/50 bg-surface-night/10 p-2 text-xs dark:border-hairline-violet/50"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xs border border-hairline-cloud/50 bg-surface-night/10 p-2 text-xs dark:border-hairline-violet/50"
                 >
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2">
