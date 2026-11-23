@@ -10,7 +10,7 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient, Response
 
-from app import jobs, pipeline, scoring_runs, uploads
+from app import channels, jobs, pipeline, scoring_runs, uploads
 from app.main import app
 from tests.test_jobs import CONFIRMATION, User, make_user
 from tests.test_scoring_runs import make_job, query
@@ -246,6 +246,7 @@ WRITES: dict[str, tuple[str, str, dict[str, Any]]] = {
         f"/scoring-runs/{uuid.uuid4()}/results/{uuid.uuid4()}/retry",
         {},
     ),
+    "publish channel post": ("POST", "/channel-posts", {"json": {"message": "Job text"}}),
 }
 
 
@@ -296,6 +297,11 @@ def test_every_write_under_a_job_takes_a_writer_dependency() -> None:
         (method, route.path): route
         for module in (jobs, uploads, scoring_runs, pipeline)
         for route in module.router.routes
+        if isinstance(route, APIRoute)
+        for method in route.methods or ()
+    } | {
+        (method, route.path): route
+        for route in channels.jobs_router.routes
         if isinstance(route, APIRoute)
         for method in route.methods or ()
     }

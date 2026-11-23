@@ -1,9 +1,12 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Locale } from "../../../i18n/locale";
+import type { Translator } from "../../../i18n/messages";
+import { apiFetch } from "../../auth";
+import { Badge } from "../../badge";
 import type { Job } from "../criteria";
 import {
   buildFacebookShareUrl,
@@ -14,7 +17,56 @@ import {
 } from "../share";
 import { clientPublicApplyUrl, useCopied } from "./clipboard";
 
-export function JobAdSection({ job, facebookAppId }: { job: Job; facebookAppId?: string }) {
+export interface ChannelPost {
+  id: string;
+  job_id: string;
+  channel: string;
+  target_id: string;
+  external_post_id: string;
+  url: string;
+  body: string;
+  posted_by: string;
+  posted_by_name: string;
+  posted_at: string;
+}
+
+export interface FacebookJobChannelStatus {
+  connected: boolean;
+  page_name?: string | null;
+  page_id?: string | null;
+  posts: ChannelPost[];
+}
+
+export function getPublishErrorMessage(
+  t: Translator<"jobShare">,
+  code: string | null,
+): string | null {
+  if (!code) return null;
+  switch (code) {
+    case "TOKEN_EXPIRED":
+      return t("errorTokenExpired");
+    case "NOT_CONNECTED":
+      return t("errorNotConnected");
+    case "TIMEOUT":
+      return t("errorTimeout");
+    case "JOB_NOT_PUBLISHED":
+      return t("disabledNotPublished");
+    case "PUBLIC_APPLY_DISABLED":
+      return t("disabledPublicApplyOff");
+    default:
+      return t("errorFailed");
+  }
+}
+
+export function JobAdSection({
+  job,
+  facebookAppId,
+  initialChannelStatus,
+}: {
+  job: Job;
+  facebookAppId?: string;
+  initialChannelStatus?: FacebookJobChannelStatus;
+}) {
   const t = useTranslations("jobShare");
   const tJobAd = useTranslations("jobAd");
   const locale = useLocale() as Locale;
@@ -39,6 +91,77 @@ export function JobAdSection({ job, facebookAppId }: { job: Job; facebookAppId?:
   const appId =
     facebookAppId !== undefined ? facebookAppId : process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
 
+  const [channelStatus, setChannelStatus] = useState<FacebookJobChannelStatus | null>(
+    initialChannelStatus ?? null,
+  );
+  const [loadingStatus, setLoadingStatus] = useState(initialChannelStatus === undefined);
+  const [publishing, setPublishing] = useState(false);
+  const [publishErrorCode, setPublishErrorCode] = useState<string | null>(null);
+  const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
+  const [isAlreadyPublished, setIsAlreadyPublished] = useState(false);
+
+  const publishError = getPublishErrorMessage(t, publishErrorCode);
+
+  useEffect(() => {
+    if (initialChannelStatus !== undefined) return;
+    let active = true;
+    apiFetch(`/api/jobs/${job.id}/channels/facebook`).then(async (res) => {
+      if (!active) return;
+      if (res.status === 401) {
+        window.location.replace("/login");
+        return;
+      }
+      if (res.ok) {
+        setChannelStatus(await res.json());
+      }
+      setLoadingStatus(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [job.id, initialChannelStatus]);
+
+  async function publishToFacebook() {
+    if (!isReady || publishing || !content.trim()) return;
+    setPublishing(true);
+    setPublishErrorCode(null);
+    setPublishSuccess(null);
+
+    try {
+      const res = await apiFetch(`/api/jobs/${job.id}/channel-posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: content }),
+      });
+
+      if (res.status === 401) {
+        window.location.replace("/login");
+        return;
+      }
+
+      if (res.ok) {
+        const data: ChannelPost = await res.json();
+        setIsAlreadyPublished(res.status === 200);
+        setPublishSuccess(data.url);
+        setChannelStatus((prev) => ({
+          connected: prev?.connected ?? true,
+          page_name: prev?.page_name ?? null,
+          page_id: prev?.page_id ?? null,
+          posts: [data, ...(prev?.posts.filter((p) => p.id !== data.id) ?? [])],
+        }));
+        return;
+      }
+
+      const err = await res.json().catch(() => null);
+      const code = err?.detail?.code ?? err?.detail ?? "FAILED";
+      setPublishErrorCode(code);
+    } catch {
+      setPublishErrorCode("FAILED");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   function shareLinkedIn() {
     if (!publicUrl) return;
     window.open(buildLinkedInShareUrl(publicUrl), "_blank", "noopener,noreferrer");
@@ -56,7 +179,7 @@ export function JobAdSection({ job, facebookAppId }: { job: Job; facebookAppId?:
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-hairline-cloud bg-surface-night/10 p-4 dark:border-hairline-violet">
+    <div className="flex flex-col gap-4 rounded-lg border border-hairline-cloud bg-surface-night/10 p-4 dark:border-hairline-violet">
       <div className="flex flex-col gap-1">
         <span className="font-semibold">{t("title")}</span>
         <p className="text-sm opacity-80">{t("description")}</p>
@@ -111,6 +234,103 @@ export function JobAdSection({ job, facebookAppId }: { job: Job; facebookAppId?:
         >
           {t("shareX")}
         </button>
+      </div>
+
+      {/* Facebook Page Channel Section */}
+      <div className="flex flex-col gap-3 rounded-md border border-hairline-cloud bg-surface-night/5 p-3 dark:border-hairline-violet">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{t("facebookPage")}</span>
+            {channelStatus?.connected && channelStatus.page_name && (
+              <Badge>{t("connectedPage", { name: channelStatus.page_name })}</Badge>
+            )}
+          </div>
+        </div>
+
+        {!loadingStatus && channelStatus && !channelStatus.connected && (
+          <div className="flex flex-col gap-1 border-l-2 border-accent-pink pl-2 text-sm">
+            <p>{t("notConnected")}</p>
+          </div>
+        )}
+
+        {channelStatus?.connected && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={!isReady || publishing || !content.trim()}
+              onClick={publishToFacebook}
+              className="button-outline text-sm font-medium whitespace-nowrap"
+            >
+              {publishing ? t("publishing") : t("publishFacebook")}
+            </button>
+          </div>
+        )}
+
+        {publishError && (
+          <p role="alert" className="border-l-2 border-accent-pink pl-2 text-xs">
+            {publishError}
+          </p>
+        )}
+
+        {publishSuccess && (
+          <div
+            role="status"
+            className="flex flex-col gap-1 rounded-xs bg-accent-violet/10 p-2 text-xs text-accent-violet"
+          >
+            <span>{isAlreadyPublished ? t("alreadyPublished") : t("publishedSuccess")}</span>
+            <a
+              href={publishSuccess}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium underline hover:opacity-80"
+            >
+              {t("viewPost")} →
+            </a>
+          </div>
+        )}
+
+        {channelStatus?.posts && channelStatus.posts.length > 0 && (
+          <div className="mt-2 flex flex-col gap-2 border-t border-hairline-cloud pt-2 dark:border-hairline-violet">
+            <span className="text-xs font-medium tracking-wider text-accent-violet-mid uppercase">
+              {t("channelPostsTitle")}
+            </span>
+            <ul className="flex flex-col gap-2">
+              {channelStatus.posts.map((post) => (
+                <li
+                  key={post.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xs border border-hairline-cloud/50 bg-surface-night/10 p-2 text-xs dark:border-hairline-violet/50"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">
+                        {post.channel === "FACEBOOK_PAGE" ? t("facebookPage") : post.channel}
+                      </span>
+                      <span className="opacity-70">
+                        {t("postedBy", {
+                          name: post.posted_by_name,
+                          time: new Date(post.posted_at).toLocaleDateString(locale, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }),
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  <a
+                    href={post.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="button-outline text-xs"
+                  >
+                    {t("viewPost")}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

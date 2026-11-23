@@ -250,3 +250,55 @@ def test_graph_api_adapter_handles_non_json_error_and_happy_paths(
     post = adapter.publish_feed_post("p-1", "page-tok-1", "We are hiring!", "https://ats/apply/j")
     assert post.external_post_id == "p-1_99"
     assert post.url == "https://www.facebook.com/p-1_99"
+
+
+def test_channel_post_models_validation() -> None:
+    from pydantic import ValidationError
+
+    from app.channels import (
+        ChannelPostResponse,
+        FacebookJobChannelStatus,
+        PublishFacebookPostRequest,
+    )
+
+    # Valid request
+    req = PublishFacebookPostRequest(message="Hello World")
+    assert req.message == "Hello World"
+
+    # Empty message fails
+    with pytest.raises(ValidationError):
+        PublishFacebookPostRequest(message="")
+
+    # Whitespace-only message fails
+    with pytest.raises(ValidationError):
+        PublishFacebookPostRequest(message="   ")
+
+    # Post response model
+    now = datetime.now(UTC)
+    post_id = uuid.uuid4()
+    job_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    resp = ChannelPostResponse(
+        id=post_id,
+        job_id=job_id,
+        channel="FACEBOOK_PAGE",
+        target_id="p-1",
+        external_post_id="p-1_99",
+        url="https://www.facebook.com/p-1_99",
+        body="Hello World",
+        posted_by=user_id,
+        posted_by_name="Alice",
+        posted_at=now,
+    )
+    assert resp.url == "https://www.facebook.com/p-1_99"
+    assert "token" not in resp.model_dump()
+
+    # Status model
+    status = FacebookJobChannelStatus(
+        connected=True,
+        page_name="Tech Page",
+        page_id="p-1",
+        posts=[resp],
+    )
+    assert status.connected is True
+    assert len(status.posts) == 1

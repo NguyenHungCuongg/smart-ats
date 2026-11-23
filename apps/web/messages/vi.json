@@ -440,7 +440,22 @@
     "shareFacebook": "Chia sẻ Facebook",
     "shareX": "Chia sẻ X",
     "disabledNotPublished": "Job cần ở trạng thái Đang tuyển để đăng và chia sẻ tin.",
-    "disabledPublicApplyOff": "Public Apply Link đang tắt. Vui lòng bật link để đăng và chia sẻ tin."
+    "disabledPublicApplyOff": "Public Apply Link đang tắt. Vui lòng bật link để đăng và chia sẻ tin.",
+    "facebookPage": "Facebook Page",
+    "connectedPage": "Trang: {name}",
+    "notConnected": "Chưa kết nối Facebook Page. Cần Company Admin kết nối Trang trong Cài đặt.",
+    "publishFacebook": "Đăng lên Facebook Page",
+    "publishing": "Đang đăng...",
+    "publishedSuccess": "Đã đăng lên Facebook Page thành công!",
+    "alreadyPublished": "Job này đã được đăng lên Facebook Page trước đó.",
+    "viewPost": "Xem bài viết",
+    "channelPostsTitle": "Bài viết đã đăng",
+    "noPosts": "Chưa có bài đăng nào.",
+    "postedBy": "Đăng bởi {name} • {time}",
+    "errorTokenExpired": "Phiên đăng nhập Facebook Page đã hết hạn hoặc bị thu hồi. Vui lòng nhờ Company Admin kết nối lại trong Cài đặt.",
+    "errorNotConnected": "Chưa kết nối Facebook Page. Vui lòng nhờ Company Admin kết nối Trang trong Cài đặt.",
+    "errorTimeout": "Hết thời gian chờ phản hồi từ Facebook. Vui lòng thử lại.",
+    "errorFailed": "Đăng bài lên Facebook Page thất bại. Vui lòng thử lại."
   },
   "activity": {
     "title": "Hoạt động",

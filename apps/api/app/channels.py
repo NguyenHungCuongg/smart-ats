@@ -12,14 +12,14 @@ import urllib.parse
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 import httpx
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -27,8 +27,10 @@ from starlette.concurrency import run_in_threadpool
 from app import audit
 from app.auth import Auth, Authenticated, _redis
 from app.db import async_tenant_session
+from app.jobs import JobManager, LockedJob
 
 router = APIRouter(prefix="/api/channels/facebook")
+jobs_router = APIRouter(prefix="/api/jobs", tags=["channels"])
 
 OAUTH_STATE_COOKIE = "fb_oauth_state"
 OAUTH_STATE_TTL = timedelta(minutes=10)
@@ -758,3 +760,282 @@ async def disconnect_facebook_page(
             ip=admin.ip,
         )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Channel 03: Channel Posts (FR-A3.5, ERD §6, SAD §5.6) ---
+
+
+class ChannelPostResponse(BaseModel):
+    id: uuid.UUID
+    job_id: uuid.UUID
+    channel: Literal["FACEBOOK_PAGE"] = "FACEBOOK_PAGE"
+    target_id: str
+    external_post_id: str
+    url: str
+    body: str
+    posted_by: uuid.UUID
+    posted_by_name: str
+    posted_at: datetime
+
+
+class PublishFacebookPostRequest(BaseModel):
+    message: str = Field(min_length=1)
+
+    @field_validator("message")
+    @classmethod
+    def validate_message_not_whitespace(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Message cannot be blank")
+        return v
+
+
+class FacebookJobChannelStatus(BaseModel):
+    connected: bool
+    page_name: str | None = None
+    page_id: str | None = None
+    posts: list[ChannelPostResponse] = []
+
+
+def _row_to_channel_post(row: Any) -> ChannelPostResponse:
+    return ChannelPostResponse(
+        id=row.id,
+        job_id=row.job_id,
+        channel=row.channel,
+        target_id=row.target_id,
+        external_post_id=row.external_post_id,
+        url=row.url,
+        body=row.body,
+        posted_by=row.posted_by,
+        posted_by_name=row.posted_by_name,
+        posted_at=row.posted_at,
+    )
+
+
+@jobs_router.get("/{job_id}/channel-posts")
+async def list_channel_posts(
+    job_id: uuid.UUID,
+    auth: JobManager,
+) -> list[ChannelPostResponse]:
+    rows = (
+        await auth.db.execute(
+            text("""
+                SELECT p.id, p.job_id, p.channel, p.target_id, p.external_post_id,
+                       p.url, p.body, p.posted_by, u.full_name AS posted_by_name, p.posted_at
+                FROM channel_posts p
+                JOIN users u ON u.tenant_id = p.tenant_id AND u.id = p.posted_by
+                WHERE p.job_id = :job_id
+                ORDER BY p.posted_at DESC
+            """),
+            {"job_id": job_id},
+        )
+    ).all()
+    return [_row_to_channel_post(r) for r in rows]
+
+
+@jobs_router.get("/{job_id}/channels/facebook")
+async def get_job_facebook_channel(
+    job_id: uuid.UUID,
+    auth: JobManager,
+) -> FacebookJobChannelStatus:
+    conn = (
+        await auth.db.execute(
+            text(
+                "SELECT external_id, name FROM channel_connections WHERE channel = 'FACEBOOK_PAGE'"
+            )
+        )
+    ).one_or_none()
+    posts = await list_channel_posts(job_id, auth)
+    return FacebookJobChannelStatus(
+        connected=conn is not None,
+        page_name=conn.name if conn is not None else None,
+        page_id=conn.external_id if conn is not None else None,
+        posts=posts,
+    )
+
+
+@jobs_router.post("/{job_id}/channel-posts", status_code=status.HTTP_201_CREATED)
+async def publish_facebook_post(
+    job_id: uuid.UUID,
+    body: PublishFacebookPostRequest,
+    auth: LockedJob,
+    response: Response,
+) -> ChannelPostResponse:
+    # 1. Verify Job status & public apply preconditions (row locked FOR UPDATE by LockedJob)
+    job_row = (
+        await auth.db.execute(
+            text("""
+                SELECT status, public_apply_enabled, public_slug
+                FROM jobs
+                WHERE id = :id
+            """),
+            {"id": job_id},
+        )
+    ).one_or_none()
+
+    if job_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+
+    if job_row.status != "PUBLISHED":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "JOB_NOT_PUBLISHED",
+                "message": "Job must be published to publish to Facebook Page",
+            },
+        )
+
+    if not job_row.public_apply_enabled or not job_row.public_slug:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "PUBLIC_APPLY_DISABLED",
+                "message": "Public apply link must be enabled to publish to Facebook Page",
+            },
+        )
+
+    # 2. Check Facebook Page connection
+    conn_row = (
+        await auth.db.execute(
+            text("""
+                SELECT external_id, name, token_ciphertext
+                FROM channel_connections
+                WHERE channel = 'FACEBOOK_PAGE'
+            """)
+        )
+    ).one_or_none()
+
+    if conn_row is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "NOT_CONNECTED",
+                "message": "Facebook Page is not connected for this Workspace",
+            },
+        )
+
+    # 3. Check if already posted for this job and page
+    existing_post = (
+        await auth.db.execute(
+            text("""
+                SELECT p.id, p.job_id, p.channel, p.target_id, p.external_post_id,
+                       p.url, p.body, p.posted_by, u.full_name AS posted_by_name, p.posted_at
+                FROM channel_posts p
+                JOIN users u ON u.tenant_id = p.tenant_id AND u.id = p.posted_by
+                WHERE p.job_id = :job_id
+                  AND p.channel = 'FACEBOOK_PAGE'
+                  AND p.target_id = :target_id
+            """),
+            {"job_id": job_id, "target_id": conn_row.external_id},
+        )
+    ).one_or_none()
+
+    if existing_post is not None:
+        response.status_code = status.HTTP_200_OK
+        return _row_to_channel_post(existing_post)
+
+    # 4. Decrypt token and call Facebook adapter
+    token_key = os.environ.get("CHANNEL_TOKEN_KEY", "").strip()
+    try:
+        page_token = decrypt_token(conn_row.token_ciphertext, token_key)
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "CONFIG_ERROR", "message": "Failed to decrypt Facebook access token"},
+        ) from e
+
+    web_base = os.environ.get("WEB_BASE_URL", "").strip().rstrip("/")
+    if not web_base:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "CONFIG_ERROR", "message": "WEB_BASE_URL is not configured"},
+        )
+    apply_url = f"{web_base}/apply/{job_row.public_slug}"
+
+    try:
+        post_result = await run_in_threadpool(
+            adapter.publish_feed_post,
+            page_id=conn_row.external_id,
+            page_access_token=page_token,
+            message=body.message,
+            link=apply_url,
+        )
+    except FacebookTokenError as e:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "TOKEN_EXPIRED",
+                "message": str(e) or "Facebook token is invalid or expired",
+            },
+        ) from e
+    except FacebookGraphError as e:
+        if "timed out" in str(e).lower():
+            raise HTTPException(
+                status.HTTP_504_GATEWAY_TIMEOUT,
+                detail={"code": "TIMEOUT", "message": str(e)},
+            ) from e
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "GRAPH_ERROR", "message": str(e)},
+        ) from e
+
+    # 5. Insert Channel Post in the same transaction
+    inserted = (
+        await auth.db.execute(
+            text("""
+                INSERT INTO channel_posts (
+                  id, tenant_id, job_id, channel, target_id,
+                  external_post_id, url, body, posted_by, posted_at
+                ) VALUES (
+                  uuidv7(), :tenant_id, :job_id, 'FACEBOOK_PAGE', :target_id,
+                  :external_post_id, :url, :body, :posted_by, now()
+                )
+                RETURNING id, posted_at
+            """),
+            {
+                "tenant_id": auth.tenant_id,
+                "job_id": job_id,
+                "target_id": conn_row.external_id,
+                "external_post_id": post_result.external_post_id,
+                "url": post_result.url,
+                "body": body.message,
+                "posted_by": auth.user_id,
+            },
+        )
+    ).one()
+
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="channel_post.created",
+        entity_id=inserted.id,
+        before=None,
+        after={
+            "channel_post_id": str(inserted.id),
+            "channel": "FACEBOOK_PAGE",
+            "target_id": conn_row.external_id,
+            "external_post_id": post_result.external_post_id,
+        },
+        ip=auth.ip,
+    )
+
+    poster_name = (
+        await auth.db.execute(
+            text("SELECT full_name FROM users WHERE id = :id"),
+            {"id": auth.user_id},
+        )
+    ).scalar_one()
+
+    response.status_code = status.HTTP_201_CREATED
+    return ChannelPostResponse(
+        id=inserted.id,
+        job_id=job_id,
+        channel="FACEBOOK_PAGE",
+        target_id=conn_row.external_id,
+        external_post_id=post_result.external_post_id,
+        url=post_result.url,
+        body=body.message,
+        posted_by=auth.user_id,
+        posted_by_name=poster_name,
+        posted_at=inserted.posted_at,
+    )
