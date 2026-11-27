@@ -295,3 +295,64 @@ test("formats scoring and application email actions in Vietnamese and English", 
   expect(render(interviewEmailSent, "vi")).toBe("Hệ thống đã gửi email mời phỏng vấn.");
   expect(render(interviewEmailSent, "en")).toBe("System sent the interview invitation email.");
 });
+
+test("formats all seven Workspace, Invitation, and Member actions in Vietnamese and English", () => {
+  const created = makeEntry("invitation.created", {
+    after: { invitation_id: "inv1", role: "RECRUITER" },
+  });
+  expect(render(created, "vi")).toBe("Nguyễn Văn An đã tạo lời mời với vai trò Recruiter.");
+  expect(render(created, "en")).toBe("Nguyễn Văn An created an invitation as Recruiter.");
+
+  const revoked = makeEntry("invitation.revoked", {
+    before: { role: "REVIEWER", status: "PENDING" },
+    after: { invitation_id: "inv1", status: "REVOKED" },
+  });
+  expect(render(revoked, "vi")).toBe("Nguyễn Văn An đã thu hồi lời mời.");
+  expect(render(revoked, "en")).toBe("Nguyễn Văn An revoked an invitation.");
+
+  const accepted = makeEntry("invitation.accepted", {
+    actor: { id: "u2", full_name: "Lê Thị Hoa" },
+    before: { status: "PENDING" },
+    after: { invitation_id: "inv2", role: "REVIEWER", status: "ACCEPTED" },
+  });
+  expect(render(accepted, "vi")).toBe("Lê Thị Hoa đã chấp nhận lời mời với vai trò Reviewer.");
+  expect(render(accepted, "en")).toBe("Lê Thị Hoa accepted the invitation as Reviewer.");
+
+  const emailSent = makeEntry("invitation.email_sent", {
+    actor_type: "SYSTEM",
+    actor: null,
+    before: { status: "QUEUED" },
+    after: { email_id: "em1", invitation_id: "inv2", status: "SENT" },
+  });
+  expect(render(emailSent, "vi")).toBe("Hệ thống đã gửi email lời mời thành viên.");
+  expect(render(emailSent, "en")).toBe("System sent the Member invitation email.");
+
+  const emailFailed = makeEntry("invitation.email_failed", {
+    actor_type: "SYSTEM",
+    actor: null,
+    before: { status: "QUEUED" },
+    after: { email_id: "em2", invitation_id: "inv3", status: "FAILED" },
+  });
+  expect(render(emailFailed, "vi")).toBe("Hệ thống gửi email lời mời thành viên thất bại.");
+  expect(render(emailFailed, "en")).toBe("System failed to send the Member invitation email.");
+
+  const roleChanged = makeEntry("member.role_changed", {
+    before: { role: "REVIEWER" },
+    after: { role: "COMPANY_ADMIN" },
+  });
+  expect(render(roleChanged, "vi")).toBe(
+    "Nguyễn Văn An đã đổi vai trò thành viên từ Reviewer sang Company Admin.",
+  );
+  expect(render(roleChanged, "en")).toBe(
+    "Nguyễn Văn An changed a Member's role from Reviewer to Company Admin.",
+  );
+
+  const memberRevoked = makeEntry("member.revoked", {
+    before: { is_active: true, role: "RECRUITER" },
+    after: { is_active: false },
+  });
+  expect(render(memberRevoked, "vi")).toBe(
+    "Nguyễn Văn An đã thu hồi quyền truy cập của thành viên.",
+  );
+  expect(render(memberRevoked, "en")).toBe("Nguyễn Văn An revoked a Member's access.");
+});

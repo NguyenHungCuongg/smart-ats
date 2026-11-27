@@ -122,7 +122,7 @@ Phần không cần nhãn (workstream Nền tảng, cùng retry, idempotency và
 
 - ✅ Public Apply Link (FR-A3.4, #96).
 - 🔄 Đăng tin Đa kênh (FR-A3.5, #94): đã xong Meta app/Page (#95) và soạn Job Ad / share intent / Open Graph / `JobPosting` (#97); ⬜ kết nối và đăng lên Facebook Page (#98, #99).
-- Activity Timeline & Audit Log (FR-A3.3).
+- ✅ Activity Timeline & Audit Log (FR-A3.3, #127–#131; trang xem Audit Log toàn tenant cho Company Admin để ngoài phạm vi #127).
 - Comment, @mention, notification, Interview Score (FR-A2.2).
 - Bảo vệ dữ liệu: consent, job retention, xóa dữ liệu (FR-C1.5).
 - Bộ test Experiment 4 đầy đủ.

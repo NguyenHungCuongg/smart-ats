@@ -1,11 +1,13 @@
 """Audit Log foundation and Activity Timelines for Jobs and Applications (FR-A3.3, ERD §7)."""
 
 import json
+import secrets
 import smtplib
 import uuid
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from decimal import Decimal
+from email.message import EmailMessage
 from typing import Any, cast
 
 import httpx
@@ -25,6 +27,7 @@ from smart_ats_scoring.llm import LlmResult, Usage
 from tests.conftest import API_DIR
 from tests.test_apply import PDF_SAMPLE
 from tests.test_jobs import CONFIRMATION, JD, PARSED, FakeLlm, User, make_user
+from tests.test_members import token_in
 from tests.test_scoring_runs import (
     EMBEDDING_MODEL,
     MODEL,
@@ -1425,3 +1428,507 @@ async def test_application_email_sent_failed_and_stuck_audit_logs_without_email_
         dumped = json.dumps(tl, ensure_ascii=False)
         for secret in forbidden:
             assert secret not in dumped
+
+
+def _workspace_audit_rows(tenant_id: uuid.UUID, *entity_types: str) -> list[Any]:
+    types = list(entity_types or ("invitation", "member"))
+    with tenant_session(tenant_id) as session:
+        return list(
+            session.execute(
+                text(
+                    "SELECT action, actor_type, actor_user_id, entity_type, entity_id,"
+                    "  before, after, request_id, ip"
+                    " FROM audit_logs"
+                    " WHERE entity_type = ANY(CAST(:types AS text[]))"
+                    " ORDER BY created_at, id"
+                ),
+                {"types": types},
+            ).all()
+        )
+
+
+@pytest.mark.cross_tenant
+async def test_invitation_lifecycle_audit_logs_and_refused_writes(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WEB_BASE_URL", "https://ats.example")
+    monkeypatch.setenv("EMAIL_FROM", "Smart ATS <no-reply@ats.example>")
+    email_enqueued: list[tuple[str, ...]] = []
+    monkeypatch.setattr(emails.send_email, "delay", lambda *args: email_enqueued.append(args))
+    delivered: list[EmailMessage] = []
+    monkeypatch.setattr(emails, "deliver", delivered.append)
+
+    admin = make_user("COMPANY_ADMIN")
+    recruiter = make_user("RECRUITER", admin.tenant_id)
+    other_admin = make_user("COMPANY_ADMIN")
+
+    secret_email_1 = f"invitee.one.{uuid.uuid4().hex}@example.com"
+    secret_email_2 = f"invitee.two.{uuid.uuid4().hex}@example.com"
+    secret_password = "super-secret-invitation-password!"
+
+    # 1. Create first invitation -> invitation.created (USER)
+    inv1_res = await client.post(
+        "/api/invitations",
+        headers=admin.headers,
+        json={"email": secret_email_1, "role": "REVIEWER"},
+    )
+    assert inv1_res.status_code == 201
+    inv1_id = inv1_res.json()["id"]
+
+    # 2. Re-invite same email -> revokes inv1 and creates inv2
+    inv2_res = await client.post(
+        "/api/invitations",
+        headers=admin.headers,
+        json={"email": secret_email_1, "role": "RECRUITER"},
+    )
+    assert inv2_res.status_code == 201
+    inv2_id = inv2_res.json()["id"]
+
+    # Deliver inv2 email so we can extract its token for acceptance.
+    emails.send_email.apply(args=email_enqueued.pop(-1)).get()
+    inv2_token = token_in(delivered[-1])
+
+    # 3. Direct revoke of another pending invitation -> invitation.revoked (USER)
+    inv3_res = await client.post(
+        "/api/invitations",
+        headers=admin.headers,
+        json={"email": secret_email_2, "role": "REVIEWER"},
+    )
+    assert inv3_res.status_code == 201
+    inv3_id = inv3_res.json()["id"]
+
+    # Cross-tenant revoke (404) & non-admin revoke (403) leave no audit rows.
+    assert (
+        await client.delete(f"/api/invitations/{inv3_id}", headers=other_admin.headers)
+    ).status_code == 404
+    assert (
+        await client.delete(f"/api/invitations/{inv3_id}", headers=recruiter.headers)
+    ).status_code == 403
+    assert (
+        await client.delete(f"/api/invitations/{inv3_id}", headers=admin.headers)
+    ).status_code == 204
+    # Revoking an already-revoked invitation (404) leaves no duplicate audit row.
+    assert (
+        await client.delete(f"/api/invitations/{inv3_id}", headers=admin.headers)
+    ).status_code == 404
+
+    # 4. Accept inv2 -> invitation.accepted (USER = newly created Member)
+    accept_res = await client.post(
+        "/api/invitations/accept",
+        json={"token": inv2_token, "full_name": "Lê Thị Hoa", "password": secret_password},
+    )
+    assert accept_res.status_code == 200
+    members_res = await client.get("/api/members", headers=admin.headers)
+    [new_member] = [m for m in members_res.json()["members"] if m["email"] == secret_email_1]
+    new_member_id = uuid.UUID(new_member["id"])
+
+    # 5. Refused operations leave no audit rows:
+    # (a) Invite existing Member (409)
+    assert (
+        await client.post(
+            "/api/invitations",
+            headers=admin.headers,
+            json={"email": secret_email_1, "role": "REVIEWER"},
+        )
+    ).status_code == 409
+    # (b) Accept with unknown / already-used token (400)
+    assert (
+        await client.post(
+            "/api/invitations/accept",
+            json={"token": secrets.token_urlsafe(32), "full_name": "Bad", "password": "pw"},
+        )
+    ).status_code == 400
+    assert (
+        await client.post(
+            "/api/invitations/accept",
+            json={"token": inv2_token, "full_name": "Reuse", "password": "pw"},
+        )
+    ).status_code == 400
+    # (c) Accept with expired token (400)
+    exp_email = f"expired.{uuid.uuid4().hex}@example.com"
+    exp_inv_res = await client.post(
+        "/api/invitations",
+        headers=admin.headers,
+        json={"email": exp_email, "role": "REVIEWER"},
+    )
+    assert exp_inv_res.status_code == 201
+    exp_inv_id = exp_inv_res.json()["id"]
+    emails.send_email.apply(args=email_enqueued.pop(-1)).get()
+    exp_token = token_in(delivered[-1])
+    with tenant_session(admin.tenant_id) as session:
+        session.execute(
+            text("UPDATE invitations SET expires_at = now() - interval '1 minute' WHERE id = :id"),
+            {"id": exp_inv_id},
+        )
+    assert (
+        await client.post(
+            "/api/invitations/accept",
+            json={"token": exp_token, "full_name": "Late", "password": "pw"},
+        )
+    ).status_code == 400
+    # Direct revoke of an already-expired invitation (404) and re-inviting that email
+    # must not emit a spurious invitation.revoked for the expired invitation.
+    assert (
+        await client.delete(f"/api/invitations/{exp_inv_id}", headers=admin.headers)
+    ).status_code == 404
+    exp_reinv_res = await client.post(
+        "/api/invitations",
+        headers=admin.headers,
+        json={"email": exp_email, "role": "RECRUITER"},
+    )
+    assert exp_reinv_res.status_code == 201
+    exp_reinv_id = exp_reinv_res.json()["id"]
+    # (d) Accept when email already has an account in another tenant (400, rolls back)
+    dup_email = f"elsewhere.{uuid.uuid4().hex}@example.com"
+    with tenant_session(other_admin.tenant_id) as session:
+        session.execute(text("UPDATE users SET email = :email"), {"email": dup_email})
+    dup_inv_res = await client.post(
+        "/api/invitations",
+        headers=admin.headers,
+        json={"email": dup_email, "role": "REVIEWER"},
+    )
+    assert dup_inv_res.status_code == 201
+    dup_inv_id = dup_inv_res.json()["id"]
+    emails.send_email.apply(args=email_enqueued.pop(-1)).get()
+    dup_token = token_in(delivered[-1])
+    assert (
+        await client.post(
+            "/api/invitations/accept",
+            json={"token": dup_token, "full_name": "Dup", "password": "pw"},
+        )
+    ).status_code == 400
+
+    # Check only USER invitation lifecycle rows (email rows tested in their own slice).
+    rows = [
+        r
+        for r in _workspace_audit_rows(admin.tenant_id, "invitation")
+        if r.action in ("invitation.created", "invitation.revoked", "invitation.accepted")
+    ]
+    assert [
+        (r.action, r.actor_type, r.actor_user_id, str(r.entity_id), r.before, r.after) for r in rows
+    ] == [
+        (
+            "invitation.created",
+            "USER",
+            admin.id,
+            inv1_id,
+            None,
+            {"invitation_id": inv1_id, "role": "REVIEWER"},
+        ),
+        (
+            "invitation.revoked",
+            "USER",
+            admin.id,
+            inv1_id,
+            {"role": "REVIEWER", "status": "PENDING"},
+            {"invitation_id": inv1_id, "status": "REVOKED"},
+        ),
+        (
+            "invitation.created",
+            "USER",
+            admin.id,
+            inv2_id,
+            None,
+            {"invitation_id": inv2_id, "role": "RECRUITER"},
+        ),
+        (
+            "invitation.created",
+            "USER",
+            admin.id,
+            inv3_id,
+            None,
+            {"invitation_id": inv3_id, "role": "REVIEWER"},
+        ),
+        (
+            "invitation.revoked",
+            "USER",
+            admin.id,
+            inv3_id,
+            {"role": "REVIEWER", "status": "PENDING"},
+            {"invitation_id": inv3_id, "status": "REVOKED"},
+        ),
+        (
+            "invitation.accepted",
+            "USER",
+            new_member_id,
+            inv2_id,
+            {"status": "PENDING"},
+            {"invitation_id": inv2_id, "role": "RECRUITER", "status": "ACCEPTED"},
+        ),
+        (
+            "invitation.created",
+            "USER",
+            admin.id,
+            exp_inv_id,
+            None,
+            {"invitation_id": exp_inv_id, "role": "REVIEWER"},
+        ),
+        (
+            "invitation.created",
+            "USER",
+            admin.id,
+            exp_reinv_id,
+            None,
+            {"invitation_id": exp_reinv_id, "role": "RECRUITER"},
+        ),
+        (
+            "invitation.created",
+            "USER",
+            admin.id,
+            dup_inv_id,
+            None,
+            {"invitation_id": dup_inv_id, "role": "REVIEWER"},
+        ),
+    ]
+    assert all(r.request_id is None and r.ip is not None for r in rows)
+    assert _workspace_audit_rows(other_admin.tenant_id, "invitation") == []
+
+    # Zero sensitive data (emails, tokens, passwords, email content) in before/after.
+    serialized = json.dumps(
+        [{"before": r.before, "after": r.after} for r in rows], ensure_ascii=False
+    )
+    for secret in (
+        secret_email_1,
+        secret_email_2,
+        exp_email,
+        dup_email,
+        inv2_token,
+        exp_token,
+        dup_token,
+        secret_password,
+        "Lê Thị Hoa",
+        "Lời mời tham gia",
+        "Join",
+        "token=",
+    ):
+        assert secret not in serialized
+
+
+async def test_invitation_email_sent_failed_and_stuck_audit_logs(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WEB_BASE_URL", "https://ats.example")
+    monkeypatch.setenv("EMAIL_FROM", "Smart ATS <no-reply@ats.example>")
+    email_enqueued: list[tuple[str, ...]] = []
+    monkeypatch.setattr(emails.send_email, "delay", lambda *args: email_enqueued.append(args))
+
+    admin = make_user("COMPANY_ADMIN")
+    sent_addr = f"inv.sent.{uuid.uuid4().hex}@example.com"
+    failed_addr = f"inv.failed.{uuid.uuid4().hex}@example.com"
+    stuck_addr = f"inv.stuck.{uuid.uuid4().hex}@example.com"
+
+    inv_ids: list[str] = []
+    for addr in (sent_addr, failed_addr, stuck_addr):
+        res = await client.post(
+            "/api/invitations",
+            headers=admin.headers,
+            json={"email": addr, "role": "RECRUITER"},
+        )
+        assert res.status_code == 201
+        inv_ids.append(res.json()["id"])
+
+    sent_inv_id, failed_inv_id, stuck_inv_id = inv_ids
+    sent_args, failed_args, stuck_args = email_enqueued
+    sent_email_id, failed_email_id, stuck_email_id = sent_args[1], failed_args[1], stuck_args[1]
+
+    # 1. SMTP succeeds -> invitation.email_sent (SYSTEM); redelivered task writes no duplicate.
+    delivered: list[EmailMessage] = []
+    monkeypatch.setattr(emails, "deliver", delivered.append)
+    emails.send_email.apply(args=sent_args).get()
+    emails.send_email.apply(args=sent_args).get()
+    assert len(delivered) == 1
+    sent_token = token_in(delivered[0])
+
+    # 2. SMTP fails -> invitation.email_failed (SYSTEM).
+    def smtp_fail(_msg: Any) -> None:
+        raise smtplib.SMTPRecipientsRefused({failed_addr: (550, b"user unknown")})
+
+    monkeypatch.setattr(emails, "deliver", smtp_fail)
+    emails.send_email.apply(args=failed_args).get()
+
+    # 3. Stuck MEMBER_INVITATION email in sweep -> invitation.email_failed (SYSTEM).
+    with tenant_session(admin.tenant_id) as session:
+        session.execute(
+            text(
+                "UPDATE email_messages SET attempts = :max_attempts,"
+                "  enqueued_at = now() - :past"
+                " WHERE id = :id"
+            ),
+            {
+                "max_attempts": sweep.MAX_ATTEMPTS,
+                "past": sweep.STUCK_AFTER + timedelta(minutes=1),
+                "id": stuck_email_id,
+            },
+        )
+    sweep.tenant.apply(args=(str(admin.tenant_id),)).get()
+
+    email_rows = [
+        r
+        for r in _workspace_audit_rows(admin.tenant_id, "invitation")
+        if r.action in ("invitation.email_sent", "invitation.email_failed")
+    ]
+    assert [
+        (r.action, r.actor_type, r.actor_user_id, str(r.entity_id), r.before, r.after)
+        for r in email_rows
+    ] == [
+        (
+            "invitation.email_sent",
+            "SYSTEM",
+            None,
+            sent_inv_id,
+            {"status": "QUEUED"},
+            {"email_id": sent_email_id, "invitation_id": sent_inv_id, "status": "SENT"},
+        ),
+        (
+            "invitation.email_failed",
+            "SYSTEM",
+            None,
+            failed_inv_id,
+            {"status": "QUEUED"},
+            {"email_id": failed_email_id, "invitation_id": failed_inv_id, "status": "FAILED"},
+        ),
+        (
+            "invitation.email_failed",
+            "SYSTEM",
+            None,
+            stuck_inv_id,
+            {"status": "QUEUED"},
+            {"email_id": stuck_email_id, "invitation_id": stuck_inv_id, "status": "FAILED"},
+        ),
+    ]
+    assert all(r.request_id is None and r.ip is None for r in email_rows)
+
+    serialized = json.dumps(
+        [{"before": r.before, "after": r.after} for r in email_rows], ensure_ascii=False
+    )
+    for secret in (
+        sent_addr,
+        failed_addr,
+        stuck_addr,
+        sent_token,
+        "Lời mời tham gia",
+        "Join",
+        "token=",
+    ):
+        assert secret not in serialized
+
+
+@pytest.mark.cross_tenant
+async def test_member_role_changed_and_revoked_audit_logs(client: AsyncClient) -> None:
+    admin = make_user("COMPANY_ADMIN")
+    member = make_user("REVIEWER", admin.tenant_id)
+    other_admin = make_user("COMPANY_ADMIN")
+
+    with tenant_session(admin.tenant_id) as session:
+        member_row = session.execute(
+            text("SELECT email, full_name FROM users WHERE id = :id"), {"id": member.id}
+        ).one()
+        member_email, member_name = member_row.email, member_row.full_name
+
+    # 1. Refused operations before any valid mutation leave zero member audit rows:
+    # (a) Last Company Admin demote & revoke -> 409
+    assert (
+        await client.patch(
+            f"/api/members/{admin.id}", headers=admin.headers, json={"role": "RECRUITER"}
+        )
+    ).status_code == 409
+    assert (
+        await client.delete(f"/api/members/{admin.id}", headers=admin.headers)
+    ).status_code == 409
+    # (b) Cross-tenant role change & revoke -> 404
+    assert (
+        await client.patch(
+            f"/api/members/{member.id}", headers=other_admin.headers, json={"role": "RECRUITER"}
+        )
+    ).status_code == 404
+    assert (
+        await client.delete(f"/api/members/{member.id}", headers=other_admin.headers)
+    ).status_code == 404
+    # (c) Missing member -> 404
+    missing_id = uuid.uuid4()
+    assert (
+        await client.patch(
+            f"/api/members/{missing_id}", headers=admin.headers, json={"role": "RECRUITER"}
+        )
+    ).status_code == 404
+    assert (
+        await client.delete(f"/api/members/{missing_id}", headers=admin.headers)
+    ).status_code == 404
+    # (d) Non-admin caller -> 403
+    assert (
+        await client.patch(
+            f"/api/members/{member.id}", headers=member.headers, json={"role": "RECRUITER"}
+        )
+    ).status_code == 403
+    assert (
+        await client.delete(f"/api/members/{admin.id}", headers=member.headers)
+    ).status_code == 403
+    assert _workspace_audit_rows(admin.tenant_id, "member") == []
+
+    # 2. Valid role change: REVIEWER -> RECRUITER -> COMPANY_ADMIN (and same-role no-op)
+    assert (
+        await client.patch(
+            f"/api/members/{member.id}", headers=admin.headers, json={"role": "RECRUITER"}
+        )
+    ).status_code == 200
+    assert (
+        await client.patch(
+            f"/api/members/{member.id}", headers=admin.headers, json={"role": "RECRUITER"}
+        )
+    ).status_code == 200  # unchanged role leaves no duplicate row
+    assert (
+        await client.patch(
+            f"/api/members/{member.id}", headers=admin.headers, json={"role": "COMPANY_ADMIN"}
+        )
+    ).status_code == 200
+
+    # (e) Self-revoke even with another active Company Admin -> 409, no audit row
+    assert (
+        await client.delete(f"/api/members/{admin.id}", headers=admin.headers)
+    ).status_code == 409
+
+    # 3. Valid member revoke (and repeat revoke no-op)
+    assert (
+        await client.delete(f"/api/members/{member.id}", headers=admin.headers)
+    ).status_code == 204
+    assert (
+        await client.delete(f"/api/members/{member.id}", headers=admin.headers)
+    ).status_code == 204
+
+    rows = _workspace_audit_rows(admin.tenant_id, "member")
+    assert [
+        (r.action, r.actor_type, r.actor_user_id, r.entity_id, r.before, r.after) for r in rows
+    ] == [
+        (
+            "member.role_changed",
+            "USER",
+            admin.id,
+            member.id,
+            {"role": "REVIEWER"},
+            {"role": "RECRUITER"},
+        ),
+        (
+            "member.role_changed",
+            "USER",
+            admin.id,
+            member.id,
+            {"role": "RECRUITER"},
+            {"role": "COMPANY_ADMIN"},
+        ),
+        (
+            "member.revoked",
+            "USER",
+            admin.id,
+            member.id,
+            {"is_active": True, "role": "COMPANY_ADMIN"},
+            {"is_active": False},
+        ),
+    ]
+    assert all(r.request_id is None and r.ip is not None for r in rows)
+    assert _workspace_audit_rows(other_admin.tenant_id, "member") == []
+
+    serialized = json.dumps(
+        [{"before": r.before, "after": r.after} for r in rows], ensure_ascii=False
+    )
+    assert member_email not in serialized
+    assert member_name not in serialized
