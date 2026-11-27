@@ -503,6 +503,17 @@
       "INVITE_INTERVIEW": "mời phỏng vấn",
       "RESULT": "thông báo kết quả",
       "FOLLOW_UP": "theo dõi"
+    },
+    "invitation": {
+      "created": "{actor} đã tạo lời mời với vai trò {role}.",
+      "revoked": "{actor} đã thu hồi lời mời.",
+      "accepted": "{actor} đã chấp nhận lời mời với vai trò {role}.",
+      "emailSent": "{actor} đã gửi email lời mời thành viên.",
+      "emailFailed": "{actor} gửi email lời mời thành viên thất bại."
+    },
+    "member": {
+      "roleChanged": "{actor} đã đổi vai trò thành viên từ {from} sang {to}.",
+      "revoked": "{actor} đã thu hồi quyền truy cập của thành viên."
     }
   },
   "channels": {

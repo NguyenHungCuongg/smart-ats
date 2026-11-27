@@ -13,14 +13,14 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
-from app import emails, outbox
+from app import audit, emails, outbox
 from app.auth import (
     REFRESH_TTL,
     Auth,
@@ -119,6 +119,19 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+async def _record_invitation_revoked(auth: Auth, invitation_id: uuid.UUID, role: str) -> None:
+    await audit.arecord(
+        auth.db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="invitation.revoked",
+        entity_id=invitation_id,
+        before={"role": role, "status": "PENDING"},
+        after={"invitation_id": str(invitation_id), "status": "REVOKED"},
+        ip=auth.ip,
+    )
+
+
 @router.get("/members")
 async def list_members(auth: CompanyAdmin) -> Members:
     users = await auth.db.execute(
@@ -158,13 +171,18 @@ async def invite(
     if await db.scalar(text("SELECT 1 FROM users WHERE email = :email"), {"email": body.email}):
         raise HTTPException(status.HTTP_409_CONFLICT, "This email is already a Member")
     # Inviting again replaces the pending invitation: only the newest link works.
-    await db.execute(
-        text(
-            "UPDATE invitations SET revoked_at = now()"
-            " WHERE email = :email AND accepted_at IS NULL AND revoked_at IS NULL"
-        ),
-        {"email": body.email},
-    )
+    revoked_rows = (
+        await db.execute(
+            text(
+                "UPDATE invitations SET revoked_at = now()"
+                " WHERE email = :email AND accepted_at IS NULL AND revoked_at IS NULL"
+                " RETURNING id, role"
+            ),
+            {"email": body.email},
+        )
+    ).all()
+    for revoked in revoked_rows:
+        await _record_invitation_revoked(auth, revoked.id, revoked.role)
     workspace = await db.scalar(text("SELECT name FROM tenants"))
     token = secrets.token_urlsafe(32)
     # emails.finish masks the token once sent by its "token=" parameter: keep that name.
@@ -188,22 +206,33 @@ async def invite(
             "user_id": auth.user_id,
         },
     )
-    invitation_id = await db.scalar(
-        text(
-            "INSERT INTO invitations (tenant_id, email, role, token_hash, invited_by, email_id,"
-            "  expires_at)"
-            " VALUES (:tenant_id, :email, :role, :token_hash, :user_id, :email_id,"
-            "  now() + :ttl) RETURNING id"
-        ),
-        {
-            "tenant_id": auth.tenant_id,
-            "email": body.email,
-            "role": body.role,
-            "token_hash": _hash_token(token),
-            "user_id": auth.user_id,
-            "email_id": email_id,
-            "ttl": INVITATION_TTL,
-        },
+    invitation_id: uuid.UUID = (
+        await db.execute(
+            text(
+                "INSERT INTO invitations (tenant_id, email, role, token_hash, invited_by, email_id,"
+                "  expires_at)"
+                " VALUES (:tenant_id, :email, :role, :token_hash, :user_id, :email_id,"
+                "  now() + :ttl) RETURNING id"
+            ),
+            {
+                "tenant_id": auth.tenant_id,
+                "email": body.email,
+                "role": body.role,
+                "token_hash": _hash_token(token),
+                "user_id": auth.user_id,
+                "email_id": email_id,
+                "ttl": INVITATION_TTL,
+            },
+        )
+    ).scalar_one()
+    await audit.arecord(
+        db,
+        actor_type="USER",
+        actor_user_id=auth.user_id,
+        action="invitation.created",
+        entity_id=invitation_id,
+        after={"invitation_id": str(invitation_id), "role": body.role},
+        ip=auth.ip,
     )
     outbox.enqueue_after_commit(db, emails.send_email, (str(auth.tenant_id), str(email_id)))
     return InvitationCreated(id=invitation_id)
@@ -211,54 +240,82 @@ async def invite(
 
 @router.delete("/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_invitation(invitation_id: uuid.UUID, auth: CompanyAdmin) -> None:
-    revoked = await auth.db.scalar(
-        text(
-            "UPDATE invitations SET revoked_at = now()"
-            " WHERE id = :id AND accepted_at IS NULL AND revoked_at IS NULL RETURNING id"
-        ),
-        {"id": invitation_id},
-    )
+    revoked = (
+        await auth.db.execute(
+            text(
+                "UPDATE invitations SET revoked_at = now()"
+                " WHERE id = :id AND accepted_at IS NULL AND revoked_at IS NULL"
+                " RETURNING id, role"
+            ),
+            {"id": invitation_id},
+        )
+    ).one_or_none()
     if revoked is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No pending invitation")
+    await _record_invitation_revoked(auth, revoked.id, revoked.role)
 
 
 @router.post("/invitations/accept")
-async def accept(body: Acceptance, response: Response) -> TokenResponse:
+async def accept(body: Acceptance, request: Request, response: Response) -> TokenResponse:
     """Create the invited User and sign them in, as /api/auth/login does."""
     # Not tenant_session: the Tenant is known only once accept_invitation has found it, and
     # the User must be created in the transaction that accepted (ERD §8).
+    token_hash = _hash_token(body.token)
     async with AsyncSession(async_engine()) as db, db.begin():
         invitation = (
             await db.execute(
                 text("SELECT * FROM accept_invitation(:token_hash)"),
-                {"token_hash": _hash_token(body.token)},
+                {"token_hash": token_hash},
             )
         ).one_or_none()
         if invitation is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, _INVALID_INVITATION)
         await set_tenant(db, invitation.tenant_id)
+        invitation_id: uuid.UUID = (
+            await db.execute(
+                text("SELECT id FROM invitations WHERE token_hash = :token_hash"),
+                {"token_hash": token_hash},
+            )
+        ).scalar_one()
         # Hashed only for a valid token: anyone may call this, and Argon2 is slow on purpose.
         hashed = await run_in_threadpool(password_hash.hash, body.password)
         try:
-            user_id = await db.scalar(
-                text(
-                    "INSERT INTO users (tenant_id, email, password_hash, full_name, role,"
-                    "  is_active, last_login_at)"
-                    " VALUES (:tenant_id, :email, :password_hash, :full_name, :role, true, now())"
-                    " RETURNING id"
-                ),
-                {
-                    "tenant_id": invitation.tenant_id,
-                    "email": invitation.email,
-                    "password_hash": hashed,
-                    "full_name": body.full_name,
-                    "role": invitation.role,
-                },
-            )
+            user_id: uuid.UUID = (
+                await db.execute(
+                    text(
+                        "INSERT INTO users (tenant_id, email, password_hash, full_name, role,"
+                        "  is_active, last_login_at)"
+                        " VALUES (:tenant_id, :email, :password_hash, :full_name, :role,"
+                        "  true, now())"
+                        " RETURNING id"
+                    ),
+                    {
+                        "tenant_id": invitation.tenant_id,
+                        "email": invitation.email,
+                        "password_hash": hashed,
+                        "full_name": body.full_name,
+                        "role": invitation.role,
+                    },
+                )
+            ).scalar_one()
         except IntegrityError:
             # users.email is unique platform-wide: the email has an account in another Tenant.
             # Raising rolls back the acceptance too.
             raise HTTPException(status.HTTP_400_BAD_REQUEST, _INVALID_INVITATION) from None
+        await audit.arecord(
+            db,
+            actor_type="USER",
+            actor_user_id=user_id,
+            action="invitation.accepted",
+            entity_id=invitation_id,
+            before={"status": "PENDING"},
+            after={
+                "invitation_id": str(invitation_id),
+                "role": invitation.role,
+                "status": "ACCEPTED",
+            },
+            ip=audit.client_ip(request),
+        )
         tokens, _ = await issue_tokens(
             db,
             response,
@@ -302,13 +359,25 @@ async def change_role(member_id: uuid.UUID, body: RoleChange, auth: CompanyAdmin
         await auth.db.execute(
             text(
                 "UPDATE users SET role = :role WHERE id = :id"
-                " RETURNING id, email, full_name, role, is_active, last_login_at"
+                " RETURNING id, email, full_name, role, is_active, last_login_at,"
+                "   old.role AS previous_role"
             ),
             {"id": member_id, "role": body.role},
         )
     ).one_or_none()
     if member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Member not found")
+    if member.previous_role != member.role:
+        await audit.arecord(
+            auth.db,
+            actor_type="USER",
+            actor_user_id=auth.user_id,
+            action="member.role_changed",
+            entity_id=member_id,
+            before={"role": member.previous_role},
+            after={"role": member.role},
+            ip=auth.ip,
+        )
     return Member.model_validate(member._mapping)
 
 
@@ -322,9 +391,15 @@ async def revoke_member(member_id: uuid.UUID, auth: CompanyAdmin) -> None:
         raise HTTPException(status.HTTP_409_CONFLICT, "You cannot revoke yourself")
     if await _lock_admins(auth.db) == {member_id}:
         raise _last_admin()
-    revoked = await auth.db.scalar(
-        text("UPDATE users SET is_active = false WHERE id = :id RETURNING id"), {"id": member_id}
-    )
+    revoked = (
+        await auth.db.execute(
+            text(
+                "UPDATE users SET is_active = false WHERE id = :id"
+                " RETURNING id, role, old.is_active AS was_active"
+            ),
+            {"id": member_id},
+        )
+    ).one_or_none()
     if revoked is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Member not found")
     await auth.db.execute(
@@ -334,3 +409,14 @@ async def revoke_member(member_id: uuid.UUID, auth: CompanyAdmin) -> None:
         ),
         {"id": member_id},
     )
+    if revoked.was_active:
+        await audit.arecord(
+            auth.db,
+            actor_type="USER",
+            actor_user_id=auth.user_id,
+            action="member.revoked",
+            entity_id=member_id,
+            before={"is_active": True, "role": revoked.role},
+            after={"is_active": False},
+            ip=auth.ip,
+        )

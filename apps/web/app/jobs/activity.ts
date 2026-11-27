@@ -1,6 +1,7 @@
 // Activity Timeline formatting for Jobs and Applications (FR-A3.3, NFR-USE-03).
 
 import type { Translator } from "../../i18n/messages";
+import { ROLE_NAMES, type Role } from "../settings/members/members";
 import type { JobStatus } from "./lifecycle";
 import { SOURCES, STAGES, type Source, type Stage } from "./pipeline";
 
@@ -41,7 +42,17 @@ const APPLICATION_EMAIL_KINDS = [
 
 type ApplicationEmailKind = (typeof APPLICATION_EMAIL_KINDS)[number];
 
-export type ActivityAction = JobActivityAction | ApplicationActivityAction;
+export type WorkspaceActivityAction =
+  | "invitation.created"
+  | "invitation.revoked"
+  | "invitation.accepted"
+  | "invitation.email_sent"
+  | "invitation.email_failed"
+  | "member.role_changed"
+  | "member.revoked";
+
+export type ActivityAction =
+  JobActivityAction | ApplicationActivityAction | WorkspaceActivityAction;
 
 export type ActivityEntry = {
   id: string;
@@ -66,6 +77,11 @@ const METADATA_FIELD_KEYS = {
   location: "location",
   apply_deadline: "deadline",
 } as const;
+
+function formatRole(value: unknown): string {
+  const role = String(value ?? "");
+  return role in ROLE_NAMES ? ROLE_NAMES[role as Role] : role;
+}
 
 /** Format the actor name or label for an Activity Timeline entry. */
 export function formatActor(
@@ -197,5 +213,23 @@ export function formatActivity(
         ? t("application.emailSent", { actor, kind })
         : t("application.emailFailed", { actor, kind });
     }
+    case "invitation.created":
+      return t("invitation.created", { actor, role: formatRole(entry.after?.role) });
+    case "invitation.revoked":
+      return t("invitation.revoked", { actor });
+    case "invitation.accepted":
+      return t("invitation.accepted", { actor, role: formatRole(entry.after?.role) });
+    case "invitation.email_sent":
+      return t("invitation.emailSent", { actor });
+    case "invitation.email_failed":
+      return t("invitation.emailFailed", { actor });
+    case "member.role_changed":
+      return t("member.roleChanged", {
+        actor,
+        from: formatRole(entry.before?.role),
+        to: formatRole(entry.after?.role),
+      });
+    case "member.revoked":
+      return t("member.revoked", { actor });
   }
 }

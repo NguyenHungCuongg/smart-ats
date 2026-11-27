@@ -102,12 +102,14 @@ def finish(session: Session, email_id: uuid.UUID, status: Literal["SENT", "FAILE
             "UPDATE email_messages SET status = :status,"
             "  sent_at = CASE WHEN :status = 'SENT' THEN now() END,"
             "  body = regexp_replace(body, 'token=[A-Za-z0-9_-]+', 'token=[redacted]', 'g')"
-            " WHERE id = :id"
+            " WHERE id = :id AND status = 'QUEUED'"
             " RETURNING application_id, kind"
         ),
         {"id": email_id, "status": status},
     ).one_or_none()
-    if row is not None and row.application_id is not None:
+    if row is None:
+        return
+    if row.application_id is not None:
         audit.record(
             session,
             actor_type="SYSTEM",
@@ -116,3 +118,21 @@ def finish(session: Session, email_id: uuid.UUID, status: Literal["SENT", "FAILE
             before={"status": "QUEUED"},
             after={"email_id": str(email_id), "kind": row.kind, "status": status},
         )
+    elif row.kind == "MEMBER_INVITATION":
+        invitation_id: uuid.UUID | None = session.scalar(
+            text("SELECT id FROM invitations WHERE email_id = :email_id"),
+            {"email_id": email_id},
+        )
+        if invitation_id is not None:
+            audit.record(
+                session,
+                actor_type="SYSTEM",
+                action="invitation.email_sent" if status == "SENT" else "invitation.email_failed",
+                entity_id=invitation_id,
+                before={"status": "QUEUED"},
+                after={
+                    "email_id": str(email_id),
+                    "invitation_id": str(invitation_id),
+                    "status": status,
+                },
+            )

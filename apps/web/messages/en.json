@@ -503,6 +503,17 @@
       "INVITE_INTERVIEW": "interview invitation",
       "RESULT": "result notification",
       "FOLLOW_UP": "follow-up"
+    },
+    "invitation": {
+      "created": "{actor} created an invitation as {role}.",
+      "revoked": "{actor} revoked an invitation.",
+      "accepted": "{actor} accepted the invitation as {role}.",
+      "emailSent": "{actor} sent the Member invitation email.",
+      "emailFailed": "{actor} failed to send the Member invitation email."
+    },
+    "member": {
+      "roleChanged": "{actor} changed a Member's role from {from} to {to}.",
+      "revoked": "{actor} revoked a Member's access."
     }
   },
   "channels": {
