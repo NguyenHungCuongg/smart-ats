@@ -176,6 +176,7 @@ async def invite(
             text(
                 "UPDATE invitations SET revoked_at = now()"
                 " WHERE email = :email AND accepted_at IS NULL AND revoked_at IS NULL"
+                "   AND expires_at > now()"
                 " RETURNING id, role"
             ),
             {"email": body.email},
@@ -245,6 +246,7 @@ async def revoke_invitation(invitation_id: uuid.UUID, auth: CompanyAdmin) -> Non
             text(
                 "UPDATE invitations SET revoked_at = now()"
                 " WHERE id = :id AND accepted_at IS NULL AND revoked_at IS NULL"
+                "   AND expires_at > now()"
                 " RETURNING id, role"
             ),
             {"id": invitation_id},

@@ -1,7 +1,7 @@
-// Activity Timeline formatting for Jobs and Applications (FR-A3.3, NFR-USE-03).
+// Activity Timeline formatting for Jobs, Applications, and Workspace actions (FR-A3.3, NFR-USE-03).
 
 import type { Translator } from "../../i18n/messages";
-import { ROLE_NAMES, type Role } from "../settings/members/members";
+import { ROLE_NAMES, ROLES, type Role } from "../settings/members/members";
 import type { JobStatus } from "./lifecycle";
 import { SOURCES, STAGES, type Source, type Stage } from "./pipeline";
 
@@ -80,7 +80,7 @@ const METADATA_FIELD_KEYS = {
 
 function formatRole(value: unknown): string {
   const role = String(value ?? "");
-  return role in ROLE_NAMES ? ROLE_NAMES[role as Role] : role;
+  return ROLES.includes(role as Role) ? ROLE_NAMES[role as Role] : role;
 }
 
 /** Format the actor name or label for an Activity Timeline entry. */

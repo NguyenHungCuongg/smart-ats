@@ -1566,6 +1566,18 @@ async def test_invitation_lifecycle_audit_logs_and_refused_writes(
             json={"token": exp_token, "full_name": "Late", "password": "pw"},
         )
     ).status_code == 400
+    # Direct revoke of an already-expired invitation (404) and re-inviting that email
+    # must not emit a spurious invitation.revoked for the expired invitation.
+    assert (
+        await client.delete(f"/api/invitations/{exp_inv_id}", headers=admin.headers)
+    ).status_code == 404
+    exp_reinv_res = await client.post(
+        "/api/invitations",
+        headers=admin.headers,
+        json={"email": exp_email, "role": "RECRUITER"},
+    )
+    assert exp_reinv_res.status_code == 201
+    exp_reinv_id = exp_reinv_res.json()["id"]
     # (d) Accept when email already has an account in another tenant (400, rolls back)
     dup_email = f"elsewhere.{uuid.uuid4().hex}@example.com"
     with tenant_session(other_admin.tenant_id) as session:
@@ -1650,6 +1662,14 @@ async def test_invitation_lifecycle_audit_logs_and_refused_writes(
             exp_inv_id,
             None,
             {"invitation_id": exp_inv_id, "role": "REVIEWER"},
+        ),
+        (
+            "invitation.created",
+            "USER",
+            admin.id,
+            exp_reinv_id,
+            None,
+            {"invitation_id": exp_reinv_id, "role": "RECRUITER"},
         ),
         (
             "invitation.created",
