@@ -27,7 +27,7 @@ export function LocaleSwitch() {
   }
 
   return (
-    <div role="group" aria-label={t("label")} className="flex gap-4">
+    <div role="group" aria-label={t("label")} className="flex shrink-0 items-center gap-3">
       {LOCALES.map((locale) => (
         <button
           key={locale}
@@ -36,7 +36,7 @@ export function LocaleSwitch() {
           aria-pressed={locale === current}
           onClick={() => choose(locale)}
           // button-cap-light type; as in link-on-light, the underline marks the one to press.
-          className={`py-2 text-sm/[1.29] tracking-[0.2px] uppercase ${
+          className={`inline-flex min-h-11 items-center px-1 text-sm/[1.29] tracking-[0.2px] whitespace-nowrap uppercase ${
             locale === current ? "font-bold" : "font-medium underline"
           }`}
         >

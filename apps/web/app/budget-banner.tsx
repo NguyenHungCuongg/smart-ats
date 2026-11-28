@@ -39,7 +39,7 @@ function AdminBudgetMonitor() {
 
   if (!summary?.budget_warning) return null;
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 pt-2">
+    <div className="mx-auto w-full max-w-6xl px-4 pt-4 sm:px-6">
       <BudgetWarningAlert summary={summary} detailsHref="/settings/usage" />
     </div>
   );

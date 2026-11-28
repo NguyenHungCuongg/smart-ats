@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { apiFetch } from "../../auth";
+import { SettingsNav } from "../settings-nav";
 import { currentMonthUtc, usageError, type UsageSummary } from "./usage";
 import { UsageView } from "./view";
 
@@ -55,6 +56,7 @@ export default function UsagePage() {
       data={data}
       loading={loading}
       error={errorStatus === null ? null : usageError(t, errorStatus)}
+      headerNav={<SettingsNav active="usage" />}
     />
   );
 }

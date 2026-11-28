@@ -13,6 +13,74 @@
     "usage": "Mức sử dụng AI & Ngân sách",
     "channels": "Facebook Page"
   },
+  "nav": {
+    "ariaLabel": "Điều hướng Workspace",
+    "openMenu": "Mở menu điều hướng",
+    "closeMenu": "Đóng menu điều hướng",
+    "overview": "Tổng quan",
+    "jobs": "Việc làm",
+    "usage": "Mức dùng AI",
+    "members": "Thành viên",
+    "channels": "Kênh đăng tin"
+  },
+  "dashboard": {
+    "title": "Tổng quan Workspace",
+    "createJob": "Tạo Job",
+    "loading": "Đang tải tổng quan Workspace",
+    "loadFailed": "Không tải được dữ liệu tổng quan. Kiểm tra kết nối rồi thử lại.",
+    "retry": "Thử lại",
+    "metricsAria": "Chỉ số tổng quan tuyển dụng",
+    "reviewerEmptyTitle": "Chưa có Job nào được phân công",
+    "reviewerEmptyDesc": "Khi Recruiter hoặc Company Admin gán bạn vào một Job, thông tin hồ sơ và kết quả đánh giá sẽ xuất hiện tại đây.",
+    "onboarding": {
+      "title": "Khởi tạo quy trình tuyển dụng đầu tiên",
+      "subtitle": "Workspace chưa có Job nào. Bắt đầu bằng một tài liệu JD để tự động bóc tách tiêu chí và đánh giá ứng viên.",
+      "uploadJdTitle": "Tải JD lên",
+      "uploadJdDesc": "Tải file PDF, DOCX hoặc dán văn bản JD để AI trích xuất tiêu chí và trọng số.",
+      "addCvsTitle": "Thêm hồ sơ ứng viên",
+      "addCvsDesc": "Tải hàng loạt CV vào Job hoặc bật liên kết ứng tuyển công khai để thu nhận hồ sơ.",
+      "scoreTitle": "Chấm điểm AI",
+      "scoreDesc": "Chạy đánh giá độ phù hợp và xem báo cáo Fit-Gap kèm dẫn chứng cho từng ứng viên."
+    },
+    "metrics": {
+      "publishedJobs": "Job đang tuyển",
+      "publishedJobsSub": "{draft} bản nháp / {total} tổng số Job",
+      "totalApplications": "Tổng hồ sơ ứng tuyển",
+      "totalApplicationsSub": "{applied} hồ sơ mới ở Applied",
+      "interviewAndOffer": "Phỏng vấn & Đề nghị",
+      "interviewAndOfferSub": "{hired} ứng viên đã tuyển (Hired)"
+    },
+    "featured": {
+      "aiSpendEyebrow": "Chi phí AI tháng hiện tại",
+      "aiSpendRatio": "Đã dùng {percent} hạn mức tháng",
+      "aiSpendUnavailable": "Xem chi tiết chi phí và hạn mức AI trong trang cài đặt.",
+      "viewUsage": "Xem mức dùng AI",
+      "assignedJobsEyebrow": "Job được phân công",
+      "assignedJobsSub": "Các vị trí bạn có quyền đọc hồ sơ và báo cáo Fit-Gap",
+      "openJobs": "Mở danh sách Job"
+    },
+    "pipeline": {
+      "title": "Phễu Pipeline toàn Workspace",
+      "total": "{count} hồ sơ"
+    },
+    "actions": {
+      "title": "Cần xử lý",
+      "empty": "Không có đầu việc tồn đọng cần xử lý.",
+      "failedParse": "Phân tích JD bị lỗi, cần thử lại hoặc nhập tiêu chí thủ công",
+      "pendingCriteria": "JD đã phân tích xong, chờ xác nhận tiêu chí chấm điểm",
+      "unscored": "{count} hồ sơ ứng viên có CV chưa chấm điểm",
+      "newApplications": "{count} hồ sơ mới ở trạng thái Applied chờ sàng lọc",
+      "reviewerApplications": "{count} hồ sơ ở trạng thái Applied thuộc các Job được gán"
+    },
+    "recentJobs": {
+      "title": "Job gần đây",
+      "viewAll": "Xem tất cả",
+      "applicationsCount": "{count} hồ sơ"
+    },
+    "recentActivity": {
+      "title": "Hoạt động gần đây"
+    }
+  },
   "session": {
     "offline": "Không kết nối được máy chủ. Tải lại trang để thử lại.",
     "logout": "Đăng xuất"
@@ -514,6 +582,11 @@
     "member": {
       "roleChanged": "{actor} đã đổi vai trò thành viên từ {from} sang {to}.",
       "revoked": "{actor} đã thu hồi quyền truy cập của thành viên."
+    },
+    "channel": {
+      "connected": "{actor} đã kết nối Facebook Page.",
+      "disconnected": "{actor} đã ngắt kết nối Facebook Page.",
+      "postCreated": "{actor} đã đăng tin tuyển dụng lên Facebook Page."
     }
   },
   "channels": {

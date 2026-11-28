@@ -1,62 +1,115 @@
 "use client";
 
-import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { type ReactNode, createContext, useContext, useEffect, useState } from "react";
 
-import { apiFetch, logout } from "./auth";
-import type { Role } from "./settings/members/members";
+import { apiFetch } from "./auth";
+import { ROLES, type Role } from "./settings/members/members";
 
-type Me = { email: string; full_name: string; role: string };
+export type Me = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: Role;
+};
 
-/** The signed-in user's role once known, for pages that show each role what it may do. */
-export function useRole(): Role | null {
-  const [role, setRole] = useState<Role | null>(null);
-  useEffect(() => {
-    apiFetch("/api/auth/me").then(async (response) => {
-      if (response.ok) setRole((await response.json()).role);
-      else window.location.replace("/login");
-    });
-  }, []);
-  return role;
+export type SessionState = {
+  user: Me | null;
+  loading: boolean;
+  offline: boolean;
+};
+
+const SessionContext = createContext<SessionState | null>(null);
+
+function isRole(value: string): value is Role {
+  return ROLES.includes(value as Role);
 }
 
-/** The signed-in user with a logout button; sends anyone signed out to /login. */
-export function Session() {
-  const t = useTranslations("session");
-  const [me, setMe] = useState<Me | null>(null);
-  const [offline, setOffline] = useState(false);
+/** Shared Workspace session provider: fetches /api/auth/me once for AppShell, banners, and pages. */
+export function SessionProvider({
+  children,
+  initialState,
+}: {
+  children: ReactNode;
+  initialState?: SessionState;
+}) {
+  const [fetched, setFetched] = useState<SessionState>(
+    () => initialState ?? { user: null, loading: true, offline: false },
+  );
+  const state = initialState ?? fetched;
 
   useEffect(() => {
+    if (initialState) return;
+    let cancelled = false;
     apiFetch("/api/auth/me").then(
       async (response) => {
-        if (response.ok) setMe(await response.json());
-        else window.location.replace("/login");
-      },
-      () => setOffline(true),
-    );
-  }, []);
-
-  if (offline) return <p role="alert">{t("offline")}</p>;
-  if (!me) {
-    return (
-      <div aria-busy="true" className="h-11 w-72 animate-pulse rounded-md bg-hairline-cloud" />
-    );
-  }
-  return (
-    <div className="flex items-center gap-3">
-      <span>
-        {me.full_name} ({me.email})
-      </span>
-      <button
-        type="button"
-        onClick={async () => {
-          await logout();
+        if (cancelled) return;
+        if (!response.ok) {
           window.location.replace("/login");
-        }}
-        className="button-outline"
-      >
-        {t("logout")}
-      </button>
-    </div>
-  );
+          return;
+        }
+        const data = (await response.json()) as {
+          id: string;
+          email: string;
+          full_name: string;
+          role: string;
+        };
+        if (cancelled) return;
+        if (!isRole(data.role)) {
+          window.location.replace("/login");
+          return;
+        }
+        setFetched({
+          user: {
+            id: data.id,
+            email: data.email,
+            full_name: data.full_name,
+            role: data.role,
+          },
+          loading: false,
+          offline: false,
+        });
+      },
+      () => {
+        if (!cancelled) setFetched({ user: null, loading: false, offline: true });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [initialState]);
+
+  return <SessionContext.Provider value={state}>{children}</SessionContext.Provider>;
+}
+
+/** Read the shared Workspace session state inside AppShell or a Workspace page. */
+export function useSession(): SessionState {
+  return useContext(SessionContext) ?? { user: null, loading: true, offline: false };
+}
+
+/** The signed-in user's role once known, shared via SessionProvider without duplicate /me calls. */
+export function useRole(): Role | null {
+  const ctx = useContext(SessionContext);
+  const [standaloneRole, setStandaloneRole] = useState<Role | null>(null);
+
+  useEffect(() => {
+    if (ctx !== null) return;
+    let cancelled = false;
+    apiFetch("/api/auth/me").then(
+      async (response) => {
+        if (cancelled) return;
+        if (response.ok) {
+          const data = (await response.json()) as { role: string };
+          if (!cancelled && isRole(data.role)) setStandaloneRole(data.role);
+        } else {
+          window.location.replace("/login");
+        }
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx]);
+
+  return ctx !== null ? (ctx.user?.role ?? null) : standaloneRole;
 }
