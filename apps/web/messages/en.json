@@ -13,6 +13,74 @@
     "usage": "AI Usage & Budget",
     "channels": "Facebook Page"
   },
+  "nav": {
+    "ariaLabel": "Workspace navigation",
+    "openMenu": "Open navigation menu",
+    "closeMenu": "Close navigation menu",
+    "overview": "Overview",
+    "jobs": "Jobs",
+    "usage": "AI Usage",
+    "members": "Members",
+    "channels": "Job Channels"
+  },
+  "dashboard": {
+    "title": "Workspace Overview",
+    "createJob": "Create Job",
+    "loading": "Loading Workspace overview",
+    "loadFailed": "Could not load the overview data. Check your connection and try again.",
+    "retry": "Retry",
+    "metricsAria": "Hiring overview metrics",
+    "reviewerEmptyTitle": "No assigned Jobs yet",
+    "reviewerEmptyDesc": "Once a Recruiter or Company Admin assigns you to a Job, candidate profiles and Fit-Gap reports will appear here.",
+    "onboarding": {
+      "title": "Start your first hiring workflow",
+      "subtitle": "This Workspace has no Jobs yet. Upload a job description to extract evaluation criteria and score candidates.",
+      "uploadJdTitle": "Upload a JD",
+      "uploadJdDesc": "Upload a PDF or DOCX file, or paste JD text to extract skills and scoring weights.",
+      "addCvsTitle": "Add candidate CVs",
+      "addCvsDesc": "Batch-upload CVs into the Job or enable a Public Apply link to collect applications.",
+      "scoreTitle": "Run AI scoring",
+      "scoreDesc": "Evaluate candidate fit against confirmed criteria with grounded Fit-Gap evidence."
+    },
+    "metrics": {
+      "publishedJobs": "Published Jobs",
+      "publishedJobsSub": "{draft} drafts / {total} total Jobs",
+      "totalApplications": "Total Applications",
+      "totalApplicationsSub": "{applied} new in Applied",
+      "interviewAndOffer": "Interview & Offer",
+      "interviewAndOfferSub": "{hired} hired candidates"
+    },
+    "featured": {
+      "aiSpendEyebrow": "Current Month AI Spend",
+      "aiSpendRatio": "{percent} of monthly budget used",
+      "aiSpendUnavailable": "Open AI usage settings to inspect monthly spend and limits.",
+      "viewUsage": "View AI usage",
+      "assignedJobsEyebrow": "Assigned Jobs",
+      "assignedJobsSub": "Positions where you can review applications and Fit-Gap reports",
+      "openJobs": "Open Jobs"
+    },
+    "pipeline": {
+      "title": "Workspace Pipeline",
+      "total": "{count} applications"
+    },
+    "actions": {
+      "title": "Action Queue",
+      "empty": "No pending items require attention.",
+      "failedParse": "JD parsing failed, retry AI parse or enter criteria manually",
+      "pendingCriteria": "JD parsed, waiting for scoring criteria confirmation",
+      "unscored": "{count} applications with unscored CVs",
+      "newApplications": "{count} new applications in Applied awaiting screening",
+      "reviewerApplications": "{count} applications in Applied across your assigned Jobs"
+    },
+    "recentJobs": {
+      "title": "Recent Jobs",
+      "viewAll": "View all",
+      "applicationsCount": "{count} applications"
+    },
+    "recentActivity": {
+      "title": "Recent Activity"
+    }
+  },
   "session": {
     "offline": "Can't reach the server. Reload the page to try again.",
     "logout": "Log out"
@@ -514,6 +582,11 @@
     "member": {
       "roleChanged": "{actor} changed a Member's role from {from} to {to}.",
       "revoked": "{actor} revoked a Member's access."
+    },
+    "channel": {
+      "connected": "{actor} connected a Facebook Page.",
+      "disconnected": "{actor} disconnected the Facebook Page.",
+      "postCreated": "{actor} published a job post to Facebook Page."
     }
   },
   "channels": {

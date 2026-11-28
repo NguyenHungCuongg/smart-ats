@@ -49,7 +49,10 @@ export type WorkspaceActivityAction =
   | "invitation.email_sent"
   | "invitation.email_failed"
   | "member.role_changed"
-  | "member.revoked";
+  | "member.revoked"
+  | "channel_connection.connected"
+  | "channel_connection.disconnected"
+  | "channel_post.created";
 
 export type ActivityAction =
   JobActivityAction | ApplicationActivityAction | WorkspaceActivityAction;
@@ -231,5 +234,11 @@ export function formatActivity(
       });
     case "member.revoked":
       return t("member.revoked", { actor });
+    case "channel_connection.connected":
+      return t("channel.connected", { actor });
+    case "channel_connection.disconnected":
+      return t("channel.disconnected", { actor });
+    case "channel_post.created":
+      return t("channel.postCreated", { actor });
   }
 }

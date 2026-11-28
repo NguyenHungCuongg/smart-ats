@@ -355,4 +355,22 @@ test("formats all seven Workspace, Invitation, and Member actions in Vietnamese 
     "Nguyễn Văn An đã thu hồi quyền truy cập của thành viên.",
   );
   expect(render(memberRevoked, "en")).toBe("Nguyễn Văn An revoked a Member's access.");
+
+  const channelConnected = makeEntry("channel_connection.connected", {
+    after: { channel: "FACEBOOK_PAGE", external_id: "123" },
+  });
+  expect(render(channelConnected, "vi")).toBe("Nguyễn Văn An đã kết nối Facebook Page.");
+  expect(render(channelConnected, "en")).toBe("Nguyễn Văn An connected a Facebook Page.");
+
+  const channelDisconnected = makeEntry("channel_connection.disconnected", {
+    before: { channel: "FACEBOOK_PAGE", external_id: "123" },
+  });
+  expect(render(channelDisconnected, "vi")).toBe("Nguyễn Văn An đã ngắt kết nối Facebook Page.");
+  expect(render(channelDisconnected, "en")).toBe("Nguyễn Văn An disconnected the Facebook Page.");
+
+  const postCreated = makeEntry("channel_post.created", {
+    after: { channel: "FACEBOOK_PAGE", external_post_id: "p1" },
+  });
+  expect(render(postCreated, "vi")).toBe("Nguyễn Văn An đã đăng tin tuyển dụng lên Facebook Page.");
+  expect(render(postCreated, "en")).toBe("Nguyễn Văn An published a job post to Facebook Page.");
 });

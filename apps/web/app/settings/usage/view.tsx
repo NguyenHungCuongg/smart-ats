@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
+import type { ReactNode } from "react";
 
 import { featureLabel, formatPercent, formatUsd, type UsageSummary } from "./usage";
 
@@ -11,6 +12,7 @@ type UsageViewProps = {
   data: UsageSummary | null;
   loading: boolean;
   error: string | null;
+  headerNav?: ReactNode;
 };
 
 export function BudgetWarningAlert({
@@ -43,7 +45,14 @@ export function BudgetWarningAlert({
   );
 }
 
-export function UsageView({ month, onMonthChange, data, loading, error }: UsageViewProps) {
+export function UsageView({
+  month,
+  onMonthChange,
+  data,
+  loading,
+  error,
+  headerNav,
+}: UsageViewProps) {
   const t = useTranslations("usage");
   const locale = useLocale();
   const fillPercent = data ? Math.min(100, Math.round(data.usage_ratio * 100)) : 0;
@@ -59,6 +68,7 @@ export function UsageView({ month, onMonthChange, data, loading, error }: UsageV
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-6">
+      {headerNav}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="heading-display text-3xl font-semibold">{t("title")}</h1>
@@ -78,9 +88,6 @@ export function UsageView({ month, onMonthChange, data, loading, error }: UsageV
               className="w-fit text-input"
             />
           </label>
-          <Link href="/" className="text-sm underline">
-            {t("back")}
-          </Link>
         </div>
       </div>
 

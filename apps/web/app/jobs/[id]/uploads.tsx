@@ -161,7 +161,7 @@ export function Uploads({ jobId, onActivity }: { jobId: string; onActivity?: () 
         <button
           type="submit"
           disabled={pending || !consent || files.length === 0}
-          className="self-start button-outline"
+          className="button-outline self-start"
         >
           {t("submit")}
         </button>
@@ -262,7 +262,7 @@ export function BatchProgress({
                 </>
               ) : (
                 <>
-                  <label className="ml-auto cursor-pointer button-outline has-focus-visible:ring-2 has-focus-visible:ring-ring-focus has-disabled:cursor-default has-disabled:border-hairline-cloud has-disabled:bg-hairline-cloud has-disabled:text-accent-violet-mid">
+                  <label className="ml-auto button-outline cursor-pointer has-focus-visible:ring-2 has-focus-visible:ring-ring-focus has-disabled:cursor-default has-disabled:border-hairline-cloud has-disabled:bg-hairline-cloud has-disabled:text-accent-violet-mid">
                     {t("retry")}
                     <input
                       type="file"

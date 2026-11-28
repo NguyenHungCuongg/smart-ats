@@ -148,7 +148,7 @@ export function Scoring({
             type="button"
             onClick={onStart}
             disabled={pending || blocker !== null}
-            className="self-start button-outline"
+            className="button-outline self-start"
           >
             {run ? t("rescore") : t("score")}
           </button>

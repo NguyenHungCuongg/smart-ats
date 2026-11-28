@@ -5,8 +5,7 @@ import { getLocale } from "next-intl/server";
 import type { ReactNode } from "react";
 
 import "./globals.css";
-import { BudgetBanner } from "./budget-banner";
-import { LocaleSwitch } from "./locale-switch";
+import { AppShell } from "./app-shell";
 
 // DESIGN.md: Archivo for display (wdth gives Semi-Condensed), Be Vietnam Pro for every UI role,
 // JetBrains Mono for code. globals.css maps the variables to font-display, font-sans, font-mono.
@@ -36,14 +35,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       lang={await getLocale()}
       className={`${archivo.variable} ${beVietnamPro.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="flex min-h-screen flex-col bg-surface-canvas-light font-sans text-ink-deep">
+      <body className="flex min-h-[100dvh] flex-col bg-surface-canvas-light font-sans text-ink-deep">
         {/* The catalog of the request's language, for client components (NFR-USE-03). */}
         <NextIntlClientProvider>
-          <header className="flex justify-end px-6 pt-4">
-            <LocaleSwitch />
-          </header>
-          <BudgetBanner />
-          {children}
+          <AppShell>{children}</AppShell>
         </NextIntlClientProvider>
       </body>
     </html>

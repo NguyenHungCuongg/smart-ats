@@ -55,7 +55,7 @@ export default function NewJobPage() {
           <textarea name="text" rows={12} className="text-input" />
         </label>
         {refused !== null && <p role="alert">{t(ERRORS[refused] ?? "failed")}</p>}
-        <button type="submit" disabled={pending} className="self-start button-primary">
+        <button type="submit" disabled={pending} className="button-primary self-start">
           {t("submit")}
         </button>
       </form>

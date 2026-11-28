@@ -73,7 +73,7 @@ export function Reviewers({ jobId, onSaved }: { jobId: string; onSaved?: () => v
             ))}
           </fieldset>
           {saved !== null && <p role="status">{saved ? t("saved") : t("failed")}</p>}
-          <button type="submit" disabled={pending} className="self-start button-outline">
+          <button type="submit" disabled={pending} className="button-outline self-start">
             {t("save")}
           </button>
         </form>

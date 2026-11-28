@@ -6,6 +6,7 @@ from app import (
     apply,
     auth,
     channels,
+    dashboard,
     events,
     jobs,
     members,
@@ -47,3 +48,4 @@ app.include_router(apply.router)
 app.include_router(usage.router)
 app.include_router(channels.router)
 app.include_router(channels.jobs_router)
+app.include_router(dashboard.router)

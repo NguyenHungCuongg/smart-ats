@@ -53,14 +53,30 @@
 }
 
 @utility button-primary {
-  @apply rounded-md bg-primary px-4 py-3 text-sm/[1.14] font-bold tracking-[0.2px] text-on-primary uppercase active:bg-surface-press-stronger active:text-ink-press disabled:bg-hairline-cloud disabled:text-accent-violet-mid;
+  @apply rounded-md bg-primary px-4 py-3 text-sm/[1.14] font-bold tracking-[0.2px] text-on-primary uppercase transition-transform duration-100 active:scale-[0.98] active:bg-surface-press-stronger active:text-ink-press disabled:bg-hairline-cloud disabled:text-accent-violet-mid motion-reduce:transition-none motion-reduce:active:scale-100;
+}
+
+/* Inverted CTA on dark canvas and featured dark cards: text stays ink-deep across all modes. */
+@utility button-inverted {
+  @apply rounded-md bg-on-primary px-4 py-3 text-sm/[1.14] font-bold tracking-[0.2px] text-ink-deep uppercase transition-transform duration-100 active:scale-[0.98] active:bg-surface-press-light active:text-ink-press disabled:bg-hairline-cloud disabled:text-accent-violet-mid motion-reduce:transition-none motion-reduce:active:scale-100;
 }
 
 /* Outline: below button-primary, of which a page has one (DESIGN.md). */
 @utility button-outline {
-  @apply rounded-md border border-ink-deep px-4 py-3 text-sm/[1.29] font-medium tracking-[0.2px] text-ink-deep uppercase active:bg-surface-press-light disabled:border-hairline-cloud disabled:bg-hairline-cloud disabled:text-accent-violet-mid;
+  @apply rounded-md border border-ink-deep px-4 py-3 text-sm/[1.29] font-medium tracking-[0.2px] text-ink-deep uppercase transition-transform duration-100 active:scale-[0.98] active:bg-surface-press-light disabled:border-hairline-cloud disabled:bg-hairline-cloud disabled:text-accent-violet-mid motion-reduce:transition-none motion-reduce:active:scale-100;
 }
 
 @utility text-input {
   @apply rounded-sm border border-hairline-cool bg-surface-canvas-light px-3 py-2 text-base/normal font-medium text-ink-deep focus:inset-shadow-input focus:outline-none focus-visible:ring-2 focus-visible:ring-ring-focus;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -439,7 +439,7 @@ function CriteriaForm({ job, onSaved }: { job: Job; onSaved: (job: Job) => void 
       <button
         type="submit"
         disabled={pending || total !== 100}
-        className="self-start button-primary"
+        className="button-primary self-start"
       >
         {t("submit")}
       </button>

@@ -94,7 +94,7 @@ export function ActivityList({
           type="button"
           onClick={onLoadMore}
           disabled={loadingMore}
-          className="self-start button-outline"
+          className="button-outline self-start"
         >
           {t("loadMore")}
         </button>
